@@ -1,4 +1,4 @@
-import { IsArray, IsIn, IsMongoId, IsOptional, IsString, IsUrl, MinLength } from 'class-validator';
+import { IsArray, IsIn, IsMongoId, IsOptional, IsString, MinLength } from 'class-validator';
 import type { Priority, RequirementStatus } from '@buggy/shared-types';
 
 export class CreateRequirementDto {
@@ -30,7 +30,7 @@ export class CreateRequirementDto {
   priority?: Priority;
 
   @IsOptional()
-  @IsUrl({ require_tld: false })
+  @IsString()
   larkWebhook?: string;
 
   @IsOptional()
@@ -68,7 +68,7 @@ export class UpdateRequirementDto {
   priority?: Priority;
 
   @IsOptional()
-  @IsUrl({ require_tld: false })
+  @IsString()
   larkWebhook?: string;
 
   @IsOptional()

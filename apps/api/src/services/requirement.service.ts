@@ -74,6 +74,12 @@ export class RequirementService {
     return { deleted: true };
   }
 
+  async projectIdOf(id: string): Promise<string> {
+    const row = await this.requirements.findById(id).select('projectId');
+    if (!row) throw new NotFoundException('需求不存在');
+    return idOf(row.projectId);
+  }
+
   toDto(row: RequirementEntity & { _id: unknown }): Requirement {
     return {
       id: idOf(row._id),

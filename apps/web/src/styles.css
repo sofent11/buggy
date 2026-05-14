@@ -47,6 +47,11 @@ button,
   white-space: nowrap;
 }
 
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 button:hover,
 .link-button:hover {
   border-color: var(--primary);
@@ -63,6 +68,16 @@ button:hover,
   border-color: var(--primary-dark);
 }
 
+.danger {
+  border-color: #fecaca;
+  color: var(--danger);
+  background: #fff7f7;
+}
+
+.danger:hover {
+  border-color: var(--danger);
+}
+
 input,
 select,
 textarea {
@@ -73,6 +88,18 @@ textarea {
   background: white;
   color: var(--text);
   min-width: 0;
+}
+
+details {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: white;
+}
+
+summary {
+  cursor: pointer;
+  font-weight: 700;
 }
 
 textarea {
@@ -142,6 +169,15 @@ label {
   border: 1px solid #fed7aa;
   border-radius: 6px;
   padding: 10px 12px;
+}
+
+.empty {
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  padding: 28px;
+  text-align: center;
+  color: var(--muted);
+  background: #fbfcfe;
 }
 
 .stack {
@@ -263,6 +299,10 @@ label {
   gap: 16px;
 }
 
+.report-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .metric,
 .panel {
   background: var(--surface);
@@ -327,6 +367,51 @@ label {
   grid-template-columns: minmax(180px, 1fr) auto auto;
 }
 
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.field-grid textarea {
+  grid-column: span 2;
+}
+
+.fit {
+  width: fit-content;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.search-box {
+  min-width: min(320px, 100%);
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: white;
+  padding: 0 10px;
+  color: var(--muted);
+}
+
+.search-box input {
+  border: 0;
+  padding: 0;
+  width: 100%;
+}
+
+.search-box input:focus {
+  outline: none;
+}
+
 .cards {
   display: grid;
   gap: 12px;
@@ -345,6 +430,11 @@ label {
   gap: 12px;
 }
 
+.item-card.selected {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(23, 107, 135, 0.12);
+}
+
 .item-card > div:first-child {
   display: flex;
   justify-content: space-between;
@@ -354,6 +444,48 @@ label {
 .item-card span {
   color: var(--muted);
   font-size: 13px;
+}
+
+.sub-panel {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.sub-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.member-list,
+.risk-list,
+.report-actions,
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: white;
+}
+
+.icon-link {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--danger);
 }
 
 .table-wrap {
@@ -387,22 +519,69 @@ tr:last-child td {
   border-bottom: 0;
 }
 
-.run-list {
+.run-list,
+.case-picker {
   display: grid;
   gap: 8px;
 }
 
 .run-row {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) 120px minmax(160px, 1fr) auto auto;
+  grid-template-columns: minmax(180px, 1fr) 140px minmax(160px, 1fr) auto auto;
   gap: 8px;
   align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+  background: white;
 }
 
-.report-actions {
-  display: flex;
-  flex-wrap: wrap;
+.linked-bugs {
+  grid-column: 1 / -1;
+  color: var(--danger);
+}
+
+.case-picker {
+  max-height: 260px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+  background: #fbfcfe;
+}
+
+.compact-picker {
+  margin-top: 10px;
+}
+
+.check-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 10px;
+  align-items: center;
+  border-radius: 6px;
+  padding: 8px;
+  color: var(--text);
+}
+
+.check-row:hover {
+  background: var(--surface-soft);
+}
+
+.check-row input {
+  min-height: auto;
+}
+
+.progress-pill {
+  display: inline-flex;
+  align-items: center;
+  color: var(--primary);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.span-two {
+  grid-column: span 2;
 }
 
 @media (max-width: 980px) {
@@ -433,5 +612,15 @@ tr:last-child td {
 
   .run-row {
     grid-template-columns: 1fr;
+  }
+
+  .field-grid,
+  .report-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .field-grid textarea,
+  .span-two {
+    grid-column: span 1;
   }
 }

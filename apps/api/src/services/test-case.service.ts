@@ -68,6 +68,12 @@ export class TestCaseService {
     return { deleted: true };
   }
 
+  async projectIdOf(id: string): Promise<string> {
+    const row = await this.cases.findById(id).select('projectId');
+    if (!row) throw new NotFoundException('用例不存在');
+    return idOf(row.projectId);
+  }
+
   toDto(row: TestCaseEntity & { _id: unknown }): TestCase {
     return {
       id: idOf(row._id),

@@ -5,44 +5,54 @@ import { TestPlanService } from '../services/test-plan.service.js';
 import { AuthGuard } from '../shared/auth.guard.js';
 import { CurrentUser } from '../shared/current-user.decorator.js';
 import type { SessionUser } from '../services/auth.service.js';
+import { ProjectService } from '../services/project.service.js';
 
 @Controller('test-plans')
 @UseGuards(AuthGuard)
 export class TestPlanController {
-  constructor(private readonly plans: TestPlanService) {}
+  constructor(
+    private readonly plans: TestPlanService,
+    private readonly projects: ProjectService
+  ) {}
 
   @Get()
-  list(@Query() query: ListQueryDto) {
+  async list(@Query() query: ListQueryDto, @CurrentUser() user: SessionUser) {
+    if (query.projectId) await this.projects.get(query.projectId, user);
     return this.plans.list(query);
   }
 
   @Post()
-  create(@Body() dto: CreateTestPlanDto) {
+  async create(@Body() dto: CreateTestPlanDto, @CurrentUser() user: SessionUser) {
+    await this.projects.assertManage(dto.projectId, user);
     return this.plans.create(dto);
   }
 
   @Get(':id')
-  get(@Param('id') id: string) {
+  async get(@Param('id') id: string, @CurrentUser() user: SessionUser) {
+    await this.projects.get(await this.plans.projectIdOf(id), user);
     return this.plans.get(id);
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: UpdateTestPlanDto) {
+  async update(@Param('id') id: string, @Body() dto: UpdateTestPlanDto, @CurrentUser() user: SessionUser) {
+    await this.projects.assertManage(await this.plans.projectIdOf(id), user);
     return this.plans.update(id, dto);
   }
 
   @Patch(':id/run-items/:runItemId')
-  updateRunItem(
+  async updateRunItem(
     @Param('id') id: string,
     @Param('runItemId') runItemId: string,
     @Body() dto: UpdateRunItemDto,
     @CurrentUser() user: SessionUser
   ) {
+    await this.projects.get(await this.plans.projectIdOf(id), user);
     return this.plans.updateRunItem(id, runItemId, dto, user);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
+  async remove(@Param('id') id: string, @CurrentUser() user: SessionUser) {
+    await this.projects.assertManage(await this.plans.projectIdOf(id), user);
     return this.plans.remove(id);
   }
 }

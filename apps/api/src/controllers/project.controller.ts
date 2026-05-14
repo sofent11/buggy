@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { CreateProjectDto, UpdateProjectDto, UpsertProjectMemberDto } from '../dto/project.dto.js';
 import { ProjectService } from '../services/project.service.js';
+import { ProjectCleanupService } from '../services/project-cleanup.service.js';
 import { AuthGuard } from '../shared/auth.guard.js';
 import { CurrentUser } from '../shared/current-user.decorator.js';
 import type { SessionUser } from '../services/auth.service.js';
@@ -8,7 +9,10 @@ import type { SessionUser } from '../services/auth.service.js';
 @Controller('projects')
 @UseGuards(AuthGuard)
 export class ProjectController {
-  constructor(private readonly projects: ProjectService) {}
+  constructor(
+    private readonly projects: ProjectService,
+    private readonly cleanup: ProjectCleanupService
+  ) {}
 
   @Get()
   list(@CurrentUser() user: SessionUser) {
@@ -31,8 +35,10 @@ export class ProjectController {
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string, @CurrentUser() user: SessionUser) {
-    return this.projects.remove(id, user);
+  async remove(@Param('id') id: string, @CurrentUser() user: SessionUser) {
+    const result = await this.projects.remove(id, user);
+    await this.cleanup.removeProjectData(id);
+    return result;
   }
 
   @Post(':id/members')

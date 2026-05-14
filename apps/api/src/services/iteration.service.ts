@@ -54,6 +54,12 @@ export class IterationService {
     return { deleted: true };
   }
 
+  async projectIdOf(id: string): Promise<string> {
+    const row = await this.iterations.findById(id).select('projectId');
+    if (!row) throw new NotFoundException('迭代不存在');
+    return idOf(row.projectId);
+  }
+
   toDto(row: IterationEntity & { _id: unknown }): Iteration {
     return {
       id: idOf(row._id),

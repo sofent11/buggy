@@ -121,6 +121,12 @@ export class TestPlanService {
     return { deleted: true };
   }
 
+  async projectIdOf(id: string): Promise<string> {
+    const row = await this.plans.findById(id).select('projectId');
+    if (!row) throw new NotFoundException('测试计划不存在');
+    return idOf(row.projectId);
+  }
+
   toDto(row: TestPlanEntity & { _id: unknown }): TestPlan {
     return {
       id: idOf(row._id),

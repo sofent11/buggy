@@ -106,6 +106,12 @@ export class BugService {
     return { deleted: true };
   }
 
+  async projectIdOf(id: string): Promise<string> {
+    const row = await this.bugs.findById(id).select('projectId');
+    if (!row) throw new NotFoundException('Bug 不存在');
+    return idOf(row.projectId);
+  }
+
   toDto(row: BugEntity & { _id: unknown }): Bug {
     return {
       id: idOf(row._id),

@@ -68,6 +68,12 @@ export class ProjectService {
     return { deleted: true };
   }
 
+  async projectIdOf(id: string): Promise<string> {
+    const project = await this.projects.findById(id).select('_id');
+    if (!project) throw new NotFoundException('项目不存在');
+    return idOf(project._id);
+  }
+
   async upsertMember(projectId: string, dto: UpsertProjectMemberDto, user: SessionUser): Promise<Project> {
     await this.assertManage(projectId, user);
     const memberUser = dto.userId

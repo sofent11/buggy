@@ -3,29 +3,39 @@ import { ListQueryDto } from '../dto/common.dto.js';
 import { CreateIterationDto, UpdateIterationDto } from '../dto/iteration.dto.js';
 import { IterationService } from '../services/iteration.service.js';
 import { AuthGuard } from '../shared/auth.guard.js';
+import { ProjectService } from '../services/project.service.js';
+import { CurrentUser } from '../shared/current-user.decorator.js';
+import type { SessionUser } from '../services/auth.service.js';
 
 @Controller('iterations')
 @UseGuards(AuthGuard)
 export class IterationController {
-  constructor(private readonly iterations: IterationService) {}
+  constructor(
+    private readonly iterations: IterationService,
+    private readonly projects: ProjectService
+  ) {}
 
   @Get()
-  list(@Query() query: ListQueryDto) {
+  async list(@Query() query: ListQueryDto, @CurrentUser() user: SessionUser) {
+    if (query.projectId) await this.projects.get(query.projectId, user);
     return this.iterations.list(query);
   }
 
   @Post()
-  create(@Body() dto: CreateIterationDto) {
+  async create(@Body() dto: CreateIterationDto, @CurrentUser() user: SessionUser) {
+    await this.projects.assertManage(dto.projectId, user);
     return this.iterations.create(dto);
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: UpdateIterationDto) {
+  async update(@Param('id') id: string, @Body() dto: UpdateIterationDto, @CurrentUser() user: SessionUser) {
+    await this.projects.assertManage(await this.iterations.projectIdOf(id), user);
     return this.iterations.update(id, dto);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
+  async remove(@Param('id') id: string, @CurrentUser() user: SessionUser) {
+    await this.projects.assertManage(await this.iterations.projectIdOf(id), user);
     return this.iterations.remove(id);
   }
 }

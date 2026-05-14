@@ -2,7 +2,9 @@ import type {
   ApiResult,
   Bug,
   Dictionary,
+  DictionaryValue,
   Iteration,
+  ProjectMember,
   Project,
   ReportSummary,
   Requirement,
@@ -52,32 +54,55 @@ export const api = {
 
   projects: () => request<Project[]>('/projects'),
   createProject: (body: Partial<Project>) => request<Project>('/projects', { method: 'POST', body: JSON.stringify(body) }),
+  updateProject: (id: string, body: Partial<Project>) => request<Project>(`/projects/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteProject: (id: string) => request<{ deleted: true }>(`/projects/${id}`, { method: 'DELETE' }),
+  upsertProjectMember: (projectId: string, body: { userId?: string; email?: string; role: ProjectMember['role'] }) =>
+    request<Project>(`/projects/${projectId}/members`, { method: 'POST', body: JSON.stringify(body) }),
+  removeProjectMember: (projectId: string, userId: string) =>
+    request<Project>(`/projects/${projectId}/members/${userId}`, { method: 'DELETE' }),
+
+  users: (keyword = '') => request<UserProfile[]>(`/users${keyword ? `?keyword=${encodeURIComponent(keyword)}` : ''}`),
+  updateUser: (id: string, body: Partial<Pick<UserProfile, 'role' | 'status'>>) =>
+    request<UserProfile>(`/users/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
 
   iterations: (projectId: string) => request<Iteration[]>(`/iterations?projectId=${projectId}`),
   createIteration: (body: Partial<Iteration>) => request<Iteration>('/iterations', { method: 'POST', body: JSON.stringify(body) }),
+  updateIteration: (id: string, body: Partial<Iteration>) => request<Iteration>(`/iterations/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteIteration: (id: string) => request<{ deleted: true }>(`/iterations/${id}`, { method: 'DELETE' }),
 
   requirements: (projectId: string) => request<Requirement[]>(`/requirements?projectId=${projectId}`),
   createRequirement: (body: Partial<Requirement>) =>
     request<Requirement>('/requirements', { method: 'POST', body: JSON.stringify(body) }),
+  updateRequirement: (id: string, body: Partial<Requirement>) =>
+    request<Requirement>(`/requirements/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteRequirement: (id: string) => request<{ deleted: true }>(`/requirements/${id}`, { method: 'DELETE' }),
   bindLark: (id: string, larkWebhook: string) =>
     request<Requirement>(`/requirements/${id}/lark`, { method: 'PATCH', body: JSON.stringify({ larkWebhook }) }),
   sendLark: (id: string) => request<{ sent: boolean }>(`/requirements/${id}/lark/send`, { method: 'POST' }),
 
   testCases: (projectId: string) => request<TestCase[]>(`/test-cases?projectId=${projectId}`),
   createTestCase: (body: Partial<TestCase>) => request<TestCase>('/test-cases', { method: 'POST', body: JSON.stringify(body) }),
+  updateTestCase: (id: string, body: Partial<TestCase>) => request<TestCase>(`/test-cases/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteTestCase: (id: string) => request<{ deleted: true }>(`/test-cases/${id}`, { method: 'DELETE' }),
 
   testPlans: (projectId: string) => request<TestPlan[]>(`/test-plans?projectId=${projectId}`),
   createTestPlan: (body: Partial<TestPlan>) => request<TestPlan>('/test-plans', { method: 'POST', body: JSON.stringify(body) }),
+  updateTestPlan: (id: string, body: Partial<TestPlan>) => request<TestPlan>(`/test-plans/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteTestPlan: (id: string) => request<{ deleted: true }>(`/test-plans/${id}`, { method: 'DELETE' }),
   updateRunItem: (planId: string, runItemId: string, body: { status: string; actualResult?: string }) =>
     request<TestPlan>(`/test-plans/${planId}/run-items/${runItemId}`, { method: 'PATCH', body: JSON.stringify(body) }),
 
   bugs: (projectId: string) => request<Bug[]>(`/bugs?projectId=${projectId}`),
   createBug: (body: Partial<Bug>) => request<Bug>('/bugs', { method: 'POST', body: JSON.stringify(body) }),
+  updateBug: (id: string, body: Partial<Bug>) => request<Bug>(`/bugs/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteBug: (id: string) => request<{ deleted: true }>(`/bugs/${id}`, { method: 'DELETE' }),
   createBugFromRun: (body: { testPlanId: string; runItemId: string; title: string; actualResult?: string }) =>
     request<Bug>('/bugs/from-run', { method: 'POST', body: JSON.stringify(body) }),
 
   report: (projectId: string) => request<ReportSummary>(`/reports/summary?projectId=${projectId}`),
   dictionaries: (projectId?: string) => request<Dictionary[]>(`/dictionaries${projectId ? `?projectId=${projectId}` : ''}`),
+  upsertDictionary: (body: { type: string; projectId?: string; values: DictionaryValue[] }) =>
+    request<Dictionary>('/dictionaries', { method: 'POST', body: JSON.stringify(body) }),
   importRows: (body: { projectId: string; type: string; rows: Array<Record<string, unknown>> }) =>
     request<{ imported: number; errors: Array<{ row: number; message: string }> }>('/import-export/import', {
       method: 'POST',

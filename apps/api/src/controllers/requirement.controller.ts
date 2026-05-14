@@ -4,47 +4,58 @@ import { BindLarkDto, CreateRequirementDto, UpdateRequirementDto } from '../dto/
 import { LarkService } from '../services/lark.service.js';
 import { RequirementService } from '../services/requirement.service.js';
 import { AuthGuard } from '../shared/auth.guard.js';
+import { ProjectService } from '../services/project.service.js';
+import { CurrentUser } from '../shared/current-user.decorator.js';
+import type { SessionUser } from '../services/auth.service.js';
 
 @Controller('requirements')
 @UseGuards(AuthGuard)
 export class RequirementController {
   constructor(
     private readonly requirements: RequirementService,
-    private readonly lark: LarkService
+    private readonly lark: LarkService,
+    private readonly projects: ProjectService
   ) {}
 
   @Get()
-  list(@Query() query: ListQueryDto) {
+  async list(@Query() query: ListQueryDto, @CurrentUser() user: SessionUser) {
+    if (query.projectId) await this.projects.get(query.projectId, user);
     return this.requirements.list(query);
   }
 
   @Post()
-  create(@Body() dto: CreateRequirementDto) {
+  async create(@Body() dto: CreateRequirementDto, @CurrentUser() user: SessionUser) {
+    await this.projects.assertManage(dto.projectId, user);
     return this.requirements.create(dto);
   }
 
   @Get(':id')
-  get(@Param('id') id: string) {
+  async get(@Param('id') id: string, @CurrentUser() user: SessionUser) {
+    await this.projects.get(await this.requirements.projectIdOf(id), user);
     return this.requirements.get(id);
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: UpdateRequirementDto) {
+  async update(@Param('id') id: string, @Body() dto: UpdateRequirementDto, @CurrentUser() user: SessionUser) {
+    await this.projects.assertManage(await this.requirements.projectIdOf(id), user);
     return this.requirements.update(id, dto);
   }
 
   @Patch(':id/lark')
-  bindLark(@Param('id') id: string, @Body() dto: BindLarkDto) {
+  async bindLark(@Param('id') id: string, @Body() dto: BindLarkDto, @CurrentUser() user: SessionUser) {
+    await this.projects.assertManage(await this.requirements.projectIdOf(id), user);
     return this.requirements.bindLark(id, dto);
   }
 
   @Post(':id/lark/send')
-  sendLark(@Param('id') id: string) {
+  async sendLark(@Param('id') id: string, @CurrentUser() user: SessionUser) {
+    await this.projects.get(await this.requirements.projectIdOf(id), user);
     return this.lark.sendRequirementProgress(id);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
+  async remove(@Param('id') id: string, @CurrentUser() user: SessionUser) {
+    await this.projects.assertManage(await this.requirements.projectIdOf(id), user);
     return this.requirements.remove(id);
   }
 }

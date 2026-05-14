@@ -5,11 +5,15 @@ import { ImportExportService } from '../services/import-export.service.js';
 import { AuthGuard } from '../shared/auth.guard.js';
 import { CurrentUser } from '../shared/current-user.decorator.js';
 import type { SessionUser } from '../services/auth.service.js';
+import { ProjectService } from '../services/project.service.js';
 
 @Controller('import-export')
 @UseGuards(AuthGuard)
 export class ImportExportController {
-  constructor(private readonly importExport: ImportExportService) {}
+  constructor(
+    private readonly importExport: ImportExportService,
+    private readonly projects: ProjectService
+  ) {}
 
   @Get('template')
   async template(@Query('type') type: ImportRowsDto['type'], @Res() reply: FastifyReply) {
@@ -21,7 +25,8 @@ export class ImportExportController {
   }
 
   @Get('export')
-  async export(@Query('type') type: ImportRowsDto['type'], @Query('projectId') projectId: string, @Res() reply: FastifyReply) {
+  async export(@Query('type') type: ImportRowsDto['type'], @Query('projectId') projectId: string, @Res() reply: FastifyReply, @CurrentUser() user: SessionUser) {
+    await this.projects.get(projectId, user);
     const buffer = await this.importExport.export(type, projectId);
     reply
       .header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
@@ -30,12 +35,14 @@ export class ImportExportController {
   }
 
   @Post('import')
-  importRows(@Body() dto: ImportRowsDto, @CurrentUser() user: SessionUser) {
+  async importRows(@Body() dto: ImportRowsDto, @CurrentUser() user: SessionUser) {
+    await this.projects.assertManage(dto.projectId, user);
     return this.importExport.importRows(dto, user);
   }
 
   @Post('import-xlsx')
   async importXlsx(@Query('projectId') projectId: string, @Query('type') type: ImportRowsDto['type'], @Req() request: FastifyRequest, @CurrentUser() user: SessionUser) {
+    await this.projects.assertManage(projectId, user);
     const file = await request.file();
     if (!file) return { imported: 0, errors: [{ row: 0, message: '请选择 Excel 文件' }] };
     const buffer = await file.toBuffer();
