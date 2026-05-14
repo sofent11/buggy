@@ -1,0 +1,12 @@
+node_modules
+apps/*/node_modules
+packages/*/node_modules
+dist
+apps/*/dist
+packages/*/dist
+mongo_data
+.DS_Store
+.env.local
+coverage
+*.tsbuildinfo
+**/*.tsbuildinfo

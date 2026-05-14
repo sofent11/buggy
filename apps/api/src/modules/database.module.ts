@@ -1,0 +1,30 @@
+import { Module } from '@nestjs/common';
+import { MongooseModule } from '@nestjs/mongoose';
+import { BugEntity, BugSchema } from '../database/bug.schema.js';
+import { DictionaryEntity, DictionarySchema } from '../database/dictionary.schema.js';
+import { IterationEntity, IterationSchema } from '../database/iteration.schema.js';
+import { ProjectEntity, ProjectSchema } from '../database/project.schema.js';
+import { RequirementEntity, RequirementSchema } from '../database/requirement.schema.js';
+import { TestCaseEntity, TestCaseSchema } from '../database/test-case.schema.js';
+import { TestPlanEntity, TestPlanSchema } from '../database/test-plan.schema.js';
+import { UserEntity, UserSchema } from '../database/user.schema.js';
+
+@Module({
+  imports: [
+    MongooseModule.forRoot(process.env.MONGO_URL || 'mongodb://127.0.0.1:27017/buggy', {
+      autoIndex: process.env.MONGO_AUTO_INDEX !== 'false'
+    }),
+    MongooseModule.forFeature([
+      { name: UserEntity.name, schema: UserSchema },
+      { name: ProjectEntity.name, schema: ProjectSchema },
+      { name: IterationEntity.name, schema: IterationSchema },
+      { name: RequirementEntity.name, schema: RequirementSchema },
+      { name: TestCaseEntity.name, schema: TestCaseSchema },
+      { name: TestPlanEntity.name, schema: TestPlanSchema },
+      { name: BugEntity.name, schema: BugSchema },
+      { name: DictionaryEntity.name, schema: DictionarySchema }
+    ])
+  ],
+  exports: [MongooseModule]
+})
+export class DatabaseModule {}

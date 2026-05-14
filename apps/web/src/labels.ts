@@ -1,0 +1,31 @@
+export const labels: Record<string, string> = {
+  planning: '规划中',
+  active: '进行中',
+  done: '已完成',
+  archived: '已归档',
+  draft: '草稿',
+  ready: '待测试',
+  testing: '测试中',
+  blocked: '阻塞',
+  deprecated: '已废弃',
+  untested: '未测',
+  passed: '通过',
+  failed: '失败',
+  skipped: '跳过',
+  open: '新建',
+  in_progress: '处理中',
+  resolved: '已解决',
+  verified: '已验证',
+  closed: '已关闭',
+  reopened: '重新打开',
+  admin: '管理员',
+  project_owner: '项目负责人',
+  tester: '测试',
+  developer: '开发',
+  viewer: '只读'
+};
+
+export function labelOf(value?: string) {
+  if (!value) return '-';
+  return labels[value] || value;
+}

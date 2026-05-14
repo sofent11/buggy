@@ -1,0 +1,23 @@
+{
+  "name": "buggy",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Buggy 测试管理平台",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace @buggy/shared-types && npm run build --workspace @buggy/api && npm run build --workspace @buggy/web",
+    "dev": "npm run dev --workspace @buggy/api",
+    "api:dev": "npm run dev --workspace @buggy/api",
+    "api:build": "npm run build --workspace @buggy/api",
+    "web:dev": "npm run dev --workspace @buggy/web",
+    "web:build": "npm run build --workspace @buggy/web",
+    "types:build": "npm run build --workspace @buggy/shared-types"
+  },
+  "engines": {
+    "node": ">=22.0.0",
+    "npm": ">=10.0.0"
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "name": "@buggy/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/main.js"
+  },
+  "dependencies": {
+    "@buggy/shared-types": "file:../../packages/shared-types",
+    "@fastify/multipart": "^10.0.0",
+    "@nestjs/common": "^11.1.19",
+    "@nestjs/core": "^11.1.19",
+    "@nestjs/mongoose": "^11.0.0",
+    "@nestjs/platform-fastify": "^11.1.19",
+    "@nestjs/schedule": "^6.0.1",
+    "axios": "^1.16.0",
+    "bcryptjs": "^3.0.2",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.2",
+    "cookie": "^1.0.2",
+    "exceljs": "^4.4.0",
+    "fastify": "^5.8.5",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.19.1",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1"
+  },
+  "devDependencies": {
+    "@types/cookie": "^0.6.0",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^22.10.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.7.2"
+  }
+}

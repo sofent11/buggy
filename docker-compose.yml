@@ -1,0 +1,40 @@
+services:
+  mongo:
+    image: mongo:7
+    restart: always
+    volumes:
+      - ./mongo_data:/data/db
+    ports:
+      - "27019:27017"
+    environment:
+      - MONGO_INITDB_DATABASE=buggy
+
+  api:
+    build:
+      context: .
+      target: api
+      args:
+        VITE_API_BASE: ${VITE_API_BASE:-/api}
+    restart: always
+    ports:
+      - "3400:3400"
+    environment:
+      - PORT=3400
+      - MONGO_URL=mongodb://mongo:27017/buggy
+      - SESSION_SECRET=${SESSION_SECRET:-buggy-local-session-secret}
+      - LARK_DAILY_CRON=${LARK_DAILY_CRON:-0 18 * * *}
+      - TZ=Asia/Shanghai
+    depends_on:
+      - mongo
+
+  web:
+    build:
+      context: .
+      target: web
+      args:
+        VITE_API_BASE: ${VITE_API_BASE:-/api}
+    restart: always
+    ports:
+      - "8090:80"
+    depends_on:
+      - api
