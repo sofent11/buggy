@@ -435,15 +435,41 @@ label {
   box-shadow: 0 0 0 2px rgba(23, 107, 135, 0.12);
 }
 
-.item-card > div:first-child {
+.card-head {
   display: flex;
   justify-content: space-between;
   gap: 12px;
+  align-items: flex-start;
 }
 
+.card-head > div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.card-head strong,
+.run-title strong {
+  color: var(--text);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.card-head span,
+.run-title span,
 .item-card span {
   color: var(--muted);
   font-size: 13px;
+}
+
+.status-badge {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 9px;
+  background: white;
+  color: var(--primary) !important;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .sub-panel {
@@ -536,6 +562,12 @@ tr:last-child td {
   background: white;
 }
 
+.run-title {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
 .linked-bugs {
   grid-column: 1 / -1;
   color: var(--danger);
@@ -605,7 +637,7 @@ tr:last-child td {
 
   .topbar,
   .top-actions,
-  .item-card > div:first-child {
+  .card-head {
     align-items: stretch;
     flex-direction: column;
   }

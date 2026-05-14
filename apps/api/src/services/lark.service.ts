@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import axios from 'axios';
 import { InjectModel } from '@nestjs/mongoose';
@@ -30,7 +30,7 @@ export class LarkService {
 
   async sendRequirementProgress(requirementId: string): Promise<{ sent: boolean }> {
     const requirement = await this.requirements.findById(requirementId);
-    if (!requirement || !requirement.larkWebhook) return { sent: false };
+    if (!requirement || !requirement.larkWebhook) throw new BadRequestException('需求未配置 Lark webhook');
     const summary = await this.reports.summary({ projectId: idOf(requirement.projectId), requirementId });
     const content = [
       `需求：${requirement.title}`,

@@ -14,14 +14,14 @@ import type {
 } from '@buggy/shared-types';
 
 const API_BASE = import.meta.env.VITE_API_BASE || '/api';
+export type ImportResult = { imported: number; errors: Array<{ row: number; message: string }> };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers = new Headers(init?.headers);
+  if (init?.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
   const response = await fetch(`${API_BASE}${path}`, {
     credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers || {})
-    },
+    headers,
     ...init
   });
   const contentType = response.headers.get('content-type') || '';
@@ -104,14 +104,14 @@ export const api = {
   upsertDictionary: (body: { type: string; projectId?: string; values: DictionaryValue[] }) =>
     request<Dictionary>('/dictionaries', { method: 'POST', body: JSON.stringify(body) }),
   importRows: (body: { projectId: string; type: string; rows: Array<Record<string, unknown>> }) =>
-    request<{ imported: number; errors: Array<{ row: number; message: string }> }>('/import-export/import', {
+    request<ImportResult>('/import-export/import', {
       method: 'POST',
       body: JSON.stringify(body)
     }),
   importXlsx: (projectId: string, type: string, file: File) => {
     const formData = new FormData();
     formData.set('file', file);
-    return upload<{ imported: number; errors: Array<{ row: number; message: string }> }>(
+    return upload<ImportResult>(
       `/import-export/import-xlsx?projectId=${projectId}&type=${type}`,
       formData
     );

@@ -36,7 +36,7 @@ import type {
   TestRunItem,
   UserProfile
 } from '@buggy/shared-types';
-import { api, downloadUrl } from './api.js';
+import { api, downloadUrl, type ImportResult } from './api.js';
 import { labelOf } from './labels.js';
 
 type Tab = 'overview' | 'projects' | 'iterations' | 'requirements' | 'cases' | 'plans' | 'bugs' | 'reports' | 'settings';
@@ -63,6 +63,8 @@ const emptyData: WorkspaceData = {
   users: []
 };
 
+const LOGGED_OUT_KEY = 'buggy_logged_out';
+
 const requirementStatuses = ['draft', 'ready', 'testing', 'done', 'blocked'] as const;
 const iterationStatuses = ['planning', 'active', 'done', 'archived'] as const;
 const caseStatuses = ['draft', 'ready', 'deprecated'] as const;
@@ -71,6 +73,8 @@ const runStatuses = ['untested', 'passed', 'failed', 'blocked', 'skipped'] as co
 const bugStatuses = ['open', 'in_progress', 'resolved', 'verified', 'closed', 'reopened'] as const;
 const priorities = ['P0', 'P1', 'P2', 'P3'] as const;
 const severities = ['S0', 'S1', 'S2', 'S3'] as const;
+const systemRoles = ['admin', 'project_owner', 'tester', 'developer', 'viewer'] as const;
+const userStatuses = ['active', 'disabled'] as const;
 
 export function App() {
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -86,6 +90,10 @@ export function App() {
   const currentProject = projects.find((project) => project.id === currentProjectId);
 
   useEffect(() => {
+    if (localStorage.getItem(LOGGED_OUT_KEY) === '1') {
+      setLoading(false);
+      return;
+    }
     api
       .me()
       .then(async (profile) => {
@@ -151,6 +159,20 @@ export function App() {
     }
   }
 
+  async function mutateWithResult<T>(action: () => Promise<T>, resolveMessage: (result: T) => string, options?: { reloadProjects?: boolean }) {
+    setBusy(true);
+    try {
+      const result = await action();
+      if (options?.reloadProjects) await loadProjects();
+      await loadWorkspace();
+      setNotice(resolveMessage(result));
+    } catch (error) {
+      setNotice((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function submitAuth(event: React.FormEvent) {
     event.preventDefault();
     setBusy(true);
@@ -159,6 +181,7 @@ export function App() {
         authMode === 'login'
           ? await api.login({ email: authForm.email.trim(), password: authForm.password })
           : await api.register({ username: authForm.username.trim(), email: authForm.email.trim(), password: authForm.password });
+      localStorage.removeItem(LOGGED_OUT_KEY);
       setUser(profile);
       setNotice(`欢迎，${profile.username}`);
       await loadProjects();
@@ -170,11 +193,16 @@ export function App() {
   }
 
   async function logout() {
-    await api.logout();
-    setUser(null);
-    setProjects([]);
-    setCurrentProjectId('');
-    setData(emptyData);
+    try {
+      await api.logout();
+    } finally {
+      setUser(null);
+      setProjects([]);
+      setCurrentProjectId('');
+      setData(emptyData);
+      setNotice('');
+      localStorage.setItem(LOGGED_OUT_KEY, '1');
+    }
   }
 
   const dashboard = useMemo(() => {
@@ -252,7 +280,7 @@ export function App() {
           <NavButton tab="reports" current={tab} icon={FileSpreadsheet} label="报告" onClick={setTab} />
           <NavButton tab="settings" current={tab} icon={Settings} label="配置" onClick={setTab} />
         </nav>
-        <button className="ghost" onClick={logout}>
+        <button type="button" className="ghost" onClick={logout}>
           <LogOut size={16} /> 退出
         </button>
       </aside>
@@ -371,9 +399,12 @@ export function App() {
             {tab === 'settings' && currentProject && (
               <SettingsSection
                 projectId={currentProject.id}
+                currentUser={user}
                 dictionaries={data.dictionaries}
+                users={data.users}
                 onNotice={setNotice}
                 mutate={mutate}
+                mutateWithResult={mutateWithResult}
               />
             )}
           </>
@@ -462,6 +493,11 @@ function ProjectCard(props: {
 }) {
   return (
     <article className={props.active ? 'item-card selected' : 'item-card'}>
+      <CardHeader
+        title={props.project.name}
+        meta={[props.project.code || '未设置代号', `${props.project.members.length} 名成员`]}
+        badge={props.active ? '当前项目' : '项目'}
+      />
       <form
         className="inline-form"
         onSubmit={(event) => {
@@ -479,9 +515,9 @@ function ProjectCard(props: {
           );
         }}
       >
-        <input name="name" defaultValue={props.project.name} />
-        <input name="code" defaultValue={props.project.code} />
-        <input name="description" defaultValue={props.project.description} />
+        <input name="name" aria-label="项目名称" placeholder="项目名称" defaultValue={props.project.name} />
+        <input name="code" aria-label="项目代号" placeholder="项目代号" defaultValue={props.project.code} />
+        <input name="description" aria-label="项目描述" placeholder="项目描述" defaultValue={props.project.description} />
         <button>
           <Save size={15} /> 保存
         </button>
@@ -612,6 +648,11 @@ function IterationSection(props: {
       <div className="cards">
         {rows.map((row) => (
           <article className="item-card" key={row.id}>
+            <CardHeader
+              title={row.name}
+              meta={[row.goal || '未设置迭代目标', dateRange(row.startDate, row.endDate)]}
+              badge={labelOf(row.status)}
+            />
             <form
               className="inline-form"
               onSubmit={(event) => {
@@ -630,10 +671,10 @@ function IterationSection(props: {
                 );
               }}
             >
-              <input name="name" defaultValue={row.name} />
-              <input name="goal" defaultValue={row.goal} />
-              <input name="startDate" type="date" defaultValue={dateInput(row.startDate)} />
-              <input name="endDate" type="date" defaultValue={dateInput(row.endDate)} />
+              <input name="name" aria-label="迭代名称" placeholder="迭代名称" defaultValue={row.name} />
+              <input name="goal" aria-label="迭代目标" placeholder="迭代目标" defaultValue={row.goal} />
+              <input name="startDate" aria-label="开始日期" type="date" defaultValue={dateInput(row.startDate)} />
+              <input name="endDate" aria-label="结束日期" type="date" defaultValue={dateInput(row.endDate)} />
               <Select name="status" values={iterationStatuses} defaultValue={row.status} />
               <button>
                 <Save size={15} /> 保存
@@ -676,6 +717,15 @@ function RequirementSection(props: {
       <div className="cards">
         {rows.map((row) => (
           <article className="item-card" key={row.id}>
+            <CardHeader
+              title={row.title}
+              meta={[
+                `优先级 ${row.priority}`,
+                row.iterationId ? iterationName(props.iterations, row.iterationId) : '未绑定迭代',
+                row.ownerId ? userName(props.users, row.ownerId) : '未指派负责人'
+              ]}
+              badge={labelOf(row.status)}
+            />
             <form className="stack" onSubmit={(event) => {
               event.preventDefault();
               props.mutate(() => api.updateRequirement(row.id, requirementPayload(new FormData(event.currentTarget), props.projectId)), '需求已保存');
@@ -701,11 +751,11 @@ function RequirementFields(props: { row?: Requirement; iterations: Iteration[]; 
   return (
     <div className="field-grid">
       <input name="title" placeholder="需求标题" defaultValue={props.row?.title} required />
-      <select name="iterationId" defaultValue={props.row?.iterationId || ''}>
+      <select name="iterationId" aria-label="绑定迭代" defaultValue={props.row?.iterationId || ''}>
         <option value="">不绑定迭代</option>
         {props.iterations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
       </select>
-      <select name="ownerId" defaultValue={props.row?.ownerId || ''}>
+      <select name="ownerId" aria-label="需求负责人" defaultValue={props.row?.ownerId || ''}>
         <option value="">未指派负责人</option>
         {props.users.map((item) => <option key={item.id} value={item.id}>{item.username}</option>)}
       </select>
@@ -748,6 +798,15 @@ function CaseSection(props: {
       <div className="cards">
         {rows.map((row) => (
           <article className="item-card" key={row.id}>
+            <CardHeader
+              title={row.title}
+              meta={[
+                `优先级 ${row.priority}`,
+                row.requirementId ? requirementTitle(props.requirements, row.requirementId) : '未绑定需求',
+                row.expectedResult || '未填写最终预期结果'
+              ]}
+              badge={labelOf(row.status)}
+            />
             <form className="stack" onSubmit={(event) => {
               event.preventDefault();
               props.mutate(() => api.updateTestCase(row.id, testCasePayload(new FormData(event.currentTarget), props.projectId)), '用例已保存');
@@ -771,7 +830,7 @@ function TestCaseFields(props: { row?: TestCase; requirements: Requirement[] }) 
   return (
     <div className="field-grid">
       <input name="title" placeholder="用例标题" defaultValue={props.row?.title} required />
-      <select name="requirementId" defaultValue={props.row?.requirementId || ''}>
+      <select name="requirementId" aria-label="绑定需求" defaultValue={props.row?.requirementId || ''}>
         <option value="">不绑定需求</option>
         {props.requirements.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
       </select>
@@ -864,6 +923,11 @@ function PlanCard(props: {
   const progress = executionProgress(props.plan.runItems);
   return (
     <article className="item-card">
+      <CardHeader
+        title={props.plan.name}
+        meta={[props.plan.round, `${props.plan.runItems.length} 条执行项`, executionProgress(props.plan.runItems)]}
+        badge={labelOf(props.plan.status)}
+      />
       <form className="inline-form" onSubmit={(event) => {
         event.preventDefault();
         const form = new FormData(event.currentTarget);
@@ -872,8 +936,8 @@ function PlanCard(props: {
           '测试计划已保存'
         );
       }}>
-        <input name="name" defaultValue={props.plan.name} />
-        <input name="round" defaultValue={props.plan.round} />
+        <input name="name" aria-label="计划名称" placeholder="计划名称" defaultValue={props.plan.name} />
+        <input name="round" aria-label="执行轮次" placeholder="执行轮次" defaultValue={props.plan.round} />
         <Select name="status" values={planStatuses} defaultValue={props.plan.status} />
         <span className="progress-pill">{progress}</span>
         <button><Save size={15} /> 保存</button>
@@ -919,9 +983,12 @@ function RunItemRow(props: {
         '执行结果已更新'
       );
     }}>
-      <span>{props.item.caseTitle}</span>
+      <div className="run-title">
+        <strong>{props.item.caseTitle}</strong>
+        <span>{labelOf(props.item.status)}</span>
+      </div>
       <Select name="status" values={runStatuses} defaultValue={props.item.status} />
-      <input name="actualResult" defaultValue={props.item.actualResult} placeholder="实际结果" />
+      <input name="actualResult" aria-label={`${props.item.caseTitle} 实际结果`} defaultValue={props.item.actualResult} placeholder="实际结果" />
       <button><Save size={15} /> 保存</button>
       <button type="button" onClick={() => props.mutate(
         () => api.createBugFromRun({ testPlanId: props.planId, runItemId: props.item.id, title: `${props.item.caseTitle} 执行失败`, actualResult: props.item.actualResult }),
@@ -963,6 +1030,16 @@ function BugSection(props: {
       <div className="cards">
         {rows.map((row) => (
           <article className="item-card" key={row.id}>
+            <CardHeader
+              title={row.title}
+              meta={[
+                `严重级别 ${row.severity}`,
+                `优先级 ${row.priority}`,
+                row.assigneeId ? userName(props.users, row.assigneeId) : '未指派',
+                row.actualResult || '未填写实际结果'
+              ]}
+              badge={labelOf(row.status)}
+            />
             <form className="stack" onSubmit={(event) => {
               event.preventDefault();
               props.mutate(() => api.updateBug(row.id, bugPayload(new FormData(event.currentTarget), props.projectId)), 'Bug 已保存');
@@ -985,16 +1062,16 @@ function BugFields(props: { row?: Bug; requirements: Requirement[]; cases: TestC
   return (
     <div className="field-grid">
       <input name="title" placeholder="Bug 标题" defaultValue={props.row?.title} required />
-      <select name="requirementId" defaultValue={props.row?.requirementId || ''}>
+      <select name="requirementId" aria-label="关联需求" defaultValue={props.row?.requirementId || ''}>
         <option value="">不绑定需求</option>{props.requirements.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
       </select>
-      <select name="testCaseId" defaultValue={props.row?.testCaseId || ''}>
+      <select name="testCaseId" aria-label="关联用例" defaultValue={props.row?.testCaseId || ''}>
         <option value="">不绑定用例</option>{props.cases.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
       </select>
-      <select name="testPlanId" defaultValue={props.row?.testPlanId || ''}>
+      <select name="testPlanId" aria-label="关联计划" defaultValue={props.row?.testPlanId || ''}>
         <option value="">不绑定计划</option>{props.plans.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
       </select>
-      <select name="assigneeId" defaultValue={props.row?.assigneeId || ''}>
+      <select name="assigneeId" aria-label="Bug 负责人" defaultValue={props.row?.assigneeId || ''}>
         <option value="">未指派</option>{props.users.map((item) => <option key={item.id} value={item.id}>{item.username}</option>)}
       </select>
       <Select name="severity" values={severities} defaultValue={props.row?.severity || 'S2'} />
@@ -1045,9 +1122,12 @@ function ReportSection(props: { projectId: string; report: ReportSummary | null 
 
 function SettingsSection(props: {
   projectId: string;
+  currentUser: UserProfile;
   dictionaries: Dictionary[];
+  users: UserProfile[];
   onNotice: (message: string) => void;
   mutate: (action: () => Promise<unknown>, message: string) => Promise<void>;
+  mutateWithResult: <T>(action: () => Promise<T>, resolveMessage: (result: T) => string) => Promise<void>;
 }) {
   return (
     <Section title="系统配置" icon={Settings}>
@@ -1072,16 +1152,92 @@ function SettingsSection(props: {
               props.onNotice('请选择 Excel 文件');
               return;
             }
-            props.mutate(() => api.importXlsx(props.projectId, text(form, 'type'), file), 'Excel 导入完成');
+            props.mutateWithResult(
+              () => api.importXlsx(props.projectId, text(form, 'type'), file),
+              (result) => importMessage(result)
+            );
           }}>
-            <select name="type"><option value="requirements">需求</option><option value="test-cases">用例</option><option value="bugs">Bug</option></select>
+            <select name="type">
+              <option value="requirements">需求</option>
+              <option value="test-cases">用例</option>
+              <option value="bugs">Bug</option>
+              <option value="run-results">执行结果</option>
+            </select>
             <input name="file" type="file" accept=".xlsx" />
             <button className="primary"><Upload size={15} /> 上传 Excel</button>
           </form>
         </article>
+        <UserAdmin currentUser={props.currentUser} users={props.users} mutate={props.mutate} />
         <DictionaryEditor dictionaries={props.dictionaries} projectId={props.projectId} mutate={props.mutate} />
       </div>
     </Section>
+  );
+}
+
+function UserAdmin(props: {
+  currentUser: UserProfile;
+  users: UserProfile[];
+  mutate: (action: () => Promise<unknown>, message: string) => Promise<void>;
+}) {
+  const canManage = props.currentUser.role === 'admin';
+  return (
+    <article className="item-card span-two">
+      <strong>账号权限</strong>
+      {!canManage && <p>当前账号可查看用户列表，只有管理员可以调整系统角色和账号状态。</p>}
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>用户</th>
+              <th>邮箱</th>
+              <th>系统角色</th>
+              <th>状态</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {props.users.map((user) => (
+              <tr key={user.id}>
+                <td>{user.username}</td>
+                <td>{user.email}</td>
+                <td>
+                  {canManage ? (
+                    <select
+                      aria-label={`${user.username} 系统角色`}
+                      defaultValue={user.role}
+                      onChange={(event) => props.mutate(() => api.updateUser(user.id, { role: event.target.value as never }), '用户角色已更新')}
+                    >
+                      {systemRoles.map((role) => <option key={role} value={role}>{labelOf(role)}</option>)}
+                    </select>
+                  ) : (
+                    labelOf(user.role)
+                  )}
+                </td>
+                <td>
+                  {canManage ? (
+                    <select
+                      aria-label={`${user.username} 账号状态`}
+                      defaultValue={user.status}
+                      onChange={(event) => props.mutate(() => api.updateUser(user.id, { status: event.target.value as never }), '账号状态已更新')}
+                    >
+                      {userStatuses.map((status) => <option key={status} value={status}>{userStatusLabel(status)}</option>)}
+                    </select>
+                  ) : (
+                    userStatusLabel(user.status)
+                  )}
+                </td>
+                <td>{user.role === 'admin' ? '管理员' : '可维护'}</td>
+              </tr>
+            ))}
+            {props.users.length === 0 && (
+              <tr>
+                <td colSpan={5}>暂无用户</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </article>
   );
 }
 
@@ -1108,10 +1264,23 @@ function DictionaryEditor(props: {
           <option value="priority">优先级</option>
           <option value="severity">严重级别</option>
         </select>
-        <textarea name="values" defaultValue={formatDictionaryValues(dictionary?.values || [])} />
+        <textarea key={dictionary?.id || type} name="values" aria-label="字典值" defaultValue={formatDictionaryValues(dictionary?.values || [])} />
         <button className="primary fit"><Save size={15} /> 保存字典</button>
       </form>
     </article>
+  );
+}
+
+function CardHeader(props: { title: string; meta?: Array<string | undefined>; badge?: string }) {
+  const meta = (props.meta || []).filter(Boolean);
+  return (
+    <div className="card-head">
+      <div>
+        <strong>{props.title}</strong>
+        {meta.length > 0 && <span>{meta.join(' · ')}</span>}
+      </div>
+      {props.badge && <span className="status-badge">{props.badge}</span>}
+    </div>
   );
 }
 
@@ -1252,6 +1421,33 @@ function dateInput(value?: string) {
   return value ? value.slice(0, 10) : '';
 }
 
+function dateRange(startDate?: string, endDate?: string) {
+  const start = dateInput(startDate);
+  const end = dateInput(endDate);
+  if (start && end) return `${start} 至 ${end}`;
+  if (start) return `${start} 开始`;
+  if (end) return `${end} 结束`;
+  return '未设置起止时间';
+}
+
+function iterationName(iterations: Iteration[], id: string) {
+  return iterations.find((item) => item.id === id)?.name || '未知迭代';
+}
+
+function requirementTitle(requirements: Requirement[], id: string) {
+  return requirements.find((item) => item.id === id)?.title || '未知需求';
+}
+
+function userName(users: UserProfile[], id: string) {
+  return users.find((item) => item.id === id)?.username || '未知用户';
+}
+
+function userStatusLabel(status?: string) {
+  if (status === 'active') return '启用';
+  if (status === 'disabled') return '已禁用';
+  return labelOf(status);
+}
+
 function requirementPayload(form: FormData, projectId: string): Partial<Requirement> {
   return {
     projectId,
@@ -1300,6 +1496,12 @@ function executionProgress(items: TestRunItem[]) {
   const done = items.filter((item) => item.status !== 'untested').length;
   const passed = items.filter((item) => item.status === 'passed').length;
   return `${done}/${total} 已测 · ${passed} 通过`;
+}
+
+function importMessage(result: ImportResult) {
+  if (result.errors.length === 0) return `Excel 导入完成：成功 ${result.imported} 行`;
+  const details = result.errors.slice(0, 3).map((error) => `第 ${error.row} 行 ${error.message}`).join('；');
+  return `Excel 导入完成：成功 ${result.imported} 行，失败 ${result.errors.length} 行。${details}`;
 }
 
 function rate(done: number, total: number) {

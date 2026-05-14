@@ -22,7 +22,8 @@ export const labels: Record<string, string> = {
   project_owner: '项目负责人',
   tester: '测试',
   developer: '开发',
-  viewer: '只读'
+  viewer: '只读',
+  disabled: '已禁用'
 };
 
 export function labelOf(value?: string) {

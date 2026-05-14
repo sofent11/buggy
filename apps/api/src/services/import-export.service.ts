@@ -1,18 +1,22 @@
 import { Injectable } from '@nestjs/common';
 import ExcelJS from 'exceljs';
-import type { Bug, Requirement, TestCase } from '@buggy/shared-types';
+import type { Bug, Requirement, TestCase, TestRunStatus } from '@buggy/shared-types';
 import type { ImportRowsDto } from '../dto/import-export.dto.js';
 import { BugService } from './bug.service.js';
 import { RequirementService } from './requirement.service.js';
 import { TestCaseService } from './test-case.service.js';
 import type { SessionUser } from './auth.service.js';
+import { TestPlanService } from './test-plan.service.js';
+
+const testRunStatuses = ['untested', 'passed', 'failed', 'blocked', 'skipped'] as const;
 
 @Injectable()
 export class ImportExportService {
   constructor(
     private readonly requirements: RequirementService,
     private readonly cases: TestCaseService,
-    private readonly bugs: BugService
+    private readonly bugs: BugService,
+    private readonly plans: TestPlanService
   ) {}
 
   async template(type: ImportRowsDto['type']): Promise<Buffer> {
@@ -29,10 +33,20 @@ export class ImportExportService {
     const sheet = workbook.addWorksheet(type);
     const headers = this.headers(type);
     sheet.addRow(headers);
-    let rows: Array<Requirement | TestCase | Bug> = [];
+    let rows: Array<Requirement | TestCase | Bug | Record<string, string>> = [];
     if (type === 'requirements') rows = await this.requirements.list({ projectId });
     if (type === 'test-cases') rows = await this.cases.list({ projectId });
     if (type === 'bugs') rows = await this.bugs.list({ projectId });
+    if (type === 'run-results') rows = (await this.plans.list({ projectId })).flatMap((plan) =>
+      plan.runItems.map((item) => ({
+        planName: plan.name,
+        testPlanId: plan.id,
+        runItemId: item.id,
+        caseTitle: item.caseTitle,
+        status: item.status,
+        actualResult: item.actualResult || ''
+      }))
+    ) as never;
     for (const row of rows) sheet.addRow(this.toExportRow(type, row));
     return Buffer.from(await workbook.xlsx.writeBuffer());
   }
@@ -71,6 +85,23 @@ export class ImportExportService {
               expectedResult: String(row.expectedResult || row['期望结果'] || ''),
               severity: (row.severity || row['严重级别'] || 'S2') as never,
               priority: (row.priority || row['优先级'] || 'P2') as never
+            },
+            user
+          );
+        } else if (dto.type === 'run-results') {
+          const testPlanId = String(row.testPlanId || row['计划ID'] || '').trim();
+          const runItemId = String(row.runItemId || row['执行项ID'] || '').trim();
+          if (!testPlanId || !runItemId) throw new Error('计划ID和执行项ID不能为空');
+          const plan = await this.plans.get(testPlanId);
+          if (plan.projectId !== dto.projectId) throw new Error('执行项不属于当前项目');
+          const status = String(row.status || row['执行状态'] || 'untested') as TestRunStatus;
+          if (!testRunStatuses.includes(status)) throw new Error(`执行状态无效：${status}`);
+          await this.plans.updateRunItem(
+            testPlanId,
+            runItemId,
+            {
+              status,
+              actualResult: String(row.actualResult || row['实际结果'] || '')
             },
             user
           );
@@ -113,10 +144,10 @@ export class ImportExportService {
     if (type === 'requirements') return ['标题', '描述', '优先级', '状态'];
     if (type === 'test-cases') return ['标题', '前置条件', '步骤', '预期', '预期结果', '优先级', '状态', 'requirementId'];
     if (type === 'bugs') return ['标题', '复现步骤', '实际结果', '期望结果', '严重级别', '优先级'];
-    return ['testPlanId', 'runItemId', 'status', 'actualResult'];
+    return ['计划名称', '计划ID', '执行项ID', '用例标题', '执行状态', '实际结果'];
   }
 
-  private toExportRow(type: ImportRowsDto['type'], row: Requirement | TestCase | Bug): string[] {
+  private toExportRow(type: ImportRowsDto['type'], row: Requirement | TestCase | Bug | Record<string, string>): string[] {
     if (type === 'requirements') {
       const item = row as Requirement;
       return [item.title, item.description || '', item.priority, item.status];
@@ -134,6 +165,10 @@ export class ImportExportService {
         item.status,
         item.requirementId || ''
       ];
+    }
+    if (type === 'run-results') {
+      const item = row as Record<string, string>;
+      return [item.planName || '', item.testPlanId || '', item.runItemId || '', item.caseTitle || '', item.status || '', item.actualResult || ''];
     }
     const item = row as Bug;
     return [item.title, item.reproduceSteps || '', item.actualResult || '', item.expectedResult || '', item.severity, item.priority];

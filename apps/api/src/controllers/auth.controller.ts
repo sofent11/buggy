@@ -27,7 +27,7 @@ export class AuthController {
 
   @Post('logout')
   logout(@Res({ passthrough: true }) reply: FastifyReply) {
-    this.auth.logoutCookies().forEach((cookie) => reply.header('Set-Cookie', cookie));
+    reply.header('Set-Cookie', this.auth.logoutCookies());
     return { loggedOut: true };
   }
 

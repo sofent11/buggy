@@ -77,12 +77,21 @@ export class AuthService {
   }
 
   logoutCookies(): string[] {
+    const expires = new Date(0);
     return [
       serialize(this.cookieName, '', {
         path: '/',
         httpOnly: true,
         sameSite: 'lax',
-        expires: new Date(0)
+        expires,
+        maxAge: 0
+      }),
+      serialize(this.cookieName, '', {
+        path: '/api',
+        httpOnly: true,
+        sameSite: 'lax',
+        expires,
+        maxAge: 0
       })
     ];
   }
