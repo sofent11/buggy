@@ -677,8 +677,50 @@ summary {
   min-width: 0;
 }
 
-.top-actions select {
-  max-width: 210px;
+.project-switcher {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.project-switcher select {
+  width: 210px;
+  max-width: 22vw;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.refresh-button {
+  min-width: 82px;
+}
+
+.refresh-button svg {
+  flex: 0 0 auto;
+}
+
+.sync-status {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: white;
+  color: var(--muted);
+  padding: 0 10px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.sync-status.is-busy {
+  border-color: #b8c9ee;
+  background: var(--primary-soft);
+  color: var(--primary-dark);
 }
 
 .user-pill {
@@ -805,6 +847,10 @@ summary {
   gap: 10px;
 }
 
+.field-grid.two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .field-grid textarea {
   grid-column: span 2;
 }
@@ -818,11 +864,17 @@ summary {
   flex-wrap: wrap;
   gap: 10px;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   border: 1px solid var(--line);
   border-radius: 4px;
   background: #fafbff;
   padding: 10px;
+}
+
+.toolbar > .primary,
+.toolbar > .ui-button,
+.toolbar > button:last-child {
+  margin-left: auto;
 }
 
 .search-box {
@@ -971,6 +1023,7 @@ summary {
 .toolbar-summary {
   color: var(--muted);
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .chip {
@@ -1118,6 +1171,10 @@ tr:last-child td {
   grid-column: span 2;
 }
 
+.span-four {
+  grid-column: 1 / -1;
+}
+
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -1206,6 +1263,22 @@ tr:last-child td {
     max-width: none;
   }
 
+  .project-switcher {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .project-switcher select {
+    width: 100%;
+    max-width: none;
+  }
+
+  .refresh-button,
+  .sync-status {
+    width: 100%;
+  }
+
   .user-pill {
     border-left: 0;
     border-top: 1px solid var(--line-strong);
@@ -1222,7 +1295,8 @@ tr:last-child td {
   }
 
   .field-grid textarea,
-  .span-two {
+  .span-two,
+  .span-four {
     grid-column: span 1;
   }
 }

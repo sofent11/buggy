@@ -3,7 +3,6 @@ import { useForm, type UseFormRegister } from 'react-hook-form';
 import {
   Activity,
   BarChart3,
-  Bell,
   Bug as BugIcon,
   CalendarRange,
   Check,
@@ -15,7 +14,6 @@ import {
   FolderKanban,
   HelpCircle,
   LogOut,
-  MessageSquare,
   Pencil,
   Plus,
   RefreshCw,
@@ -326,20 +324,24 @@ export function App() {
             />
           </label>
           <div className="top-actions">
-            <select value={currentProjectId} onChange={(event) => setCurrentProjectId(event.target.value)}>
-              <option value="">选择项目</option>
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.name}
-                </option>
-              ))}
-            </select>
-            <button className="icon-button" title="刷新" onClick={() => loadWorkspace()} disabled={busy || !currentProjectId}>
+            <label className="project-switcher">
+              <span>当前项目</span>
+              <select value={currentProjectId} onChange={(event) => setCurrentProjectId(event.target.value)}>
+                <option value="">选择项目</option>
+                {projects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button className="refresh-button" title="刷新工作区数据" onClick={() => loadWorkspace()} disabled={busy || !currentProjectId}>
               <RefreshCw size={17} />
+              <span>{busy ? '同步中' : '刷新'}</span>
             </button>
-            <button className="icon-button" title="通知" type="button"><Bell size={18} /></button>
-            <button className="icon-button" title="历史" type="button"><Clock3 size={18} /></button>
-            <button className="icon-button" title="消息" type="button"><MessageSquare size={18} /></button>
+            <span className={busy ? 'sync-status is-busy' : 'sync-status'}>
+              <Clock3 size={15} /> {busy ? '正在更新数据' : '数据已就绪'}
+            </span>
             <span className="user-pill">{user.username} · {labelOf(user.role)}</span>
           </div>
         </header>
@@ -533,6 +535,7 @@ function ProjectSection(props: {
     <Section title="项目管理" icon={FolderKanban}>
       <Toolbar>
         <SearchBox value={keyword} onChange={setKeyword} placeholder="搜索项目" />
+        <span className="toolbar-summary">{filtered.length} / {props.projects.length} 个项目</span>
         <button className="primary" type="button" onClick={() => setCreating(true)}>
           <Plus size={16} /> 新建项目
         </button>
@@ -568,9 +571,18 @@ function ProjectSection(props: {
         >
           {(register) => (
             <>
-              <Input {...register('name')} placeholder="项目名称" required />
-              <Input {...register('code')} placeholder="项目代号" />
-              <Textarea {...register('description')} placeholder="项目描述" />
+              <Field>
+                <FieldLabel>项目名称</FieldLabel>
+                <Input {...register('name')} placeholder="例如：移动端 6.0" required />
+              </Field>
+              <Field>
+                <FieldLabel>项目代号</FieldLabel>
+                <Input {...register('code')} placeholder="例如：APP-QA" />
+              </Field>
+              <Field>
+                <FieldLabel>项目描述</FieldLabel>
+                <Textarea {...register('description')} placeholder="补充项目范围、目标或协作说明" />
+              </Field>
               <FormActions>
                 <Button type="button" onClick={() => setCreating(false)}>取消</Button>
                 <Button variant="primary"><Plus size={16} /> 创建项目</Button>
@@ -644,9 +656,18 @@ function ProjectCard(props: {
           >
             {(register) => (
               <>
-                <Input {...register('name')} aria-label="项目名称" placeholder="项目名称" />
-                <Input {...register('code')} aria-label="项目代号" placeholder="项目代号" />
-                <Textarea {...register('description')} aria-label="项目描述" placeholder="项目描述" />
+                <Field>
+                  <FieldLabel>项目名称</FieldLabel>
+                  <Input {...register('name')} placeholder="项目名称" />
+                </Field>
+                <Field>
+                  <FieldLabel>项目代号</FieldLabel>
+                  <Input {...register('code')} placeholder="项目代号" />
+                </Field>
+                <Field>
+                  <FieldLabel>项目描述</FieldLabel>
+                  <Textarea {...register('description')} placeholder="项目描述" />
+                </Field>
                 <FormActions>
                   <Button type="button" onClick={() => setEditing(false)}>取消</Button>
                   <Button variant="primary"><Save size={15} /> 保存项目</Button>
@@ -743,6 +764,7 @@ function IterationSection(props: {
     <Section title="迭代管理" icon={CalendarRange}>
       <Toolbar>
         <SearchBox value={keyword} onChange={setKeyword} placeholder="搜索迭代" />
+        <span className="toolbar-summary">{rows.length} / {props.rows.length} 个迭代</span>
         <button className="primary" type="button" onClick={() => setCreating(true)}>
           <Plus size={16} /> 新建迭代
         </button>
@@ -829,11 +851,28 @@ function IterationDrawer(props: {
       >
         {(register) => (
           <>
-            <Input {...register('name')} aria-label="迭代名称" placeholder="迭代名称" required />
-            <Input {...register('goal')} aria-label="迭代目标" placeholder="迭代目标" />
-            <Input {...register('startDate')} aria-label="开始日期" type="date" />
-            <Input {...register('endDate')} aria-label="结束日期" type="date" />
-            <Select name="status" register={register} values={iterationStatuses} defaultValue={props.row?.status || 'planning'} />
+            <Field>
+              <FieldLabel>迭代名称</FieldLabel>
+              <Input {...register('name')} placeholder="例如：6 月回归" required />
+            </Field>
+            <Field>
+              <FieldLabel>迭代目标</FieldLabel>
+              <Input {...register('goal')} placeholder="本轮要交付或验证的目标" />
+            </Field>
+            <div className="field-grid two">
+              <Field>
+                <FieldLabel>开始日期</FieldLabel>
+                <Input {...register('startDate')} type="date" />
+              </Field>
+              <Field>
+                <FieldLabel>结束日期</FieldLabel>
+                <Input {...register('endDate')} type="date" />
+              </Field>
+            </div>
+            <Field>
+              <FieldLabel>状态</FieldLabel>
+              <Select name="status" register={register} values={iterationStatuses} defaultValue={props.row?.status || 'planning'} />
+            </Field>
             <FormActions>
               <Button type="button" onClick={props.onClose}>取消</Button>
               <Button variant="primary"><Save size={15} /> 保存</Button>
@@ -862,6 +901,7 @@ function RequirementSection(props: {
       <Toolbar>
         <SearchBox value={keyword} onChange={setKeyword} placeholder="搜索需求" />
         <Select value={status} onChange={setStatus} values={requirementStatuses} emptyLabel="全部状态" />
+        <span className="toolbar-summary">{rows.length} / {props.rows.length} 个需求</span>
         <button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建需求</button>
       </Toolbar>
       <div className="cards">
@@ -919,19 +959,40 @@ function RequirementSection(props: {
 function RequirementFields(props: { row?: Requirement; iterations: Iteration[]; users: UserProfile[]; register?: UseFormRegister<StringFormValues> }) {
   return (
     <div className="field-grid">
-      <Input {...registerField(props.register, 'title')} placeholder="需求标题" defaultValue={props.row?.title} required />
-      <select {...registerField(props.register, 'iterationId')} aria-label="绑定迭代" defaultValue={props.row?.iterationId || ''}>
-        <option value="">不绑定迭代</option>
-        {props.iterations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-      </select>
-      <select {...registerField(props.register, 'ownerId')} aria-label="需求负责人" defaultValue={props.row?.ownerId || ''}>
-        <option value="">未指派负责人</option>
-        {props.users.map((item) => <option key={item.id} value={item.id}>{item.username}</option>)}
-      </select>
-      <Select name="priority" register={props.register} values={priorities} defaultValue={props.row?.priority || 'P2'} />
-      <Select name="status" register={props.register} values={requirementStatuses} defaultValue={props.row?.status || 'ready'} />
-      <Input {...registerField(props.register, 'larkWebhook')} placeholder="Lark webhook" defaultValue={props.row?.larkWebhook} />
-      <Textarea {...registerField(props.register, 'description')} placeholder="需求描述" defaultValue={props.row?.description} />
+      <Field className="span-two">
+        <FieldLabel>需求标题</FieldLabel>
+        <Input {...registerField(props.register, 'title')} placeholder="一句话描述验收目标" defaultValue={props.row?.title} required />
+      </Field>
+      <Field>
+        <FieldLabel>绑定迭代</FieldLabel>
+        <select {...registerField(props.register, 'iterationId')} defaultValue={props.row?.iterationId || ''}>
+          <option value="">不绑定迭代</option>
+          {props.iterations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+        </select>
+      </Field>
+      <Field>
+        <FieldLabel>负责人</FieldLabel>
+        <select {...registerField(props.register, 'ownerId')} defaultValue={props.row?.ownerId || ''}>
+          <option value="">未指派负责人</option>
+          {props.users.map((item) => <option key={item.id} value={item.id}>{item.username}</option>)}
+        </select>
+      </Field>
+      <Field>
+        <FieldLabel>优先级</FieldLabel>
+        <Select name="priority" register={props.register} values={priorities} defaultValue={props.row?.priority || 'P2'} />
+      </Field>
+      <Field>
+        <FieldLabel>状态</FieldLabel>
+        <Select name="status" register={props.register} values={requirementStatuses} defaultValue={props.row?.status || 'ready'} />
+      </Field>
+      <Field className="span-two">
+        <FieldLabel>Lark Webhook</FieldLabel>
+        <Input {...registerField(props.register, 'larkWebhook')} placeholder="用于发送需求日报，可留空" defaultValue={props.row?.larkWebhook} />
+      </Field>
+      <Field className="span-four">
+        <FieldLabel>需求描述</FieldLabel>
+        <Textarea {...registerField(props.register, 'description')} placeholder="补充背景、边界和验收条件" defaultValue={props.row?.description} />
+      </Field>
     </div>
   );
 }
@@ -983,6 +1044,7 @@ function CaseSection(props: {
           <option value="">全部需求</option>
           {props.requirements.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
         </select>
+        <span className="toolbar-summary">{rows.length} / {props.rows.length} 条用例</span>
         <button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建用例</button>
       </Toolbar>
       <div className="cards">
@@ -1036,17 +1098,41 @@ function TestCaseFields(props: { row?: TestCase; requirements: Requirement[]; re
   const step = props.row?.steps[0];
   return (
     <div className="field-grid">
-      <Input {...registerField(props.register, 'title')} placeholder="用例标题" defaultValue={props.row?.title} required />
-      <select {...registerField(props.register, 'requirementId')} aria-label="绑定需求" defaultValue={props.row?.requirementId || ''}>
-        <option value="">不绑定需求</option>
-        {props.requirements.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
-      </select>
-      <Select name="priority" register={props.register} values={priorities} defaultValue={props.row?.priority || 'P2'} />
-      <Select name="status" register={props.register} values={caseStatuses} defaultValue={props.row?.status || 'ready'} />
-      <Input {...registerField(props.register, 'preconditions')} placeholder="前置条件" defaultValue={props.row?.preconditions} />
-      <Input {...registerField(props.register, 'step')} placeholder="测试步骤" defaultValue={step?.action} />
-      <Input {...registerField(props.register, 'expected')} placeholder="步骤预期" defaultValue={step?.expected} />
-      <Textarea {...registerField(props.register, 'expectedResult')} placeholder="最终预期结果" defaultValue={props.row?.expectedResult} />
+      <Field className="span-two">
+        <FieldLabel>用例标题</FieldLabel>
+        <Input {...registerField(props.register, 'title')} placeholder="例如：登录失败时展示错误提示" defaultValue={props.row?.title} required />
+      </Field>
+      <Field>
+        <FieldLabel>绑定需求</FieldLabel>
+        <select {...registerField(props.register, 'requirementId')} defaultValue={props.row?.requirementId || ''}>
+          <option value="">不绑定需求</option>
+          {props.requirements.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
+        </select>
+      </Field>
+      <Field>
+        <FieldLabel>优先级</FieldLabel>
+        <Select name="priority" register={props.register} values={priorities} defaultValue={props.row?.priority || 'P2'} />
+      </Field>
+      <Field>
+        <FieldLabel>状态</FieldLabel>
+        <Select name="status" register={props.register} values={caseStatuses} defaultValue={props.row?.status || 'ready'} />
+      </Field>
+      <Field>
+        <FieldLabel>前置条件</FieldLabel>
+        <Input {...registerField(props.register, 'preconditions')} placeholder="账号、环境或数据准备" defaultValue={props.row?.preconditions} />
+      </Field>
+      <Field>
+        <FieldLabel>测试步骤</FieldLabel>
+        <Input {...registerField(props.register, 'step')} placeholder="输入操作步骤" defaultValue={step?.action} />
+      </Field>
+      <Field>
+        <FieldLabel>步骤预期</FieldLabel>
+        <Input {...registerField(props.register, 'expected')} placeholder="该步骤的预期反馈" defaultValue={step?.expected} />
+      </Field>
+      <Field className="span-four">
+        <FieldLabel>最终预期结果</FieldLabel>
+        <Textarea {...registerField(props.register, 'expectedResult')} placeholder="执行完成后的整体预期" defaultValue={props.row?.expectedResult} />
+      </Field>
     </div>
   );
 }
@@ -1292,6 +1378,7 @@ function BugSection(props: {
       <Toolbar>
         <SearchBox value={keyword} onChange={setKeyword} placeholder="搜索 Bug" />
         <Select value={status} onChange={setStatus} values={bugStatuses} emptyLabel="全部状态" />
+        <span className="toolbar-summary">{rows.length} / {props.rows.length} 个 Bug</span>
         <button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建 Bug</button>
       </Toolbar>
       <div className="cards">
@@ -1351,25 +1438,58 @@ function BugSection(props: {
 function BugFields(props: { row?: Bug; requirements: Requirement[]; cases: TestCase[]; plans: TestPlan[]; users: UserProfile[]; register?: UseFormRegister<StringFormValues> }) {
   return (
     <div className="field-grid">
-      <Input {...registerField(props.register, 'title')} placeholder="Bug 标题" defaultValue={props.row?.title} required />
-      <select {...registerField(props.register, 'requirementId')} aria-label="关联需求" defaultValue={props.row?.requirementId || ''}>
-        <option value="">不绑定需求</option>{props.requirements.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
-      </select>
-      <select {...registerField(props.register, 'testCaseId')} aria-label="关联用例" defaultValue={props.row?.testCaseId || ''}>
-        <option value="">不绑定用例</option>{props.cases.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
-      </select>
-      <select {...registerField(props.register, 'testPlanId')} aria-label="关联计划" defaultValue={props.row?.testPlanId || ''}>
-        <option value="">不绑定计划</option>{props.plans.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-      </select>
-      <select {...registerField(props.register, 'assigneeId')} aria-label="Bug 负责人" defaultValue={props.row?.assigneeId || ''}>
-        <option value="">未指派</option>{props.users.map((item) => <option key={item.id} value={item.id}>{item.username}</option>)}
-      </select>
-      <Select name="severity" register={props.register} values={severities} defaultValue={props.row?.severity || 'S2'} />
-      <Select name="priority" register={props.register} values={priorities} defaultValue={props.row?.priority || 'P2'} />
-      <Select name="status" register={props.register} values={bugStatuses} defaultValue={props.row?.status || 'open'} />
-      <Textarea {...registerField(props.register, 'reproduceSteps')} placeholder="复现步骤" defaultValue={props.row?.reproduceSteps} />
-      <Textarea {...registerField(props.register, 'actualResult')} placeholder="实际结果" defaultValue={props.row?.actualResult} />
-      <Textarea {...registerField(props.register, 'expectedResult')} placeholder="期望结果" defaultValue={props.row?.expectedResult} />
+      <Field className="span-two">
+        <FieldLabel>Bug 标题</FieldLabel>
+        <Input {...registerField(props.register, 'title')} placeholder="清楚说明问题现象" defaultValue={props.row?.title} required />
+      </Field>
+      <Field>
+        <FieldLabel>关联需求</FieldLabel>
+        <select {...registerField(props.register, 'requirementId')} defaultValue={props.row?.requirementId || ''}>
+          <option value="">不绑定需求</option>{props.requirements.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
+        </select>
+      </Field>
+      <Field>
+        <FieldLabel>关联用例</FieldLabel>
+        <select {...registerField(props.register, 'testCaseId')} defaultValue={props.row?.testCaseId || ''}>
+          <option value="">不绑定用例</option>{props.cases.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
+        </select>
+      </Field>
+      <Field>
+        <FieldLabel>关联计划</FieldLabel>
+        <select {...registerField(props.register, 'testPlanId')} defaultValue={props.row?.testPlanId || ''}>
+          <option value="">不绑定计划</option>{props.plans.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+        </select>
+      </Field>
+      <Field>
+        <FieldLabel>负责人</FieldLabel>
+        <select {...registerField(props.register, 'assigneeId')} defaultValue={props.row?.assigneeId || ''}>
+          <option value="">未指派</option>{props.users.map((item) => <option key={item.id} value={item.id}>{item.username}</option>)}
+        </select>
+      </Field>
+      <Field>
+        <FieldLabel>严重级别</FieldLabel>
+        <Select name="severity" register={props.register} values={severities} defaultValue={props.row?.severity || 'S2'} />
+      </Field>
+      <Field>
+        <FieldLabel>优先级</FieldLabel>
+        <Select name="priority" register={props.register} values={priorities} defaultValue={props.row?.priority || 'P2'} />
+      </Field>
+      <Field>
+        <FieldLabel>状态</FieldLabel>
+        <Select name="status" register={props.register} values={bugStatuses} defaultValue={props.row?.status || 'open'} />
+      </Field>
+      <Field className="span-four">
+        <FieldLabel>复现步骤</FieldLabel>
+        <Textarea {...registerField(props.register, 'reproduceSteps')} placeholder="按步骤描述如何稳定复现" defaultValue={props.row?.reproduceSteps} />
+      </Field>
+      <Field className="span-two">
+        <FieldLabel>实际结果</FieldLabel>
+        <Textarea {...registerField(props.register, 'actualResult')} placeholder="实际看到的行为" defaultValue={props.row?.actualResult} />
+      </Field>
+      <Field className="span-two">
+        <FieldLabel>期望结果</FieldLabel>
+        <Textarea {...registerField(props.register, 'expectedResult')} placeholder="期望系统表现" defaultValue={props.row?.expectedResult} />
+      </Field>
     </div>
   );
 }
@@ -1710,15 +1830,15 @@ function Metric(props: { label: string; value: string | number; detail: string }
 
 function pageInfo(tab: Tab) {
   const descriptions: Record<Tab, { title: string; description: (project: string) => string }> = {
-    overview: { title: 'Dashboard', description: (project) => `查看「${project}」的质量指标、近期工作和风险信号。` },
-    projects: { title: 'Projects', description: () => '维护项目档案、成员和基础信息。' },
-    iterations: { title: 'Iterations', description: (project) => `管理「${project}」的迭代周期、目标和状态。` },
-    requirements: { title: 'Requirements', description: (project) => `沉淀「${project}」的需求条目、负责人和日报同步。` },
-    cases: { title: 'Test Repository', description: (project) => `管理「${project}」的测试用例、优先级和执行前置条件。` },
-    plans: { title: 'Test Execution', description: (project) => `组织「${project}」的测试轮次、用例范围和执行结果。` },
-    bugs: { title: 'Bug Tracking Center', description: (project) => `筛选、指派和追踪「${project}」中的缺陷。` },
-    reports: { title: 'Reports', description: (project) => `导出「${project}」的需求、用例、Bug 和质量统计。` },
-    settings: { title: 'Settings', description: (project) => `配置「${project}」的数据字典、Excel 模板和账号权限。` }
+    overview: { title: '质量总览', description: (project) => `查看「${project}」的质量指标、近期工作和风险信号。` },
+    projects: { title: '项目管理', description: () => '维护项目档案、成员和基础信息。' },
+    iterations: { title: '迭代管理', description: (project) => `管理「${project}」的迭代周期、目标和状态。` },
+    requirements: { title: '需求管理', description: (project) => `沉淀「${project}」的需求条目、负责人和日报同步。` },
+    cases: { title: '用例库', description: (project) => `管理「${project}」的测试用例、优先级和执行前置条件。` },
+    plans: { title: '测试执行', description: (project) => `组织「${project}」的测试轮次、用例范围和执行结果。` },
+    bugs: { title: '缺陷追踪', description: (project) => `筛选、指派和追踪「${project}」中的缺陷。` },
+    reports: { title: '统计报告', description: (project) => `导出「${project}」的需求、用例、Bug 和质量统计。` },
+    settings: { title: '系统配置', description: (project) => `配置「${project}」的数据字典、Excel 模板和账号权限。` }
   };
   return descriptions[tab];
 }
