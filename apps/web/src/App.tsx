@@ -1,16 +1,22 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useForm, type UseFormRegister } from 'react-hook-form';
 import {
   Activity,
   BarChart3,
+  Bell,
   Bug as BugIcon,
   CalendarRange,
   Check,
   ClipboardCheck,
+  Clock3,
   Download,
   FileSpreadsheet,
   Flag,
   FolderKanban,
+  HelpCircle,
   LogOut,
+  MessageSquare,
+  Pencil,
   Plus,
   RefreshCw,
   Save,
@@ -37,6 +43,13 @@ import type {
   UserProfile
 } from '@buggy/shared-types';
 import { api, downloadUrl, type ImportResult } from './api.js';
+import { Badge } from './components/ui/badge.js';
+import { Button } from './components/ui/button.js';
+import { Card, CardContent, CardHeader as UiCardHeader, CardTitle } from './components/ui/card.js';
+import { Field, FieldLabel, FormActions } from './components/ui/form.js';
+import { Input } from './components/ui/input.js';
+import { Sheet, SheetBody, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetX } from './components/ui/sheet.js';
+import { Textarea } from './components/ui/textarea.js';
 import { labelOf } from './labels.js';
 
 type Tab = 'overview' | 'projects' | 'iterations' | 'requirements' | 'cases' | 'plans' | 'bugs' | 'reports' | 'settings';
@@ -51,6 +64,14 @@ type WorkspaceData = {
   dictionaries: Dictionary[];
   users: UserProfile[];
 };
+
+type AuthFormValues = {
+  username: string;
+  email: string;
+  password: string;
+};
+
+type StringFormValues = Record<string, string>;
 
 const emptyData: WorkspaceData = {
   iterations: [],
@@ -79,10 +100,13 @@ const userStatuses = ['active', 'disabled'] as const;
 export function App() {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('register');
-  const [authForm, setAuthForm] = useState({ username: 'admin', email: 'admin@example.com', password: '123456' });
+  const authForm = useForm<AuthFormValues>({
+    defaultValues: { username: 'admin', email: 'admin@example.com', password: '123456' }
+  });
   const [projects, setProjects] = useState<Project[]>([]);
   const [currentProjectId, setCurrentProjectId] = useState('');
   const [tab, setTab] = useState<Tab>('overview');
+  const [globalKeyword, setGlobalKeyword] = useState('');
   const [data, setData] = useState<WorkspaceData>(emptyData);
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(true);
@@ -173,14 +197,13 @@ export function App() {
     }
   }
 
-  async function submitAuth(event: React.FormEvent) {
-    event.preventDefault();
+  async function submitAuth(values: AuthFormValues) {
     setBusy(true);
     try {
       const profile =
         authMode === 'login'
-          ? await api.login({ email: authForm.email.trim(), password: authForm.password })
-          : await api.register({ username: authForm.username.trim(), email: authForm.email.trim(), password: authForm.password });
+          ? await api.login({ email: values.email.trim(), password: values.password })
+          : await api.register({ username: values.username.trim(), email: values.email.trim(), password: values.password });
       localStorage.removeItem(LOGGED_OUT_KEY);
       setUser(profile);
       setNotice(`欢迎，${profile.username}`);
@@ -214,6 +237,8 @@ export function App() {
       { label: '活跃 Bug', value: report?.bugs.active || 0, detail: `${report?.bugs.total || 0} 总数`, icon: BugIcon }
     ];
   }, [data.report]);
+  const page = pageInfo(tab);
+  const visibleData = useMemo(() => filterWorkspaceData(data, globalKeyword), [data, globalKeyword]);
 
   if (loading) return <div className="boot">正在启动 Buggy...</div>;
 
@@ -226,32 +251,32 @@ export function App() {
             <h1>测试管理平台</h1>
             <p className="muted">项目、迭代、需求、用例、执行、缺陷、报告与 Lark 日报闭环。</p>
           </div>
-          <form onSubmit={submitAuth} className="stack">
+          <form onSubmit={authForm.handleSubmit(submitAuth)} className="stack">
             <div className="segmented">
-              <button type="button" className={authMode === 'register' ? 'active' : ''} onClick={() => setAuthMode('register')}>
+              <Button type="button" variant="ghost" className={authMode === 'register' ? 'active' : ''} onClick={() => setAuthMode('register')}>
                 注册
-              </button>
-              <button type="button" className={authMode === 'login' ? 'active' : ''} onClick={() => setAuthMode('login')}>
+              </Button>
+              <Button type="button" variant="ghost" className={authMode === 'login' ? 'active' : ''} onClick={() => setAuthMode('login')}>
                 登录
-              </button>
+              </Button>
             </div>
             {authMode === 'register' && (
-              <label>
-                用户名
-                <input value={authForm.username} onChange={(event) => setAuthForm({ ...authForm, username: event.target.value })} />
-              </label>
+              <Field>
+                <FieldLabel>用户名</FieldLabel>
+                <Input {...authForm.register('username')} />
+              </Field>
             )}
-            <label>
-              邮箱
-              <input value={authForm.email} onChange={(event) => setAuthForm({ ...authForm, email: event.target.value })} />
-            </label>
-            <label>
-              密码
-              <input type="password" value={authForm.password} onChange={(event) => setAuthForm({ ...authForm, password: event.target.value })} />
-            </label>
-            <button className="primary" type="submit" disabled={busy}>
+            <Field>
+              <FieldLabel>邮箱</FieldLabel>
+              <Input {...authForm.register('email')} />
+            </Field>
+            <Field>
+              <FieldLabel>密码</FieldLabel>
+              <Input type="password" {...authForm.register('password')} />
+            </Field>
+            <Button variant="primary" type="submit" disabled={busy}>
               <ShieldCheck size={18} /> {authMode === 'register' ? '创建账号' : '进入系统'}
-            </button>
+            </Button>
             {notice && <p className="notice">{notice}</p>}
           </form>
         </section>
@@ -263,10 +288,10 @@ export function App() {
     <main className="app">
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-mark">B</div>
+          <div className="brand-mark"><BugIcon size={20} /></div>
           <div>
             <strong>Buggy</strong>
-            <span>测试管理平台</span>
+            <span>Enterprise QA System</span>
           </div>
         </div>
         <nav>
@@ -280,17 +305,26 @@ export function App() {
           <NavButton tab="reports" current={tab} icon={FileSpreadsheet} label="报告" onClick={setTab} />
           <NavButton tab="settings" current={tab} icon={Settings} label="配置" onClick={setTab} />
         </nav>
-        <button type="button" className="ghost" onClick={logout}>
-          <LogOut size={16} /> 退出
-        </button>
+        <div className="sidebar-footer">
+          <button type="button" className="ghost">
+            <HelpCircle size={16} /> 帮助中心
+          </button>
+          <button type="button" className="ghost" onClick={logout}>
+            <LogOut size={16} /> 退出
+          </button>
+        </div>
       </aside>
 
       <section className="workspace">
         <header className="topbar">
-          <div>
-            <p className="eyebrow">当前项目</p>
-            <h1>{currentProject?.name || '创建第一个项目'}</h1>
-          </div>
+          <label className="global-search" aria-label="全局搜索">
+            <Search size={20} />
+            <input
+              value={globalKeyword}
+              onChange={(event) => setGlobalKeyword(event.target.value)}
+              placeholder="搜索需求、用例、Bug、项目..."
+            />
+          </label>
           <div className="top-actions">
             <select value={currentProjectId} onChange={(event) => setCurrentProjectId(event.target.value)}>
               <option value="">选择项目</option>
@@ -300,19 +334,36 @@ export function App() {
                 </option>
               ))}
             </select>
-            <button title="刷新" onClick={() => loadWorkspace()} disabled={busy || !currentProjectId}>
-              <RefreshCw size={16} /> 刷新
+            <button className="icon-button" title="刷新" onClick={() => loadWorkspace()} disabled={busy || !currentProjectId}>
+              <RefreshCw size={17} />
             </button>
+            <button className="icon-button" title="通知" type="button"><Bell size={18} /></button>
+            <button className="icon-button" title="历史" type="button"><Clock3 size={18} /></button>
+            <button className="icon-button" title="消息" type="button"><MessageSquare size={18} /></button>
             <span className="user-pill">{user.username} · {labelOf(user.role)}</span>
           </div>
         </header>
 
         {notice && <div className="notice">{notice}</div>}
 
+        <div className="page-title">
+          <div>
+            <p className="eyebrow">{currentProject?.code || 'Buggy'}</p>
+            <h1>{page.title}</h1>
+            <p>{page.description(currentProject?.name || '未选择项目')}</p>
+          </div>
+          {globalKeyword && (
+            <button className="link-button" type="button" onClick={() => setGlobalKeyword('')}>
+              清除搜索
+            </button>
+          )}
+        </div>
+
         {!currentProject && tab !== 'projects' ? (
           <ProjectSection
             user={user}
             projects={projects}
+            searchKeyword={globalKeyword}
             currentProjectId={currentProjectId}
             users={data.users}
             onSelect={setCurrentProjectId}
@@ -331,7 +382,7 @@ export function App() {
                     <small>{item.detail}</small>
                   </article>
                 ))}
-                <RecentWork data={data} />
+                <RecentWork data={visibleData} />
                 <section className="panel wide">
                   <h2>项目风险</h2>
                   <RiskBoard report={data.report} />
@@ -342,6 +393,7 @@ export function App() {
               <ProjectSection
                 user={user}
                 projects={projects}
+                searchKeyword={globalKeyword}
                 currentProjectId={currentProjectId}
                 users={data.users}
                 onSelect={setCurrentProjectId}
@@ -352,7 +404,7 @@ export function App() {
             {tab === 'iterations' && currentProject && (
               <IterationSection
                 projectId={currentProject.id}
-                rows={data.iterations}
+                rows={visibleData.iterations}
                 mutate={mutate}
               />
             )}
@@ -361,7 +413,7 @@ export function App() {
                 projectId={currentProject.id}
                 iterations={data.iterations}
                 users={data.users}
-                rows={data.requirements}
+                rows={visibleData.requirements}
                 mutate={mutate}
               />
             )}
@@ -369,7 +421,7 @@ export function App() {
               <CaseSection
                 projectId={currentProject.id}
                 requirements={data.requirements}
-                rows={data.cases}
+                rows={visibleData.cases}
                 mutate={mutate}
               />
             )}
@@ -379,7 +431,7 @@ export function App() {
                 requirements={data.requirements}
                 iterations={data.iterations}
                 cases={data.cases}
-                rows={data.plans}
+                rows={visibleData.plans}
                 bugs={data.bugs}
                 mutate={mutate}
               />
@@ -391,7 +443,7 @@ export function App() {
                 cases={data.cases}
                 plans={data.plans}
                 users={data.users}
-                rows={data.bugs}
+                rows={visibleData.bugs}
                 mutate={mutate}
               />
             )}
@@ -422,9 +474,48 @@ function NavButton(props: { tab: Tab; current: Tab; label: string; icon: typeof 
   );
 }
 
+function Drawer(props: { title: string; subtitle?: string; open: boolean; onClose: () => void; children: React.ReactNode }) {
+  return (
+    <Sheet open={props.open} onOpenChange={(open) => (!open ? props.onClose() : undefined)}>
+      <SheetContent>
+        <SheetHeader>
+          <div>
+            <SheetTitle>{props.title}</SheetTitle>
+            {props.subtitle && <SheetDescription>{props.subtitle}</SheetDescription>}
+          </div>
+          <SheetX />
+        </SheetHeader>
+        <SheetBody>{props.children}</SheetBody>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function HookForm(props: {
+  defaultValues?: StringFormValues;
+  className?: string;
+  onSubmit: (form: FormData, values: StringFormValues) => Promise<void>;
+  children: (register: UseFormRegister<StringFormValues>) => React.ReactNode;
+}) {
+  const form = useForm<StringFormValues>({ defaultValues: props.defaultValues || {} });
+  return (
+    <form
+      className={props.className || 'drawer-form'}
+      onSubmit={form.handleSubmit(async (values) => props.onSubmit(formDataFromValues(values), values))}
+    >
+      {props.children(form.register)}
+    </form>
+  );
+}
+
+function registerField(register: UseFormRegister<StringFormValues> | undefined, name: string) {
+  return register ? register(name) : { name };
+}
+
 function ProjectSection(props: {
   user: UserProfile;
   projects: Project[];
+  searchKeyword?: string;
   currentProjectId: string;
   users: UserProfile[];
   onSelect: (id: string) => void;
@@ -432,41 +523,20 @@ function ProjectSection(props: {
   mutate: (action: () => Promise<unknown>, message: string, options?: { reloadProjects?: boolean }) => Promise<void>;
 }) {
   const [keyword, setKeyword] = useState('');
+  const [creating, setCreating] = useState(false);
   const filtered = useMemo(
-    () => props.projects.filter((item) => matchKeyword([item.name, item.code || '', item.description || ''], keyword)),
-    [props.projects, keyword]
+    () => props.projects.filter((item) => matchKeyword([item.name, item.code || '', item.description || ''], keyword, props.searchKeyword)),
+    [props.projects, keyword, props.searchKeyword]
   );
 
   return (
     <Section title="项目管理" icon={FolderKanban}>
       <Toolbar>
         <SearchBox value={keyword} onChange={setKeyword} placeholder="搜索项目" />
-      </Toolbar>
-      <form
-        className="inline-form"
-        onSubmit={(event) => {
-          event.preventDefault();
-          const form = new FormData(event.currentTarget);
-          props.mutate(
-            () =>
-              api.createProject({
-                name: text(form, 'name'),
-                code: text(form, 'code'),
-                description: text(form, 'description')
-              }),
-            '项目已创建',
-            { reloadProjects: true }
-          );
-          event.currentTarget.reset();
-        }}
-      >
-        <input name="name" placeholder="项目名称" required />
-        <input name="code" placeholder="项目代号" />
-        <input name="description" placeholder="项目描述" />
-        <button className="primary">
+        <button className="primary" type="button" onClick={() => setCreating(true)}>
           <Plus size={16} /> 新建项目
         </button>
-      </form>
+      </Toolbar>
       <div className="cards">
         {filtered.map((project) => (
           <ProjectCard
@@ -480,6 +550,35 @@ function ProjectSection(props: {
         ))}
       </div>
       {filtered.length === 0 && <EmptyState text="暂无项目" />}
+      <Drawer title="新建项目" subtitle="创建项目档案后即可维护成员与测试资产。" open={creating} onClose={() => setCreating(false)}>
+        <HookForm
+          onSubmit={async (form) => {
+            await props.mutate(
+              () =>
+                api.createProject({
+                  name: text(form, 'name'),
+                  code: text(form, 'code'),
+                  description: text(form, 'description')
+                }),
+              '项目已创建',
+              { reloadProjects: true }
+            );
+            setCreating(false);
+          }}
+        >
+          {(register) => (
+            <>
+              <Input {...register('name')} placeholder="项目名称" required />
+              <Input {...register('code')} placeholder="项目代号" />
+              <Textarea {...register('description')} placeholder="项目描述" />
+              <FormActions>
+                <Button type="button" onClick={() => setCreating(false)}>取消</Button>
+                <Button variant="primary"><Plus size={16} /> 创建项目</Button>
+              </FormActions>
+            </>
+          )}
+        </HookForm>
+      </Drawer>
     </Section>
   );
 }
@@ -491,38 +590,20 @@ function ProjectCard(props: {
   onSelect: () => void;
   mutate: (action: () => Promise<unknown>, message: string, options?: { reloadProjects?: boolean }) => Promise<void>;
 }) {
+  const [editing, setEditing] = useState(false);
   return (
     <article className={props.active ? 'item-card selected' : 'item-card'}>
       <CardHeader
         title={props.project.name}
-        meta={[props.project.code || '未设置代号', `${props.project.members.length} 名成员`]}
+        meta={[props.project.code || '未设置代号', props.project.description || '未填写描述', `${props.project.members.length} 名成员`]}
         badge={props.active ? '当前项目' : '项目'}
       />
-      <form
-        className="inline-form"
-        onSubmit={(event) => {
-          event.preventDefault();
-          const form = new FormData(event.currentTarget);
-          props.mutate(
-            () =>
-              api.updateProject(props.project.id, {
-                name: text(form, 'name'),
-                code: text(form, 'code'),
-                description: text(form, 'description')
-              }),
-            '项目已保存',
-            { reloadProjects: true }
-          );
-        }}
-      >
-        <input name="name" aria-label="项目名称" placeholder="项目名称" defaultValue={props.project.name} />
-        <input name="code" aria-label="项目代号" placeholder="项目代号" defaultValue={props.project.code} />
-        <input name="description" aria-label="项目描述" placeholder="项目描述" defaultValue={props.project.description} />
-        <button>
-          <Save size={15} /> 保存
-        </button>
+      <div className="card-actions">
         <button type="button" onClick={props.onSelect}>
           <Check size={15} /> 选中
+        </button>
+        <button type="button" onClick={() => setEditing(true)}>
+          <Pencil size={15} /> 编辑
         </button>
         <DangerButton
           onClick={() => {
@@ -531,8 +612,51 @@ function ProjectCard(props: {
             }
           }}
         />
-      </form>
-      <MemberManager project={props.project} users={props.users} mutate={props.mutate} />
+      </div>
+      {props.project.members.length > 0 && (
+        <div className="member-list">
+          {props.project.members.map((member) => (
+            <span key={member.userId} className="chip">{member.username} · {labelOf(member.role)}</span>
+          ))}
+        </div>
+      )}
+      <Drawer title="编辑项目" subtitle={props.project.name} open={editing} onClose={() => setEditing(false)}>
+        <div className="drawer-form">
+          <HookForm
+            defaultValues={{
+              name: props.project.name,
+              code: props.project.code || '',
+              description: props.project.description || ''
+            }}
+            onSubmit={async (form) => {
+              await props.mutate(
+                () =>
+                  api.updateProject(props.project.id, {
+                    name: text(form, 'name'),
+                    code: text(form, 'code'),
+                    description: text(form, 'description')
+                  }),
+                '项目已保存',
+                { reloadProjects: true }
+              );
+              setEditing(false);
+            }}
+          >
+            {(register) => (
+              <>
+                <Input {...register('name')} aria-label="项目名称" placeholder="项目名称" />
+                <Input {...register('code')} aria-label="项目代号" placeholder="项目代号" />
+                <Textarea {...register('description')} aria-label="项目描述" placeholder="项目描述" />
+                <FormActions>
+                  <Button type="button" onClick={() => setEditing(false)}>取消</Button>
+                  <Button variant="primary"><Save size={15} /> 保存项目</Button>
+                </FormActions>
+              </>
+            )}
+          </HookForm>
+          <MemberManager project={props.project} users={props.users} mutate={props.mutate} />
+        </div>
+      </Drawer>
     </article>
   );
 }
@@ -564,16 +688,16 @@ function MemberManager(props: {
           event.currentTarget.reset();
         }}
       >
-        <input name="email" placeholder="用户邮箱" list="user-emails" required />
+        <Input name="email" placeholder="用户邮箱" list="user-emails" required />
         <select name="role" defaultValue="tester">
           <option value="owner">负责人</option>
           <option value="tester">测试</option>
           <option value="developer">开发</option>
           <option value="viewer">只读</option>
         </select>
-        <button>
+        <Button>
           <Plus size={15} /> 添加
-        </button>
+        </Button>
       </form>
       <datalist id="user-emails">
         {props.users.map((user) => (
@@ -587,15 +711,17 @@ function MemberManager(props: {
           <span key={member.userId} className="chip">
             {member.username} · {labelOf(member.role)}
             {member.role !== 'owner' && (
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="sm"
                 className="icon-link"
                 onClick={() =>
                   props.mutate(() => api.removeProjectMember(props.project.id, member.userId), '成员已移除', { reloadProjects: true })
                 }
               >
                 <Trash2 size={13} />
-              </button>
+              </Button>
             )}
           </span>
         ))}
@@ -610,18 +736,39 @@ function IterationSection(props: {
   mutate: (action: () => Promise<unknown>, message: string) => Promise<void>;
 }) {
   const [keyword, setKeyword] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<Iteration | null>(null);
   const rows = props.rows.filter((row) => matchKeyword([row.name, row.goal || '', row.status], keyword));
   return (
     <Section title="迭代管理" icon={CalendarRange}>
       <Toolbar>
         <SearchBox value={keyword} onChange={setKeyword} placeholder="搜索迭代" />
+        <button className="primary" type="button" onClick={() => setCreating(true)}>
+          <Plus size={16} /> 新建迭代
+        </button>
       </Toolbar>
-      <form
-        className="inline-form"
-        onSubmit={(event) => {
-          event.preventDefault();
-          const form = new FormData(event.currentTarget);
-          props.mutate(
+      <div className="cards">
+        {rows.map((row) => (
+          <article className="item-card" key={row.id}>
+            <CardHeader
+              title={row.name}
+              meta={[row.goal || '未设置迭代目标', dateRange(row.startDate, row.endDate)]}
+              badge={labelOf(row.status)}
+            />
+            <div className="card-actions">
+              <button type="button" onClick={() => setEditing(row)}><Pencil size={15} /> 编辑</button>
+              <DangerButton onClick={() => props.mutate(() => api.deleteIteration(row.id), '迭代已删除')} />
+            </div>
+          </article>
+        ))}
+      </div>
+      {rows.length === 0 && <EmptyState text="暂无迭代" />}
+      <IterationDrawer
+        title="新建迭代"
+        open={creating}
+        onClose={() => setCreating(false)}
+        onSubmit={async (form) => {
+          await props.mutate(
             () =>
               api.createIteration({
                 projectId: props.projectId,
@@ -633,59 +780,68 @@ function IterationSection(props: {
               }),
             '迭代已创建'
           );
-          event.currentTarget.reset();
+          setCreating(false);
         }}
-      >
-        <input name="name" placeholder="迭代名称" required />
-        <input name="goal" placeholder="迭代目标" />
-        <input name="startDate" type="date" />
-        <input name="endDate" type="date" />
-        <Select name="status" values={iterationStatuses} defaultValue="planning" />
-        <button className="primary">
-          <Plus size={16} /> 新建迭代
-        </button>
-      </form>
-      <div className="cards">
-        {rows.map((row) => (
-          <article className="item-card" key={row.id}>
-            <CardHeader
-              title={row.name}
-              meta={[row.goal || '未设置迭代目标', dateRange(row.startDate, row.endDate)]}
-              badge={labelOf(row.status)}
-            />
-            <form
-              className="inline-form"
-              onSubmit={(event) => {
-                event.preventDefault();
-                const form = new FormData(event.currentTarget);
-                props.mutate(
-                  () =>
-                    api.updateIteration(row.id, {
-                      name: text(form, 'name'),
-                      goal: text(form, 'goal'),
-                      startDate: text(form, 'startDate') || undefined,
-                      endDate: text(form, 'endDate') || undefined,
-                      status: text(form, 'status') as never
-                    }),
-                  '迭代已保存'
-                );
-              }}
-            >
-              <input name="name" aria-label="迭代名称" placeholder="迭代名称" defaultValue={row.name} />
-              <input name="goal" aria-label="迭代目标" placeholder="迭代目标" defaultValue={row.goal} />
-              <input name="startDate" aria-label="开始日期" type="date" defaultValue={dateInput(row.startDate)} />
-              <input name="endDate" aria-label="结束日期" type="date" defaultValue={dateInput(row.endDate)} />
-              <Select name="status" values={iterationStatuses} defaultValue={row.status} />
-              <button>
-                <Save size={15} /> 保存
-              </button>
-              <DangerButton onClick={() => props.mutate(() => api.deleteIteration(row.id), '迭代已删除')} />
-            </form>
-          </article>
-        ))}
-      </div>
-      {rows.length === 0 && <EmptyState text="暂无迭代" />}
+      />
+      <IterationDrawer
+        title="编辑迭代"
+        row={editing || undefined}
+        open={Boolean(editing)}
+        onClose={() => setEditing(null)}
+        onSubmit={async (form) => {
+          if (!editing) return;
+          await props.mutate(
+            () =>
+              api.updateIteration(editing.id, {
+                name: text(form, 'name'),
+                goal: text(form, 'goal'),
+                startDate: text(form, 'startDate') || undefined,
+                endDate: text(form, 'endDate') || undefined,
+                status: text(form, 'status') as never
+              }),
+            '迭代已保存'
+          );
+          setEditing(null);
+        }}
+      />
     </Section>
+  );
+}
+
+function IterationDrawer(props: {
+  title: string;
+  row?: Iteration;
+  open: boolean;
+  onClose: () => void;
+  onSubmit: (form: FormData) => Promise<void>;
+}) {
+  return (
+    <Drawer title={props.title} subtitle={props.row?.name || '规划迭代目标和时间范围'} open={props.open} onClose={props.onClose}>
+      <HookForm
+        defaultValues={{
+          name: props.row?.name || '',
+          goal: props.row?.goal || '',
+          startDate: dateInput(props.row?.startDate),
+          endDate: dateInput(props.row?.endDate),
+          status: props.row?.status || 'planning'
+        }}
+        onSubmit={async (form) => props.onSubmit(form)}
+      >
+        {(register) => (
+          <>
+            <Input {...register('name')} aria-label="迭代名称" placeholder="迭代名称" required />
+            <Input {...register('goal')} aria-label="迭代目标" placeholder="迭代目标" />
+            <Input {...register('startDate')} aria-label="开始日期" type="date" />
+            <Input {...register('endDate')} aria-label="结束日期" type="date" />
+            <Select name="status" register={register} values={iterationStatuses} defaultValue={props.row?.status || 'planning'} />
+            <FormActions>
+              <Button type="button" onClick={props.onClose}>取消</Button>
+              <Button variant="primary"><Save size={15} /> 保存</Button>
+            </FormActions>
+          </>
+        )}
+      </HookForm>
+    </Drawer>
   );
 }
 
@@ -698,22 +854,16 @@ function RequirementSection(props: {
 }) {
   const [keyword, setKeyword] = useState('');
   const [status, setStatus] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<Requirement | null>(null);
   const rows = props.rows.filter((row) => (!status || row.status === status) && matchKeyword([row.title, row.description || '', row.priority], keyword));
   return (
     <Section title="需求管理" icon={Flag}>
       <Toolbar>
         <SearchBox value={keyword} onChange={setKeyword} placeholder="搜索需求" />
         <Select value={status} onChange={setStatus} values={requirementStatuses} emptyLabel="全部状态" />
+        <button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建需求</button>
       </Toolbar>
-      <form className="inline-form" onSubmit={(event) => {
-        event.preventDefault();
-        const form = new FormData(event.currentTarget);
-        props.mutate(() => api.createRequirement(requirementPayload(form, props.projectId)), '需求已创建');
-        event.currentTarget.reset();
-      }}>
-        <RequirementFields iterations={props.iterations} users={props.users} />
-        <button className="primary"><Plus size={16} /> 新建需求</button>
-      </form>
       <div className="cards">
         {rows.map((row) => (
           <article className="item-card" key={row.id}>
@@ -726,44 +876,89 @@ function RequirementSection(props: {
               ]}
               badge={labelOf(row.status)}
             />
-            <form className="stack" onSubmit={(event) => {
-              event.preventDefault();
-              props.mutate(() => api.updateRequirement(row.id, requirementPayload(new FormData(event.currentTarget), props.projectId)), '需求已保存');
-            }}>
-              <RequirementFields row={row} iterations={props.iterations} users={props.users} />
-              <div className="form-actions">
-                <button><Save size={15} /> 保存</button>
-                <button type="button" onClick={() => props.mutate(() => api.sendLark(row.id), 'Lark 日报已发送')}>
-                  <Send size={15} /> 发送 Lark
-                </button>
-                <DangerButton onClick={() => props.mutate(() => api.deleteRequirement(row.id), '需求已删除')} />
-              </div>
-            </form>
+            {row.description && <p>{row.description}</p>}
+            <div className="card-actions">
+              <button type="button" onClick={() => setEditing(row)}><Pencil size={15} /> 编辑</button>
+              <button type="button" onClick={() => props.mutate(() => api.sendLark(row.id), 'Lark 日报已发送')}>
+                <Send size={15} /> 发送 Lark
+              </button>
+              <DangerButton onClick={() => props.mutate(() => api.deleteRequirement(row.id), '需求已删除')} />
+            </div>
           </article>
         ))}
       </div>
       {rows.length === 0 && <EmptyState text="暂无需求" />}
+      <RequirementDrawer
+        title="新建需求"
+        open={creating}
+        iterations={props.iterations}
+        users={props.users}
+        onClose={() => setCreating(false)}
+        onSubmit={async (form) => {
+          await props.mutate(() => api.createRequirement(requirementPayload(form, props.projectId)), '需求已创建');
+          setCreating(false);
+        }}
+      />
+      <RequirementDrawer
+        title="编辑需求"
+        row={editing || undefined}
+        open={Boolean(editing)}
+        iterations={props.iterations}
+        users={props.users}
+        onClose={() => setEditing(null)}
+        onSubmit={async (form) => {
+          if (!editing) return;
+          await props.mutate(() => api.updateRequirement(editing.id, requirementPayload(form, props.projectId)), '需求已保存');
+          setEditing(null);
+        }}
+      />
     </Section>
   );
 }
 
-function RequirementFields(props: { row?: Requirement; iterations: Iteration[]; users: UserProfile[] }) {
+function RequirementFields(props: { row?: Requirement; iterations: Iteration[]; users: UserProfile[]; register?: UseFormRegister<StringFormValues> }) {
   return (
     <div className="field-grid">
-      <input name="title" placeholder="需求标题" defaultValue={props.row?.title} required />
-      <select name="iterationId" aria-label="绑定迭代" defaultValue={props.row?.iterationId || ''}>
+      <Input {...registerField(props.register, 'title')} placeholder="需求标题" defaultValue={props.row?.title} required />
+      <select {...registerField(props.register, 'iterationId')} aria-label="绑定迭代" defaultValue={props.row?.iterationId || ''}>
         <option value="">不绑定迭代</option>
         {props.iterations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
       </select>
-      <select name="ownerId" aria-label="需求负责人" defaultValue={props.row?.ownerId || ''}>
+      <select {...registerField(props.register, 'ownerId')} aria-label="需求负责人" defaultValue={props.row?.ownerId || ''}>
         <option value="">未指派负责人</option>
         {props.users.map((item) => <option key={item.id} value={item.id}>{item.username}</option>)}
       </select>
-      <Select name="priority" values={priorities} defaultValue={props.row?.priority || 'P2'} />
-      <Select name="status" values={requirementStatuses} defaultValue={props.row?.status || 'ready'} />
-      <input name="larkWebhook" placeholder="Lark webhook" defaultValue={props.row?.larkWebhook} />
-      <textarea name="description" placeholder="需求描述" defaultValue={props.row?.description} />
+      <Select name="priority" register={props.register} values={priorities} defaultValue={props.row?.priority || 'P2'} />
+      <Select name="status" register={props.register} values={requirementStatuses} defaultValue={props.row?.status || 'ready'} />
+      <Input {...registerField(props.register, 'larkWebhook')} placeholder="Lark webhook" defaultValue={props.row?.larkWebhook} />
+      <Textarea {...registerField(props.register, 'description')} placeholder="需求描述" defaultValue={props.row?.description} />
     </div>
+  );
+}
+
+function RequirementDrawer(props: {
+  title: string;
+  row?: Requirement;
+  open: boolean;
+  iterations: Iteration[];
+  users: UserProfile[];
+  onClose: () => void;
+  onSubmit: (form: FormData) => Promise<void>;
+}) {
+  return (
+    <Drawer title={props.title} subtitle={props.row?.title || '维护需求状态、负责人和描述'} open={props.open} onClose={props.onClose}>
+      <HookForm onSubmit={async (form) => props.onSubmit(form)}>
+        {(register) => (
+          <>
+            <RequirementFields row={props.row} iterations={props.iterations} users={props.users} register={register} />
+            <FormActions>
+              <Button type="button" onClick={props.onClose}>取消</Button>
+              <Button variant="primary"><Save size={15} /> 保存需求</Button>
+            </FormActions>
+          </>
+        )}
+      </HookForm>
+    </Drawer>
   );
 }
 
@@ -775,6 +970,8 @@ function CaseSection(props: {
 }) {
   const [keyword, setKeyword] = useState('');
   const [requirementId, setRequirementId] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<TestCase | null>(null);
   const rows = props.rows.filter(
     (row) => (!requirementId || row.requirementId === requirementId) && matchKeyword([row.title, row.expectedResult || '', row.priority], keyword)
   );
@@ -786,15 +983,8 @@ function CaseSection(props: {
           <option value="">全部需求</option>
           {props.requirements.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
         </select>
+        <button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建用例</button>
       </Toolbar>
-      <form className="stack" onSubmit={(event) => {
-        event.preventDefault();
-        props.mutate(() => api.createTestCase(testCasePayload(new FormData(event.currentTarget), props.projectId)), '用例已创建');
-        event.currentTarget.reset();
-      }}>
-        <TestCaseFields requirements={props.requirements} />
-        <button className="primary fit"><Plus size={16} /> 新建用例</button>
-      </form>
       <div className="cards">
         {rows.map((row) => (
           <article className="item-card" key={row.id}>
@@ -807,40 +997,82 @@ function CaseSection(props: {
               ]}
               badge={labelOf(row.status)}
             />
-            <form className="stack" onSubmit={(event) => {
-              event.preventDefault();
-              props.mutate(() => api.updateTestCase(row.id, testCasePayload(new FormData(event.currentTarget), props.projectId)), '用例已保存');
-            }}>
-              <TestCaseFields row={row} requirements={props.requirements} />
-              <div className="form-actions">
-                <button><Save size={15} /> 保存</button>
-                <DangerButton onClick={() => props.mutate(() => api.deleteTestCase(row.id), '用例已删除')} />
-              </div>
-            </form>
+            {row.preconditions && <p>{row.preconditions}</p>}
+            <div className="card-actions">
+              <button type="button" onClick={() => setEditing(row)}><Pencil size={15} /> 编辑</button>
+              <DangerButton onClick={() => props.mutate(() => api.deleteTestCase(row.id), '用例已删除')} />
+            </div>
           </article>
         ))}
       </div>
       {rows.length === 0 && <EmptyState text="暂无用例" />}
+      <TestCaseDrawer
+        title="新建用例"
+        open={creating}
+        requirements={props.requirements}
+        onClose={() => setCreating(false)}
+        onSubmit={async (form) => {
+          await props.mutate(() => api.createTestCase(testCasePayload(form, props.projectId)), '用例已创建');
+          setCreating(false);
+        }}
+      />
+      <TestCaseDrawer
+        title="编辑用例"
+        row={editing || undefined}
+        open={Boolean(editing)}
+        requirements={props.requirements}
+        onClose={() => setEditing(null)}
+        onSubmit={async (form) => {
+          if (!editing) return;
+          await props.mutate(() => api.updateTestCase(editing.id, testCasePayload(form, props.projectId)), '用例已保存');
+          setEditing(null);
+        }}
+      />
     </Section>
   );
 }
 
-function TestCaseFields(props: { row?: TestCase; requirements: Requirement[] }) {
+function TestCaseFields(props: { row?: TestCase; requirements: Requirement[]; register?: UseFormRegister<StringFormValues> }) {
   const step = props.row?.steps[0];
   return (
     <div className="field-grid">
-      <input name="title" placeholder="用例标题" defaultValue={props.row?.title} required />
-      <select name="requirementId" aria-label="绑定需求" defaultValue={props.row?.requirementId || ''}>
+      <Input {...registerField(props.register, 'title')} placeholder="用例标题" defaultValue={props.row?.title} required />
+      <select {...registerField(props.register, 'requirementId')} aria-label="绑定需求" defaultValue={props.row?.requirementId || ''}>
         <option value="">不绑定需求</option>
         {props.requirements.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
       </select>
-      <Select name="priority" values={priorities} defaultValue={props.row?.priority || 'P2'} />
-      <Select name="status" values={caseStatuses} defaultValue={props.row?.status || 'ready'} />
-      <input name="preconditions" placeholder="前置条件" defaultValue={props.row?.preconditions} />
-      <input name="step" placeholder="测试步骤" defaultValue={step?.action} />
-      <input name="expected" placeholder="步骤预期" defaultValue={step?.expected} />
-      <textarea name="expectedResult" placeholder="最终预期结果" defaultValue={props.row?.expectedResult} />
+      <Select name="priority" register={props.register} values={priorities} defaultValue={props.row?.priority || 'P2'} />
+      <Select name="status" register={props.register} values={caseStatuses} defaultValue={props.row?.status || 'ready'} />
+      <Input {...registerField(props.register, 'preconditions')} placeholder="前置条件" defaultValue={props.row?.preconditions} />
+      <Input {...registerField(props.register, 'step')} placeholder="测试步骤" defaultValue={step?.action} />
+      <Input {...registerField(props.register, 'expected')} placeholder="步骤预期" defaultValue={step?.expected} />
+      <Textarea {...registerField(props.register, 'expectedResult')} placeholder="最终预期结果" defaultValue={props.row?.expectedResult} />
     </div>
+  );
+}
+
+function TestCaseDrawer(props: {
+  title: string;
+  row?: TestCase;
+  open: boolean;
+  requirements: Requirement[];
+  onClose: () => void;
+  onSubmit: (form: FormData) => Promise<void>;
+}) {
+  return (
+    <Drawer title={props.title} subtitle={props.row?.title || '维护测试步骤、预期结果和优先级'} open={props.open} onClose={props.onClose}>
+      <HookForm onSubmit={async (form) => props.onSubmit(form)}>
+        {(register) => (
+          <>
+            <TestCaseFields row={props.row} requirements={props.requirements} register={register} />
+            <FormActions>
+              <Button type="button" onClick={props.onClose}>取消</Button>
+              <Button variant="primary"><Save size={15} /> 保存用例</Button>
+            </FormActions>
+          </>
+        )}
+      </HookForm>
+    </Drawer>
   );
 }
 
@@ -853,6 +1085,7 @@ function PlanSection(props: {
   bugs: Bug[];
   mutate: (action: () => Promise<unknown>, message: string) => Promise<void>;
 }) {
+  const [creating, setCreating] = useState(false);
   const [selectedCases, setSelectedCases] = useState<string[]>([]);
   const [requirementFilter, setRequirementFilter] = useState('');
   const visibleCases = props.cases.filter((item) => !requirementFilter || item.requirementId === requirementFilter);
@@ -861,54 +1094,63 @@ function PlanSection(props: {
 
   return (
     <Section title="测试执行" icon={Activity}>
-      <form className="stack" onSubmit={(event) => {
-        event.preventDefault();
-        const form = new FormData(event.currentTarget);
-        if (selectedCases.length === 0) {
-          alert('请至少选择一个用例');
-          return;
-        }
-        props.mutate(
-          () =>
-            api.createTestPlan({
-              projectId: props.projectId,
-              iterationId: text(form, 'iterationId') || undefined,
-              requirementId: text(form, 'requirementId') || undefined,
-              name: text(form, 'name'),
-              round: text(form, 'round') || '第 1 轮',
-              caseIds: selectedCases
-            }),
-          '测试计划已创建'
-        );
-        setSelectedCases([]);
-        event.currentTarget.reset();
-      }}>
-        <div className="inline-form">
-          <input name="name" placeholder="计划名称" required />
-          <input name="round" placeholder="轮次，如第 1 轮" />
-          <select name="iterationId"><option value="">不绑定迭代</option>{props.iterations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
-          <select name="requirementId" onChange={(event) => setRequirementFilter(event.target.value)}>
-            <option value="">全部需求</option>{props.requirements.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
-          </select>
-          <button className="primary"><Plus size={16} /> 新建计划</button>
-        </div>
-        <div className="case-picker">
-          {visibleCases.map((testCase) => (
-            <label key={testCase.id} className="check-row">
-              <input type="checkbox" checked={selectedCases.includes(testCase.id)} onChange={() => toggleCase(testCase.id)} />
-              <span>{testCase.title}</span>
-              <small>{testCase.priority} · {labelOf(testCase.status)}</small>
-            </label>
-          ))}
-          {visibleCases.length === 0 && <EmptyState text="还没有可选用例" />}
-        </div>
-      </form>
+      <Toolbar>
+        <span className="toolbar-summary">{props.rows.length} 个测试计划 · {props.cases.length} 条可选用例</span>
+        <button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建计划</button>
+      </Toolbar>
       <div className="cards">
         {props.rows.map((plan) => (
           <PlanCard key={plan.id} plan={plan} cases={props.cases} bugs={props.bugs} mutate={props.mutate} />
         ))}
       </div>
       {props.rows.length === 0 && <EmptyState text="暂无测试计划" />}
+      <Drawer title="新建测试计划" subtitle="选择轮次、关联范围和本轮要执行的用例。" open={creating} onClose={() => setCreating(false)}>
+        <HookForm onSubmit={async (form) => {
+          if (selectedCases.length === 0) {
+            alert('请至少选择一个用例');
+            return;
+          }
+          await props.mutate(
+            () =>
+              api.createTestPlan({
+                projectId: props.projectId,
+                iterationId: text(form, 'iterationId') || undefined,
+                requirementId: text(form, 'requirementId') || undefined,
+                name: text(form, 'name'),
+                round: text(form, 'round') || '第 1 轮',
+                caseIds: selectedCases
+              }),
+            '测试计划已创建'
+          );
+          setSelectedCases([]);
+          setCreating(false);
+        }}>
+          {(register) => (
+            <>
+              <Input {...register('name')} placeholder="计划名称" required />
+              <Input {...register('round')} placeholder="轮次，如第 1 轮" />
+              <select {...register('iterationId')}><option value="">不绑定迭代</option>{props.iterations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
+              <select {...register('requirementId')} onChange={(event) => setRequirementFilter(event.target.value)}>
+                <option value="">全部需求</option>{props.requirements.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
+              </select>
+              <div className="case-picker">
+                {visibleCases.map((testCase) => (
+                  <label key={testCase.id} className="check-row">
+                    <input type="checkbox" checked={selectedCases.includes(testCase.id)} onChange={() => toggleCase(testCase.id)} />
+                    <span>{testCase.title}</span>
+                    <small>{testCase.priority} · {labelOf(testCase.status)}</small>
+                  </label>
+                ))}
+                {visibleCases.length === 0 && <EmptyState text="还没有可选用例" />}
+              </div>
+              <FormActions>
+                <Button type="button" onClick={() => setCreating(false)}>取消</Button>
+                <Button variant="primary"><Plus size={16} /> 创建计划</Button>
+              </FormActions>
+            </>
+          )}
+        </HookForm>
+      </Drawer>
     </Section>
   );
 }
@@ -919,7 +1161,9 @@ function PlanCard(props: {
   bugs: Bug[];
   mutate: (action: () => Promise<unknown>, message: string) => Promise<void>;
 }) {
+  const [editing, setEditing] = useState(false);
   const [caseIds, setCaseIds] = useState(props.plan.caseIds);
+  useEffect(() => setCaseIds(props.plan.caseIds), [props.plan.caseIds]);
   const progress = executionProgress(props.plan.runItems);
   return (
     <article className="item-card">
@@ -928,41 +1172,53 @@ function PlanCard(props: {
         meta={[props.plan.round, `${props.plan.runItems.length} 条执行项`, executionProgress(props.plan.runItems)]}
         badge={labelOf(props.plan.status)}
       />
-      <form className="inline-form" onSubmit={(event) => {
-        event.preventDefault();
-        const form = new FormData(event.currentTarget);
-        props.mutate(
-          () => api.updateTestPlan(props.plan.id, { name: text(form, 'name'), round: text(form, 'round'), status: text(form, 'status') as never, caseIds }),
-          '测试计划已保存'
-        );
-      }}>
-        <input name="name" aria-label="计划名称" placeholder="计划名称" defaultValue={props.plan.name} />
-        <input name="round" aria-label="执行轮次" placeholder="执行轮次" defaultValue={props.plan.round} />
-        <Select name="status" values={planStatuses} defaultValue={props.plan.status} />
+      <div className="card-actions">
         <span className="progress-pill">{progress}</span>
-        <button><Save size={15} /> 保存</button>
+        <button type="button" onClick={() => setEditing(true)}><Pencil size={15} /> 编辑计划</button>
         <DangerButton onClick={() => props.mutate(() => api.deleteTestPlan(props.plan.id), '测试计划已删除')} />
-      </form>
-      <details>
-        <summary>调整用例范围</summary>
-        <div className="case-picker compact-picker">
-          {props.cases.map((testCase) => (
-            <label key={testCase.id} className="check-row">
-              <input
-                type="checkbox"
-                checked={caseIds.includes(testCase.id)}
-                onChange={() => setCaseIds((current) => (current.includes(testCase.id) ? current.filter((id) => id !== testCase.id) : [...current, testCase.id]))}
-              />
-              <span>{testCase.title}</span>
-            </label>
-          ))}
-        </div>
-      </details>
+      </div>
       <div className="run-list">
         {props.plan.runItems.map((item) => (
           <RunItemRow key={item.id} planId={props.plan.id} item={item} bugs={props.bugs} mutate={props.mutate} />
         ))}
       </div>
+      <Drawer title="编辑测试计划" subtitle={props.plan.name} open={editing} onClose={() => setEditing(false)}>
+        <HookForm
+          defaultValues={{ name: props.plan.name, round: props.plan.round, status: props.plan.status }}
+          onSubmit={async (form) => {
+            await props.mutate(
+              () => api.updateTestPlan(props.plan.id, { name: text(form, 'name'), round: text(form, 'round'), status: text(form, 'status') as never, caseIds }),
+              '测试计划已保存'
+            );
+            setEditing(false);
+          }}
+        >
+          {(register) => (
+            <>
+              <Input {...register('name')} aria-label="计划名称" placeholder="计划名称" />
+              <Input {...register('round')} aria-label="执行轮次" placeholder="执行轮次" />
+              <Select name="status" register={register} values={planStatuses} defaultValue={props.plan.status} />
+              <div className="sub-title">调整用例范围</div>
+              <div className="case-picker compact-picker">
+                {props.cases.map((testCase) => (
+                  <label key={testCase.id} className="check-row">
+                    <input
+                      type="checkbox"
+                      checked={caseIds.includes(testCase.id)}
+                      onChange={() => setCaseIds((current) => (current.includes(testCase.id) ? current.filter((id) => id !== testCase.id) : [...current, testCase.id]))}
+                    />
+                    <span>{testCase.title}</span>
+                  </label>
+                ))}
+              </div>
+              <FormActions>
+                <Button type="button" onClick={() => setEditing(false)}>取消</Button>
+                <Button variant="primary"><Save size={15} /> 保存计划</Button>
+              </FormActions>
+            </>
+          )}
+        </HookForm>
+      </Drawer>
     </article>
   );
 }
@@ -973,23 +1229,16 @@ function RunItemRow(props: {
   bugs: Bug[];
   mutate: (action: () => Promise<unknown>, message: string) => Promise<void>;
 }) {
+  const [editing, setEditing] = useState(false);
   const linkedBugs = props.bugs.filter((bug) => props.item.bugIds.includes(bug.id));
   return (
-    <form className="run-row" onSubmit={(event) => {
-      event.preventDefault();
-      const form = new FormData(event.currentTarget);
-      props.mutate(
-        () => api.updateRunItem(props.planId, props.item.id, { status: text(form, 'status'), actualResult: text(form, 'actualResult') }),
-        '执行结果已更新'
-      );
-    }}>
+    <div className="run-row">
       <div className="run-title">
         <strong>{props.item.caseTitle}</strong>
         <span>{labelOf(props.item.status)}</span>
       </div>
-      <Select name="status" values={runStatuses} defaultValue={props.item.status} />
-      <input name="actualResult" aria-label={`${props.item.caseTitle} 实际结果`} defaultValue={props.item.actualResult} placeholder="实际结果" />
-      <button><Save size={15} /> 保存</button>
+      <span>{props.item.actualResult || '未记录实际结果'}</span>
+      <button type="button" onClick={() => setEditing(true)}><Pencil size={15} /> 记录结果</button>
       <button type="button" onClick={() => props.mutate(
         () => api.createBugFromRun({ testPlanId: props.planId, runItemId: props.item.id, title: `${props.item.caseTitle} 执行失败`, actualResult: props.item.actualResult }),
         'Bug 已从执行项创建'
@@ -997,7 +1246,30 @@ function RunItemRow(props: {
         <BugIcon size={15} /> 建 Bug
       </button>
       {linkedBugs.length > 0 && <small className="linked-bugs">{linkedBugs.map((bug) => bug.title).join('、')}</small>}
-    </form>
+      <Drawer title="记录执行结果" subtitle={props.item.caseTitle} open={editing} onClose={() => setEditing(false)}>
+        <HookForm
+          defaultValues={{ status: props.item.status, actualResult: props.item.actualResult || '' }}
+          onSubmit={async (form) => {
+            await props.mutate(
+              () => api.updateRunItem(props.planId, props.item.id, { status: text(form, 'status'), actualResult: text(form, 'actualResult') }),
+              '执行结果已更新'
+            );
+            setEditing(false);
+          }}
+        >
+          {(register) => (
+            <>
+              <Select name="status" register={register} values={runStatuses} defaultValue={props.item.status} />
+              <Textarea {...register('actualResult')} aria-label={`${props.item.caseTitle} 实际结果`} placeholder="实际结果" />
+              <FormActions>
+                <Button type="button" onClick={() => setEditing(false)}>取消</Button>
+                <Button variant="primary"><Save size={15} /> 保存结果</Button>
+              </FormActions>
+            </>
+          )}
+        </HookForm>
+      </Drawer>
+    </div>
   );
 }
 
@@ -1012,21 +1284,16 @@ function BugSection(props: {
 }) {
   const [keyword, setKeyword] = useState('');
   const [status, setStatus] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<Bug | null>(null);
   const rows = props.rows.filter((row) => (!status || row.status === status) && matchKeyword([row.title, row.actualResult || '', row.severity], keyword));
   return (
     <Section title="Bug 管理" icon={BugIcon}>
       <Toolbar>
         <SearchBox value={keyword} onChange={setKeyword} placeholder="搜索 Bug" />
         <Select value={status} onChange={setStatus} values={bugStatuses} emptyLabel="全部状态" />
+        <button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建 Bug</button>
       </Toolbar>
-      <form className="stack" onSubmit={(event) => {
-        event.preventDefault();
-        props.mutate(() => api.createBug(bugPayload(new FormData(event.currentTarget), props.projectId)), 'Bug 已创建');
-        event.currentTarget.reset();
-      }}>
-        <BugFields requirements={props.requirements} cases={props.cases} plans={props.plans} users={props.users} />
-        <button className="primary fit"><Plus size={16} /> 新建 Bug</button>
-      </form>
       <div className="cards">
         {rows.map((row) => (
           <article className="item-card" key={row.id}>
@@ -1040,47 +1307,98 @@ function BugSection(props: {
               ]}
               badge={labelOf(row.status)}
             />
-            <form className="stack" onSubmit={(event) => {
-              event.preventDefault();
-              props.mutate(() => api.updateBug(row.id, bugPayload(new FormData(event.currentTarget), props.projectId)), 'Bug 已保存');
-            }}>
-              <BugFields row={row} requirements={props.requirements} cases={props.cases} plans={props.plans} users={props.users} />
-              <div className="form-actions">
-                <button><Save size={15} /> 保存</button>
-                <DangerButton onClick={() => props.mutate(() => api.deleteBug(row.id), 'Bug 已删除')} />
-              </div>
-            </form>
+            {row.reproduceSteps && <p>{row.reproduceSteps}</p>}
+            <div className="card-actions">
+              <button type="button" onClick={() => setEditing(row)}><Pencil size={15} /> 编辑</button>
+              <DangerButton onClick={() => props.mutate(() => api.deleteBug(row.id), 'Bug 已删除')} />
+            </div>
           </article>
         ))}
       </div>
       {rows.length === 0 && <EmptyState text="暂无 Bug" />}
+      <BugDrawer
+        title="新建 Bug"
+        open={creating}
+        requirements={props.requirements}
+        cases={props.cases}
+        plans={props.plans}
+        users={props.users}
+        onClose={() => setCreating(false)}
+        onSubmit={async (form) => {
+          await props.mutate(() => api.createBug(bugPayload(form, props.projectId)), 'Bug 已创建');
+          setCreating(false);
+        }}
+      />
+      <BugDrawer
+        title="编辑 Bug"
+        row={editing || undefined}
+        open={Boolean(editing)}
+        requirements={props.requirements}
+        cases={props.cases}
+        plans={props.plans}
+        users={props.users}
+        onClose={() => setEditing(null)}
+        onSubmit={async (form) => {
+          if (!editing) return;
+          await props.mutate(() => api.updateBug(editing.id, bugPayload(form, props.projectId)), 'Bug 已保存');
+          setEditing(null);
+        }}
+      />
     </Section>
   );
 }
 
-function BugFields(props: { row?: Bug; requirements: Requirement[]; cases: TestCase[]; plans: TestPlan[]; users: UserProfile[] }) {
+function BugFields(props: { row?: Bug; requirements: Requirement[]; cases: TestCase[]; plans: TestPlan[]; users: UserProfile[]; register?: UseFormRegister<StringFormValues> }) {
   return (
     <div className="field-grid">
-      <input name="title" placeholder="Bug 标题" defaultValue={props.row?.title} required />
-      <select name="requirementId" aria-label="关联需求" defaultValue={props.row?.requirementId || ''}>
+      <Input {...registerField(props.register, 'title')} placeholder="Bug 标题" defaultValue={props.row?.title} required />
+      <select {...registerField(props.register, 'requirementId')} aria-label="关联需求" defaultValue={props.row?.requirementId || ''}>
         <option value="">不绑定需求</option>{props.requirements.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
       </select>
-      <select name="testCaseId" aria-label="关联用例" defaultValue={props.row?.testCaseId || ''}>
+      <select {...registerField(props.register, 'testCaseId')} aria-label="关联用例" defaultValue={props.row?.testCaseId || ''}>
         <option value="">不绑定用例</option>{props.cases.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
       </select>
-      <select name="testPlanId" aria-label="关联计划" defaultValue={props.row?.testPlanId || ''}>
+      <select {...registerField(props.register, 'testPlanId')} aria-label="关联计划" defaultValue={props.row?.testPlanId || ''}>
         <option value="">不绑定计划</option>{props.plans.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
       </select>
-      <select name="assigneeId" aria-label="Bug 负责人" defaultValue={props.row?.assigneeId || ''}>
+      <select {...registerField(props.register, 'assigneeId')} aria-label="Bug 负责人" defaultValue={props.row?.assigneeId || ''}>
         <option value="">未指派</option>{props.users.map((item) => <option key={item.id} value={item.id}>{item.username}</option>)}
       </select>
-      <Select name="severity" values={severities} defaultValue={props.row?.severity || 'S2'} />
-      <Select name="priority" values={priorities} defaultValue={props.row?.priority || 'P2'} />
-      <Select name="status" values={bugStatuses} defaultValue={props.row?.status || 'open'} />
-      <textarea name="reproduceSteps" placeholder="复现步骤" defaultValue={props.row?.reproduceSteps} />
-      <textarea name="actualResult" placeholder="实际结果" defaultValue={props.row?.actualResult} />
-      <textarea name="expectedResult" placeholder="期望结果" defaultValue={props.row?.expectedResult} />
+      <Select name="severity" register={props.register} values={severities} defaultValue={props.row?.severity || 'S2'} />
+      <Select name="priority" register={props.register} values={priorities} defaultValue={props.row?.priority || 'P2'} />
+      <Select name="status" register={props.register} values={bugStatuses} defaultValue={props.row?.status || 'open'} />
+      <Textarea {...registerField(props.register, 'reproduceSteps')} placeholder="复现步骤" defaultValue={props.row?.reproduceSteps} />
+      <Textarea {...registerField(props.register, 'actualResult')} placeholder="实际结果" defaultValue={props.row?.actualResult} />
+      <Textarea {...registerField(props.register, 'expectedResult')} placeholder="期望结果" defaultValue={props.row?.expectedResult} />
     </div>
+  );
+}
+
+function BugDrawer(props: {
+  title: string;
+  row?: Bug;
+  open: boolean;
+  requirements: Requirement[];
+  cases: TestCase[];
+  plans: TestPlan[];
+  users: UserProfile[];
+  onClose: () => void;
+  onSubmit: (form: FormData) => Promise<void>;
+}) {
+  return (
+    <Drawer title={props.title} subtitle={props.row?.title || '记录复现步骤、预期结果和责任人'} open={props.open} onClose={props.onClose}>
+      <HookForm onSubmit={async (form) => props.onSubmit(form)}>
+        {(register) => (
+          <>
+            <BugFields row={props.row} requirements={props.requirements} cases={props.cases} plans={props.plans} users={props.users} register={register} />
+            <FormActions>
+              <Button type="button" onClick={props.onClose}>取消</Button>
+              <Button variant="primary"><Save size={15} /> 保存 Bug</Button>
+            </FormActions>
+          </>
+        )}
+      </HookForm>
+    </Drawer>
   );
 }
 
@@ -1163,8 +1481,8 @@ function SettingsSection(props: {
               <option value="bugs">Bug</option>
               <option value="run-results">执行结果</option>
             </select>
-            <input name="file" type="file" accept=".xlsx" />
-            <button className="primary"><Upload size={15} /> 上传 Excel</button>
+            <Input name="file" type="file" accept=".xlsx" />
+            <Button variant="primary"><Upload size={15} /> 上传 Excel</Button>
           </form>
         </article>
         <UserAdmin currentUser={props.currentUser} users={props.users} mutate={props.mutate} />
@@ -1264,8 +1582,8 @@ function DictionaryEditor(props: {
           <option value="priority">优先级</option>
           <option value="severity">严重级别</option>
         </select>
-        <textarea key={dictionary?.id || type} name="values" aria-label="字典值" defaultValue={formatDictionaryValues(dictionary?.values || [])} />
-        <button className="primary fit"><Save size={15} /> 保存字典</button>
+        <Textarea key={dictionary?.id || type} name="values" aria-label="字典值" defaultValue={formatDictionaryValues(dictionary?.values || [])} />
+        <Button variant="primary" className="fit"><Save size={15} /> 保存字典</Button>
       </form>
     </article>
   );
@@ -1274,13 +1592,13 @@ function DictionaryEditor(props: {
 function CardHeader(props: { title: string; meta?: Array<string | undefined>; badge?: string }) {
   const meta = (props.meta || []).filter(Boolean);
   return (
-    <div className="card-head">
+    <UiCardHeader className="card-head">
       <div>
         <strong>{props.title}</strong>
         {meta.length > 0 && <span>{meta.join(' · ')}</span>}
       </div>
-      {props.badge && <span className="status-badge">{props.badge}</span>}
-    </div>
+      {props.badge && <Badge className={`status-badge ${badgeTone(props.badge)}`}>{props.badge}</Badge>}
+    </UiCardHeader>
   );
 }
 
@@ -1313,13 +1631,13 @@ function RiskBoard(props: { report: ReportSummary | null }) {
 
 function Section(props: { title: string; icon: typeof FolderKanban; children: React.ReactNode }) {
   return (
-    <section className="panel">
-      <header className="section-head">
+    <Card className="panel">
+      <UiCardHeader className="section-head">
         <props.icon size={22} />
-        <h2>{props.title}</h2>
-      </header>
-      {props.children}
-    </section>
+        <CardTitle>{props.title}</CardTitle>
+      </UiCardHeader>
+      <CardContent className="section-content">{props.children}</CardContent>
+    </Card>
   );
 }
 
@@ -1338,14 +1656,25 @@ function SearchBox(props: { value: string; onChange: (value: string) => void; pl
 
 function Select<T extends readonly string[]>(props: {
   name?: string;
+  register?: UseFormRegister<StringFormValues>;
   values: T;
   defaultValue?: T[number] | string;
   value?: string;
   onChange?: (value: string) => void;
   emptyLabel?: string;
 }) {
+  const registered = props.name && props.register ? props.register(props.name) : undefined;
   return (
-    <select name={props.name} defaultValue={props.value === undefined ? props.defaultValue : undefined} value={props.value} onChange={(event) => props.onChange?.(event.target.value)}>
+    <select
+      {...(registered || {})}
+      name={props.name}
+      defaultValue={props.value === undefined ? props.defaultValue : undefined}
+      value={props.value}
+      onChange={(event) => {
+        registered?.onChange?.(event);
+        props.onChange?.(event.target.value);
+      }}
+    >
       {props.emptyLabel && <option value="">{props.emptyLabel}</option>}
       {props.values.map((value) => <option key={value} value={value}>{labelOf(value)}</option>)}
     </select>
@@ -1371,12 +1700,53 @@ function Table(props: { headers: string[]; rows: Array<Array<string | number>> }
 
 function Metric(props: { label: string; value: string | number; detail: string }) {
   return (
-    <article className="metric">
+    <Card className="metric">
       <span>{props.label}</span>
       <strong>{props.value}</strong>
       <small>{props.detail}</small>
-    </article>
+    </Card>
   );
+}
+
+function pageInfo(tab: Tab) {
+  const descriptions: Record<Tab, { title: string; description: (project: string) => string }> = {
+    overview: { title: 'Dashboard', description: (project) => `查看「${project}」的质量指标、近期工作和风险信号。` },
+    projects: { title: 'Projects', description: () => '维护项目档案、成员和基础信息。' },
+    iterations: { title: 'Iterations', description: (project) => `管理「${project}」的迭代周期、目标和状态。` },
+    requirements: { title: 'Requirements', description: (project) => `沉淀「${project}」的需求条目、负责人和日报同步。` },
+    cases: { title: 'Test Repository', description: (project) => `管理「${project}」的测试用例、优先级和执行前置条件。` },
+    plans: { title: 'Test Execution', description: (project) => `组织「${project}」的测试轮次、用例范围和执行结果。` },
+    bugs: { title: 'Bug Tracking Center', description: (project) => `筛选、指派和追踪「${project}」中的缺陷。` },
+    reports: { title: 'Reports', description: (project) => `导出「${project}」的需求、用例、Bug 和质量统计。` },
+    settings: { title: 'Settings', description: (project) => `配置「${project}」的数据字典、Excel 模板和账号权限。` }
+  };
+  return descriptions[tab];
+}
+
+function filterWorkspaceData(data: WorkspaceData, keyword: string): WorkspaceData {
+  const normalized = keyword.trim();
+  if (!normalized) return data;
+  return {
+    ...data,
+    iterations: data.iterations.filter((item) => matchKeyword([item.name, item.goal || '', item.status], normalized)),
+    requirements: data.requirements.filter((item) =>
+      matchKeyword([item.title, item.description || '', item.priority, item.status, item.larkWebhook || ''], normalized)
+    ),
+    cases: data.cases.filter((item) =>
+      matchKeyword([item.title, item.preconditions || '', item.expectedResult || '', item.priority, item.status], normalized)
+    ),
+    plans: data.plans.filter((item) => matchKeyword([item.name, item.round, item.status], normalized)),
+    bugs: data.bugs.filter((item) =>
+      matchKeyword([item.title, item.actualResult || '', item.expectedResult || '', item.reproduceSteps || '', item.priority, item.severity, item.status], normalized)
+    )
+  };
+}
+
+function badgeTone(label: string) {
+  if (/(失败|阻塞|重新|废弃|禁用|P0|S0|新建)/.test(label)) return 'tone-danger';
+  if (/(处理中|测试中|进行中|未测|P1|S1|规划)/.test(label)) return 'tone-info';
+  if (/(通过|完成|解决|验证|关闭|启用|待测试)/.test(label)) return 'tone-success';
+  return 'tone-neutral';
 }
 
 function DangerButton(props: { onClick: () => void }) {
@@ -1388,7 +1758,7 @@ function DangerButton(props: { onClick: () => void }) {
 }
 
 function EmptyState(props: { text: string }) {
-  return <div className="empty">{props.text}</div>;
+  return <Card className="empty">{props.text}</Card>;
 }
 
 function ExportLink(props: { projectId: string; type: string; label: string }) {
@@ -1411,10 +1781,17 @@ function text(form: FormData, key: string) {
   return String(form.get(key) || '').trim();
 }
 
-function matchKeyword(values: string[], keyword: string) {
-  const normalized = keyword.trim().toLowerCase();
-  if (!normalized) return true;
-  return values.some((value) => value.toLowerCase().includes(normalized));
+function formDataFromValues(values: StringFormValues) {
+  const form = new FormData();
+  Object.entries(values).forEach(([key, value]) => form.set(key, value ?? ''));
+  return form;
+}
+
+function matchKeyword(values: string[], ...keywords: Array<string | undefined>) {
+  const normalized = keywords.map((item) => item?.trim().toLowerCase()).filter(Boolean) as string[];
+  if (normalized.length === 0) return true;
+  const haystack = values.join(' ').toLowerCase();
+  return normalized.every((keyword) => haystack.includes(keyword));
 }
 
 function dateInput(value?: string) {
