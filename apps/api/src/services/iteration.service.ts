@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import type { Iteration } from '@buggy/shared-types';
+import type { Iteration, PageResult } from '@buggy/shared-types';
 import { IterationEntity } from '../database/iteration.schema.js';
 import type { CreateIterationDto, UpdateIterationDto } from '../dto/iteration.dto.js';
 import type { ListQueryDto } from '../dto/common.dto.js';
@@ -11,12 +11,19 @@ import { idOf, toObjectId } from '../shared/mongo.js';
 export class IterationService {
   constructor(@InjectModel(IterationEntity.name) private readonly iterations: Model<IterationEntity>) {}
 
-  async list(query: ListQueryDto): Promise<Iteration[]> {
+  async list(query: ListQueryDto): Promise<PageResult<Iteration>> {
     const filter: Record<string, unknown> = {};
     if (query.projectId) filter.projectId = new Types.ObjectId(query.projectId);
     if (query.status) filter.status = query.status;
-    const rows = await this.iterations.find(filter).sort({ startDate: -1, createdAt: -1 });
-    return rows.map((row) => this.toDto(row));
+    if (query.keyword) filter.$or = [{ name: { $regex: query.keyword, $options: 'i' } }, { goal: { $regex: query.keyword, $options: 'i' } }];
+    const page = query.page || 1;
+    const pageSize = query.pageSize || 50;
+    const sort = this.sortOf(query.sortBy, query.sortOrder, { startDate: -1, createdAt: -1 });
+    const [total, rows] = await Promise.all([
+      this.iterations.countDocuments(filter),
+      this.iterations.find(filter).sort(sort).skip((page - 1) * pageSize).limit(pageSize)
+    ]);
+    return { total, page, pageSize, items: rows.map((row) => this.toDto(row)) };
   }
 
   async create(dto: CreateIterationDto): Promise<Iteration> {
@@ -60,7 +67,7 @@ export class IterationService {
     return idOf(row.projectId);
   }
 
-  toDto(row: IterationEntity & { _id: unknown }): Iteration {
+  toDto(row: IterationEntity & { _id: unknown; createdAt?: Date; updatedAt?: Date }): Iteration {
     return {
       id: idOf(row._id),
       projectId: idOf(row.projectId),
@@ -68,7 +75,15 @@ export class IterationService {
       goal: row.goal,
       startDate: row.startDate?.toISOString(),
       endDate: row.endDate?.toISOString(),
-      status: row.status
+      status: row.status,
+      createdAt: row.createdAt?.toISOString(),
+      updatedAt: row.updatedAt?.toISOString()
     };
+  }
+
+  private sortOf(sortBy?: string, sortOrder?: 'asc' | 'desc', fallback: Record<string, 1 | -1> = { updatedAt: -1 }): Record<string, 1 | -1> {
+    if (!sortBy) return fallback;
+    const allowed = new Set(['name', 'status', 'startDate', 'endDate', 'createdAt', 'updatedAt']);
+    return allowed.has(sortBy) ? { [sortBy]: sortOrder === 'asc' ? 1 : -1 } : fallback;
   }
 }

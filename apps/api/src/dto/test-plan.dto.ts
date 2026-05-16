@@ -56,4 +56,7 @@ export class UpdateRunItemDto {
   @IsOptional()
   @IsString()
   actualResult?: string;
+
+  @IsOptional()
+  stepResults?: Array<{ stepId?: string; status: TestRunStatus; actualResult?: string }>;
 }

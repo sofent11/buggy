@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import type { Requirement } from '@buggy/shared-types';
+import type { PageResult, Requirement } from '@buggy/shared-types';
 import { RequirementEntity } from '../database/requirement.schema.js';
 import type { ListQueryDto } from '../dto/common.dto.js';
 import type { BindLarkDto, CreateRequirementDto, UpdateRequirementDto } from '../dto/requirement.dto.js';
@@ -11,14 +11,28 @@ import { idOf, toObjectId } from '../shared/mongo.js';
 export class RequirementService {
   constructor(@InjectModel(RequirementEntity.name) private readonly requirements: Model<RequirementEntity>) {}
 
-  async list(query: ListQueryDto): Promise<Requirement[]> {
+  async list(query: ListQueryDto): Promise<PageResult<Requirement>> {
     const filter: Record<string, unknown> = {};
     if (query.projectId) filter.projectId = new Types.ObjectId(query.projectId);
     if (query.iterationId) filter.iterationId = new Types.ObjectId(query.iterationId);
     if (query.status) filter.status = query.status;
-    if (query.keyword) filter.title = { $regex: query.keyword, $options: 'i' };
-    const rows = await this.requirements.find(filter).sort({ updatedAt: -1 });
-    return rows.map((row) => this.toDto(row));
+    if (query.priority) filter.priority = query.priority;
+    if (query.ownerId) filter.ownerId = new Types.ObjectId(query.ownerId);
+    if (query.keyword) {
+      filter.$or = [
+        { title: { $regex: query.keyword, $options: 'i' } },
+        { description: { $regex: query.keyword, $options: 'i' } },
+        { tags: { $regex: query.keyword, $options: 'i' } }
+      ];
+    }
+    const page = query.page || 1;
+    const pageSize = query.pageSize || 50;
+    const sort = this.sortOf(query.sortBy, query.sortOrder);
+    const [total, rows] = await Promise.all([
+      this.requirements.countDocuments(filter),
+      this.requirements.find(filter).sort(sort).skip((page - 1) * pageSize).limit(pageSize)
+    ]);
+    return { total, page, pageSize, items: rows.map((row) => this.toDto(row)) };
   }
 
   async create(dto: CreateRequirementDto): Promise<Requirement> {
@@ -80,7 +94,7 @@ export class RequirementService {
     return idOf(row.projectId);
   }
 
-  toDto(row: RequirementEntity & { _id: unknown }): Requirement {
+  toDto(row: RequirementEntity & { _id: unknown; createdAt?: Date; updatedAt?: Date }): Requirement {
     return {
       id: idOf(row._id),
       projectId: idOf(row.projectId),
@@ -91,7 +105,15 @@ export class RequirementService {
       status: row.status,
       priority: row.priority,
       larkWebhook: row.larkWebhook,
-      tags: row.tags
+      tags: row.tags,
+      createdAt: row.createdAt?.toISOString(),
+      updatedAt: row.updatedAt?.toISOString()
     };
+  }
+
+  private sortOf(sortBy?: string, sortOrder?: 'asc' | 'desc'): Record<string, 1 | -1> {
+    const allowed = new Set(['title', 'status', 'priority', 'createdAt', 'updatedAt']);
+    if (!sortBy || !allowed.has(sortBy)) return { updatedAt: -1 };
+    return { [sortBy]: sortOrder === 'asc' ? 1 : -1 };
   }
 }

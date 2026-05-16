@@ -1,17 +1,16 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Activity, BarChart3, Bug as BugIcon, CalendarRange, Check, ClipboardCheck, FileSpreadsheet, Flag, FolderKanban, Pencil, Plus, Save, Send, Settings, Trash2, Upload, Users } from 'lucide-react';
-import type { Bug, Dictionary, Iteration, Project, ProjectMember, ReportSummary, Requirement, TestCase, TestPlan, TestRunItem, UserProfile } from '@buggy/shared-types';
+import { useMemo, useState } from 'react';
+import { ClipboardCheck, Pencil, Plus, Save } from 'lucide-react';
+import type { Requirement, TestCase } from '@buggy/shared-types';
 import type { UseFormRegister } from 'react-hook-form';
-import { api, downloadUrl } from '../../api.js';
+import { api } from '../../api.js';
 import { Button } from '../ui/button.js';
 import { Field, FieldLabel, FormActions } from '../ui/form.js';
 import { Input } from '../ui/input.js';
 import { Textarea } from '../ui/textarea.js';
-import { labelOf } from '../../labels.js';
-import { bugStatuses, caseStatuses, iterationStatuses, planStatuses, priorities, requirementStatuses, runStatuses, severities, systemRoles, userStatuses } from '../../app/constants.js';
+import { caseStatuses, priorities } from '../../app/constants.js';
 import type { StringFormValues } from '../../app/types.js';
-import { bugPayload, dateInput, dateRange, executionProgress, formatDictionaryValues, importMessage, iterationName, matchKeyword, parseDictionaryValues, rate, requirementPayload, requirementTitle, testCasePayload, text, userName, userStatusLabel } from '../../app/workspace-utils.js';
-import { CardHeader, DangerButton, Drawer, EmptyState, ExportLink, HookForm, registerField, SearchBox, Section, Select, Table, TemplateLink, Toolbar, Metric } from './common.js';
+import { matchKeyword, requirementTitle, shortDate, testCasePayload } from '../../app/workspace-utils.js';
+import { DataPage, DataTable, DangerButton, Drawer, EmptyState, HookForm, MetricCard, registerField, SearchBox, Select, StatusBadge, StepEditor, Toolbar } from './common.js';
 
 export function CaseSection(props: {
   projectId: string;
@@ -21,133 +20,104 @@ export function CaseSection(props: {
 }) {
   const [keyword, setKeyword] = useState('');
   const [requirementId, setRequirementId] = useState('');
+  const [status, setStatus] = useState('');
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<TestCase | null>(null);
-  const rows = props.rows.filter(
-    (row) => (!requirementId || row.requirementId === requirementId) && matchKeyword([row.title, row.expectedResult || '', row.priority], keyword)
+  const rows = useMemo(
+    () => props.rows.filter((row) => (!requirementId || row.requirementId === requirementId) && (!status || row.status === status) && matchKeyword([row.title, row.expectedResult || '', row.priority, row.steps.map((step) => step.action).join(' ')], keyword)),
+    [props.rows, requirementId, status, keyword]
   );
+  const ready = props.rows.filter((row) => row.status === 'ready').length;
+
   return (
-    <Section title="用例库" icon={ClipboardCheck}>
-      <Toolbar>
-        <SearchBox value={keyword} onChange={setKeyword} placeholder="搜索用例" />
-        <select value={requirementId} onChange={(event) => setRequirementId(event.target.value)}>
-          <option value="">全部需求</option>
-          {props.requirements.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
-        </select>
-        <span className="toolbar-summary">{rows.length} / {props.rows.length} 条用例</span>
-        <button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建用例</button>
-      </Toolbar>
-      <div className="cards">
-        {rows.map((row) => (
-          <article className="item-card" key={row.id}>
-            <CardHeader
-              title={row.title}
-              meta={[
-                `优先级 ${row.priority}`,
-                row.requirementId ? requirementTitle(props.requirements, row.requirementId) : '未绑定需求',
-                row.expectedResult || '未填写最终预期结果'
-              ]}
-              badge={labelOf(row.status)}
-            />
-            {row.preconditions && <p>{row.preconditions}</p>}
-            <div className="card-actions">
-              <button type="button" onClick={() => setEditing(row)}><Pencil size={15} /> 编辑</button>
-              <DangerButton onClick={() => props.mutate(() => api.deleteTestCase(row.id), '用例已删除')} />
-            </div>
-          </article>
-        ))}
+    <DataPage
+      title="用例库"
+      icon={ClipboardCheck}
+      metrics={
+        <section className="insight-strip">
+          <MetricCard label="用例总数" value={props.rows.length} detail={`${ready} 可执行`} tone="info" />
+          <MetricCard label="多步骤用例" value={props.rows.filter((row) => row.steps.length > 1).length} detail="步骤数大于 1" />
+          <MetricCard label="废弃用例" value={props.rows.filter((row) => row.status === 'deprecated').length} detail="不进入执行" tone="risk" />
+          <MetricCard label="需求分组" value={props.requirements.length} detail="左侧可筛选范围" />
+        </section>
+      }
+    >
+      <div className="split-layout case-layout">
+        <aside className="requirement-tree">
+          <button className={!requirementId ? 'active' : ''} type="button" onClick={() => setRequirementId('')}>全部需求 <span>{props.rows.length}</span></button>
+          {props.requirements.map((requirement) => (
+            <button key={requirement.id} className={requirementId === requirement.id ? 'active' : ''} type="button" onClick={() => setRequirementId(requirement.id)}>
+              {requirement.title}<span>{props.rows.filter((row) => row.requirementId === requirement.id).length}</span>
+            </button>
+          ))}
+        </aside>
+        <div className="main-table">
+          <Toolbar>
+            <SearchBox value={keyword} onChange={setKeyword} placeholder="搜索用例、步骤、预期" />
+            <Select value={status} onChange={setStatus} values={caseStatuses} emptyLabel="全部状态" />
+            <span className="toolbar-summary">{rows.length} / {props.rows.length} 条用例</span>
+            <button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建用例</button>
+          </Toolbar>
+          <DataTable
+            headers={['用例', '需求', '步骤', '优先级', '状态', '更新时间', '操作']}
+            emptyText="暂无用例"
+            rows={rows.map((row) => [
+              <div className="cell-main"><strong>{row.title}</strong><span>{row.expectedResult || row.preconditions || '未填写预期结果'}</span></div>,
+              row.requirementId ? requirementTitle(props.requirements, row.requirementId) : '-',
+              row.steps.length,
+              <StatusBadge value={row.priority} />,
+              <select value={row.status} onChange={(event) => props.mutate(() => api.updateTestCase(row.id, { status: event.target.value as never }), '用例状态已更新')}>
+                {caseStatuses.map((item) => <option key={item} value={item}>{item}</option>)}
+              </select>,
+              shortDate(row.updatedAt),
+              <div className="row-actions">
+                <Button type="button" size="sm" onClick={() => setEditing(row)}><Pencil size={14} /> 详情</Button>
+                <DangerButton title={`删除用例「${row.title}」？`} onConfirm={() => props.mutate(() => api.deleteTestCase(row.id), '用例已删除')} />
+              </div>
+            ])}
+          />
+        </div>
       </div>
       {rows.length === 0 && <EmptyState text="暂无用例" />}
-      <TestCaseDrawer
-        title="新建用例"
-        open={creating}
-        requirements={props.requirements}
-        onClose={() => setCreating(false)}
-        onSubmit={async (form) => {
-          await props.mutate(() => api.createTestCase(testCasePayload(form, props.projectId)), '用例已创建');
-          setCreating(false);
-        }}
-      />
-      <TestCaseDrawer
-        title="编辑用例"
-        row={editing || undefined}
-        open={Boolean(editing)}
-        requirements={props.requirements}
-        onClose={() => setEditing(null)}
-        onSubmit={async (form) => {
-          if (!editing) return;
-          await props.mutate(() => api.updateTestCase(editing.id, testCasePayload(form, props.projectId)), '用例已保存');
-          setEditing(null);
-        }}
-      />
-    </Section>
+      <TestCaseDrawer title="新建用例" open={creating} requirements={props.requirements} onClose={() => setCreating(false)} onSubmit={async (form) => {
+        await props.mutate(() => api.createTestCase(testCasePayload(form, props.projectId)), '用例已创建');
+        setCreating(false);
+      }} />
+      <TestCaseDrawer title="编辑用例" row={editing || undefined} open={Boolean(editing)} requirements={props.requirements} onClose={() => setEditing(null)} onSubmit={async (form) => {
+        if (!editing) return;
+        await props.mutate(() => api.updateTestCase(editing.id, testCasePayload(form, props.projectId)), '用例已保存');
+        setEditing(null);
+      }} />
+    </DataPage>
   );
 }
 
 export function TestCaseFields(props: { row?: TestCase; requirements: Requirement[]; register?: UseFormRegister<StringFormValues> }) {
-  const step = props.row?.steps[0];
   return (
     <div className="field-grid">
-      <Field className="span-two">
-        <FieldLabel>用例标题</FieldLabel>
-        <Input {...registerField(props.register, 'title')} placeholder="例如：登录失败时展示错误提示" defaultValue={props.row?.title} required />
-      </Field>
-      <Field>
-        <FieldLabel>绑定需求</FieldLabel>
-        <select {...registerField(props.register, 'requirementId')} defaultValue={props.row?.requirementId || ''}>
-          <option value="">不绑定需求</option>
-          {props.requirements.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
-        </select>
-      </Field>
-      <Field>
-        <FieldLabel>优先级</FieldLabel>
-        <Select name="priority" register={props.register} values={priorities} defaultValue={props.row?.priority || 'P2'} />
-      </Field>
-      <Field>
-        <FieldLabel>状态</FieldLabel>
-        <Select name="status" register={props.register} values={caseStatuses} defaultValue={props.row?.status || 'ready'} />
-      </Field>
-      <Field>
-        <FieldLabel>前置条件</FieldLabel>
-        <Input {...registerField(props.register, 'preconditions')} placeholder="账号、环境或数据准备" defaultValue={props.row?.preconditions} />
-      </Field>
-      <Field>
-        <FieldLabel>测试步骤</FieldLabel>
-        <Input {...registerField(props.register, 'step')} placeholder="输入操作步骤" defaultValue={step?.action} />
-      </Field>
-      <Field>
-        <FieldLabel>步骤预期</FieldLabel>
-        <Input {...registerField(props.register, 'expected')} placeholder="该步骤的预期反馈" defaultValue={step?.expected} />
-      </Field>
-      <Field className="span-four">
-        <FieldLabel>最终预期结果</FieldLabel>
-        <Textarea {...registerField(props.register, 'expectedResult')} placeholder="执行完成后的整体预期" defaultValue={props.row?.expectedResult} />
-      </Field>
+      <Field className="span-two"><FieldLabel>用例标题</FieldLabel><Input {...registerField(props.register, 'title')} defaultValue={props.row?.title} required /></Field>
+      <Field><FieldLabel>绑定需求</FieldLabel><select {...registerField(props.register, 'requirementId')} defaultValue={props.row?.requirementId || ''}><option value="">不绑定需求</option>{props.requirements.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></Field>
+      <Field><FieldLabel>优先级</FieldLabel><Select name="priority" register={props.register} values={priorities} defaultValue={props.row?.priority || 'P2'} /></Field>
+      <Field><FieldLabel>状态</FieldLabel><Select name="status" register={props.register} values={caseStatuses} defaultValue={props.row?.status || 'ready'} /></Field>
+      <Field className="span-two"><FieldLabel>前置条件</FieldLabel><Input {...registerField(props.register, 'preconditions')} defaultValue={props.row?.preconditions} /></Field>
+      <div className="span-four"><StepEditor initialSteps={props.row?.steps} /></div>
+      <Field className="span-four"><FieldLabel>最终预期结果</FieldLabel><Textarea {...registerField(props.register, 'expectedResult')} defaultValue={props.row?.expectedResult} /></Field>
     </div>
   );
 }
 
-export function TestCaseDrawer(props: {
-  title: string;
-  row?: TestCase;
-  open: boolean;
-  requirements: Requirement[];
-  onClose: () => void;
-  onSubmit: (form: FormData) => Promise<void>;
-}) {
+export function TestCaseDrawer(props: { title: string; row?: TestCase; open: boolean; requirements: Requirement[]; onClose: () => void; onSubmit: (form: FormData) => Promise<void> }) {
   return (
     <Drawer title={props.title} subtitle={props.row?.title || '维护测试步骤、预期结果和优先级'} open={props.open} onClose={props.onClose}>
       <HookForm onSubmit={async (form) => props.onSubmit(form)}>
         {(register) => (
           <>
             <TestCaseFields row={props.row} requirements={props.requirements} register={register} />
-            <FormActions>
-              <Button type="button" onClick={props.onClose}>取消</Button>
-              <Button variant="primary"><Save size={15} /> 保存用例</Button>
-            </FormActions>
+            <FormActions><Button type="button" onClick={props.onClose}>取消</Button><Button variant="primary"><Save size={15} /> 保存用例</Button></FormActions>
           </>
         )}
       </HookForm>
     </Drawer>
   );
 }
+

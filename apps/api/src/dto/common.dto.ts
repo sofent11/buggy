@@ -1,4 +1,5 @@
-import { IsMongoId, IsOptional, IsString } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsIn, IsInt, IsMongoId, IsOptional, IsString, Max, Min } from 'class-validator';
 
 export class ProjectScopedQueryDto {
   @IsMongoId()
@@ -6,6 +7,19 @@ export class ProjectScopedQueryDto {
 }
 
 export class ListQueryDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number = 1;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(500)
+  pageSize?: number = 50;
+
   @IsOptional()
   @IsMongoId()
   projectId?: string;
@@ -25,4 +39,28 @@ export class ListQueryDto {
   @IsOptional()
   @IsString()
   keyword?: string;
+
+  @IsOptional()
+  @IsString()
+  priority?: string;
+
+  @IsOptional()
+  @IsString()
+  severity?: string;
+
+  @IsOptional()
+  @IsMongoId()
+  assigneeId?: string;
+
+  @IsOptional()
+  @IsMongoId()
+  ownerId?: string;
+
+  @IsOptional()
+  @IsString()
+  sortBy?: string;
+
+  @IsOptional()
+  @IsIn(['asc', 'desc'])
+  sortOrder?: 'asc' | 'desc';
 }

@@ -1,10 +1,11 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import type { Project, ProjectMember, ProjectRole } from '@buggy/shared-types';
+import type { PageResult, Project, ProjectMember, ProjectRole } from '@buggy/shared-types';
 import { ProjectEntity } from '../database/project.schema.js';
 import { UserEntity } from '../database/user.schema.js';
 import type { CreateProjectDto, UpdateProjectDto, UpsertProjectMemberDto } from '../dto/project.dto.js';
+import type { ListQueryDto } from '../dto/common.dto.js';
 import { idOf, toObjectId } from '../shared/mongo.js';
 import type { SessionUser } from './auth.service.js';
 
@@ -15,15 +16,39 @@ export class ProjectService {
     @InjectModel(UserEntity.name) private readonly users: Model<UserEntity>
   ) {}
 
-  async list(user: SessionUser): Promise<Project[]> {
-    const query =
+  async list(user: SessionUser, query: ListQueryDto = {}): Promise<PageResult<Project>> {
+    const accessFilter =
       user.role === 'admin'
         ? {}
         : {
             $or: [{ ownerId: new Types.ObjectId(user.id) }, { 'members.userId': new Types.ObjectId(user.id) }]
           };
-    const rows = await this.projects.find(query).sort({ updatedAt: -1 });
-    return rows.map((row) => this.toDto(row));
+    const filter: Record<string, unknown> = { ...accessFilter };
+    if (query.keyword) {
+      filter.$and = [
+        accessFilter,
+        {
+          $or: [
+            { name: { $regex: query.keyword, $options: 'i' } },
+            { code: { $regex: query.keyword, $options: 'i' } },
+            { description: { $regex: query.keyword, $options: 'i' } }
+          ]
+        }
+      ];
+      delete filter.$or;
+    }
+    if (query.ownerId) filter.ownerId = new Types.ObjectId(query.ownerId);
+    const page = query.page || 1;
+    const pageSize = query.pageSize || 50;
+    const sortBy = query.sortBy;
+    const sortOrder = query.sortOrder;
+    const allowed = new Set(['name', 'code', 'createdAt', 'updatedAt']);
+    const sort: Record<string, 1 | -1> = sortBy && allowed.has(sortBy) ? { [sortBy]: sortOrder === 'asc' ? 1 : -1 } : { updatedAt: -1 };
+    const [total, rows] = await Promise.all([
+      this.projects.countDocuments(filter),
+      this.projects.find(filter).sort(sort).skip((page - 1) * pageSize).limit(pageSize)
+    ]);
+    return { total, page, pageSize, items: rows.map((row) => this.toDto(row)) };
   }
 
   async create(dto: CreateProjectDto, user: SessionUser): Promise<Project> {

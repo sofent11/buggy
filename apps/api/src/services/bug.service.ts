@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import type { Bug } from '@buggy/shared-types';
+import type { Bug, PageResult } from '@buggy/shared-types';
 import { BugEntity } from '../database/bug.schema.js';
 import { TestPlanEntity } from '../database/test-plan.schema.js';
 import type { CreateBugDto, CreateBugFromRunDto, UpdateBugDto } from '../dto/bug.dto.js';
@@ -18,15 +18,31 @@ export class BugService {
     private readonly testPlanService: TestPlanService
   ) {}
 
-  async list(query: ListQueryDto): Promise<Bug[]> {
+  async list(query: ListQueryDto): Promise<PageResult<Bug>> {
     const filter: Record<string, unknown> = {};
     if (query.projectId) filter.projectId = new Types.ObjectId(query.projectId);
     if (query.iterationId) filter.iterationId = new Types.ObjectId(query.iterationId);
     if (query.requirementId) filter.requirementId = new Types.ObjectId(query.requirementId);
     if (query.status) filter.status = query.status;
-    if (query.keyword) filter.title = { $regex: query.keyword, $options: 'i' };
-    const rows = await this.bugs.find(filter).sort({ updatedAt: -1 });
-    return rows.map((row) => this.toDto(row));
+    if (query.priority) filter.priority = query.priority;
+    if (query.severity) filter.severity = query.severity;
+    if (query.assigneeId) filter.assigneeId = new Types.ObjectId(query.assigneeId);
+    if (query.keyword) {
+      filter.$or = [
+        { title: { $regex: query.keyword, $options: 'i' } },
+        { reproduceSteps: { $regex: query.keyword, $options: 'i' } },
+        { actualResult: { $regex: query.keyword, $options: 'i' } },
+        { expectedResult: { $regex: query.keyword, $options: 'i' } }
+      ];
+    }
+    const page = query.page || 1;
+    const pageSize = query.pageSize || 50;
+    const sort = this.sortOf(query.sortBy, query.sortOrder);
+    const [total, rows] = await Promise.all([
+      this.bugs.countDocuments(filter),
+      this.bugs.find(filter).sort(sort).skip((page - 1) * pageSize).limit(pageSize)
+    ]);
+    return { total, page, pageSize, items: rows.map((row) => this.toDto(row)) };
   }
 
   async create(dto: CreateBugDto, user: SessionUser): Promise<Bug> {
@@ -112,7 +128,7 @@ export class BugService {
     return idOf(row.projectId);
   }
 
-  toDto(row: BugEntity & { _id: unknown }): Bug {
+  toDto(row: BugEntity & { _id: unknown; createdAt?: Date; updatedAt?: Date }): Bug {
     return {
       id: idOf(row._id),
       projectId: idOf(row.projectId),
@@ -129,7 +145,15 @@ export class BugService {
       priority: row.priority,
       status: row.status,
       assigneeId: row.assigneeId ? idOf(row.assigneeId) : undefined,
-      reporterId: row.reporterId ? idOf(row.reporterId) : undefined
+      reporterId: row.reporterId ? idOf(row.reporterId) : undefined,
+      createdAt: row.createdAt?.toISOString(),
+      updatedAt: row.updatedAt?.toISOString()
     };
+  }
+
+  private sortOf(sortBy?: string, sortOrder?: 'asc' | 'desc'): Record<string, 1 | -1> {
+    const allowed = new Set(['title', 'status', 'priority', 'severity', 'createdAt', 'updatedAt']);
+    if (!sortBy || !allowed.has(sortBy)) return { updatedAt: -1 };
+    return { [sortBy]: sortOrder === 'asc' ? 1 : -1 };
   }
 }

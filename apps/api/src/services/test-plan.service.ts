@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import type { TestPlan, TestRunItem } from '@buggy/shared-types';
+import type { PageResult, TestCaseStep, TestPlan, TestRunItem } from '@buggy/shared-types';
 import { TestCaseEntity } from '../database/test-case.schema.js';
 import { TestPlanEntity, TestRunItemEntity } from '../database/test-plan.schema.js';
 import type { ListQueryDto } from '../dto/common.dto.js';
@@ -16,15 +16,22 @@ export class TestPlanService {
     @InjectModel(TestCaseEntity.name) private readonly cases: Model<TestCaseEntity>
   ) {}
 
-  async list(query: ListQueryDto): Promise<TestPlan[]> {
+  async list(query: ListQueryDto): Promise<PageResult<TestPlan>> {
     const filter: Record<string, unknown> = {};
     if (query.projectId) filter.projectId = new Types.ObjectId(query.projectId);
     if (query.iterationId) filter.iterationId = new Types.ObjectId(query.iterationId);
     if (query.requirementId) filter.requirementId = new Types.ObjectId(query.requirementId);
     if (query.status) filter.status = query.status;
-    if (query.keyword) filter.name = { $regex: query.keyword, $options: 'i' };
-    const rows = await this.plans.find(filter).sort({ updatedAt: -1 });
-    return rows.map((row) => this.toDto(row));
+    if (query.ownerId) filter.ownerId = new Types.ObjectId(query.ownerId);
+    if (query.keyword) filter.$or = [{ name: { $regex: query.keyword, $options: 'i' } }, { round: { $regex: query.keyword, $options: 'i' } }];
+    const page = query.page || 1;
+    const pageSize = query.pageSize || 50;
+    const sort = this.sortOf(query.sortBy, query.sortOrder);
+    const [total, rows] = await Promise.all([
+      this.plans.countDocuments(filter),
+      this.plans.find(filter).sort(sort).skip((page - 1) * pageSize).limit(pageSize)
+    ]);
+    return { total, page, pageSize, items: rows.map((row) => this.toDto(row)) };
   }
 
   async create(dto: CreateTestPlanDto): Promise<TestPlan> {
@@ -34,11 +41,12 @@ export class TestPlanService {
       caseId: testCase._id,
       caseTitle: testCase.title,
       requirementId: testCase.requirementId,
-      steps: testCase.steps.map((step) => ({ action: step.action, expected: step.expected })),
+      steps: this.normalizeSteps(testCase.steps),
       expectedResult: testCase.expectedResult,
       status: 'untested',
       actualResult: '',
-      bugIds: []
+      bugIds: [],
+      stepResults: []
     }));
     const row = await this.plans.create({
       projectId: new Types.ObjectId(dto.projectId),
@@ -79,11 +87,12 @@ export class TestPlanService {
           caseId: testCase._id as Types.ObjectId,
           caseTitle: testCase.title,
           requirementId: testCase.requirementId,
-          steps: testCase.steps.map((step) => ({ action: step.action, expected: step.expected })),
+          steps: this.normalizeSteps(testCase.steps),
           expectedResult: testCase.expectedResult,
           status: 'untested',
           actualResult: '',
-          bugIds: []
+          bugIds: [],
+          stepResults: []
         } as TestRunItemEntity;
       });
     }
@@ -98,6 +107,7 @@ export class TestPlanService {
     if (!item) throw new NotFoundException('执行项不存在');
     item.status = dto.status;
     item.actualResult = dto.actualResult || '';
+    item.stepResults = dto.stepResults || item.stepResults || [];
     item.executorId = new Types.ObjectId(user.id);
     item.executedAt = new Date();
     if (row.status === 'draft') row.status = 'active';
@@ -127,7 +137,7 @@ export class TestPlanService {
     return idOf(row.projectId);
   }
 
-  toDto(row: TestPlanEntity & { _id: unknown }): TestPlan {
+  toDto(row: TestPlanEntity & { _id: unknown; createdAt?: Date; updatedAt?: Date }): TestPlan {
     return {
       id: idOf(row._id),
       projectId: idOf(row.projectId),
@@ -144,15 +154,36 @@ export class TestPlanService {
           caseId: idOf(item.caseId),
           caseTitle: item.caseTitle,
           requirementId: item.requirementId ? idOf(item.requirementId) : undefined,
-          steps: item.steps,
+          steps: this.normalizeSteps(item.steps),
           expectedResult: item.expectedResult,
           status: item.status,
           actualResult: item.actualResult,
           executorId: item.executorId ? idOf(item.executorId) : undefined,
           executedAt: item.executedAt?.toISOString(),
-          bugIds: item.bugIds.map(idOf)
+          bugIds: item.bugIds.map(idOf),
+          stepResults: item.stepResults || []
         })
-      )
+      ),
+      createdAt: row.createdAt?.toISOString(),
+      updatedAt: row.updatedAt?.toISOString()
     };
+  }
+
+  private normalizeSteps(steps: Array<Partial<TestCaseStep>>): TestCaseStep[] {
+    return steps
+      .map((step, index) => ({
+        id: step.id || new Types.ObjectId().toString(),
+        action: String(step.action || '').trim(),
+        expected: String(step.expected || '').trim(),
+        sort: typeof step.sort === 'number' ? step.sort : index + 1
+      }))
+      .filter((step) => step.action || step.expected)
+      .sort((a, b) => (a.sort || 0) - (b.sort || 0));
+  }
+
+  private sortOf(sortBy?: string, sortOrder?: 'asc' | 'desc'): Record<string, 1 | -1> {
+    const allowed = new Set(['name', 'round', 'status', 'createdAt', 'updatedAt']);
+    if (!sortBy || !allowed.has(sortBy)) return { updatedAt: -1 };
+    return { [sortBy]: sortOrder === 'asc' ? 1 : -1 };
   }
 }

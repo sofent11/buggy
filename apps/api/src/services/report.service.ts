@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import type { BugStatus, ReportSummary, RequirementStatus, TestCaseStatus, TestRunStatus } from '@buggy/shared-types';
+import type { BugStatus, Priority, ReportSummary, RequirementStatus, Severity, TestCaseStatus, TestRunStatus } from '@buggy/shared-types';
+import { IterationEntity } from '../database/iteration.schema.js';
 import { BugEntity } from '../database/bug.schema.js';
 import { RequirementEntity } from '../database/requirement.schema.js';
 import { TestCaseEntity } from '../database/test-case.schema.js';
@@ -12,6 +13,7 @@ import type { ListQueryDto } from '../dto/common.dto.js';
 export class ReportService {
   constructor(
     @InjectModel(RequirementEntity.name) private readonly requirements: Model<RequirementEntity>,
+    @InjectModel(IterationEntity.name) private readonly iterations: Model<IterationEntity>,
     @InjectModel(TestCaseEntity.name) private readonly cases: Model<TestCaseEntity>,
     @InjectModel(TestPlanEntity.name) private readonly plans: Model<TestPlanEntity>,
     @InjectModel(BugEntity.name) private readonly bugs: Model<BugEntity>
@@ -19,8 +21,9 @@ export class ReportService {
 
   async summary(query: ListQueryDto): Promise<ReportSummary> {
     const base = this.baseFilter(query);
-    const [requirements, cases, plans, bugs] = await Promise.all([
+    const [requirements, iterations, cases, plans, bugs] = await Promise.all([
       this.requirements.find(base.requirements),
+      this.iterations.find(base.iterations),
       this.cases.find(base.cases),
       this.plans.find(base.plans),
       this.bugs.find(base.bugs)
@@ -62,6 +65,61 @@ export class ReportService {
         closed: this.countBy(bugs, 'status', 'closed'),
         reopened: this.countBy(bugs, 'status', 'reopened'),
         active: bugs.filter((bug) => !['verified', 'closed'].includes(bug.status)).length
+      },
+      charts: {
+        executionTrend: plans.map((plan) => {
+          const total = plan.runItems.length;
+          const passedCount = this.countBy(plan.runItems, 'status', 'passed');
+          return {
+            label: `${plan.round || ''}${plan.name ? ` ${plan.name}` : ''}`.trim(),
+            total,
+            passed: passedCount,
+            failed: this.countBy(plan.runItems, 'status', 'failed'),
+            blocked: this.countBy(plan.runItems, 'status', 'blocked'),
+            skipped: this.countBy(plan.runItems, 'status', 'skipped'),
+            passRate: total > 0 ? Math.round((passedCount / total) * 10000) / 100 : 0
+          };
+        }),
+        bugStatus: (['open', 'in_progress', 'resolved', 'verified', 'closed', 'reopened'] as BugStatus[]).map((status) => ({
+          key: status,
+          label: this.labelOf(status),
+          value: this.countBy(bugs, 'status', status)
+        })),
+        bugSeverity: (['S0', 'S1', 'S2', 'S3'] as Severity[]).map((severity) => ({
+          key: severity,
+          label: this.labelOf(severity),
+          value: this.countBy(bugs, 'severity', severity)
+        })),
+        priority: (['P0', 'P1', 'P2', 'P3'] as Priority[]).map((priority) => ({
+          key: priority,
+          label: priority,
+          value: requirements.filter((item) => item.priority === priority).length + cases.filter((item) => item.priority === priority).length + bugs.filter((item) => item.priority === priority).length
+        })),
+        iterationRank: iterations.map((iteration) => {
+          const id = String(iteration._id);
+          const iterationPlans = plans.filter((plan) => String(plan.iterationId || '') === id);
+          const iterationRunItems = iterationPlans.flatMap((plan) => plan.runItems);
+          const iterationPassed = this.countBy(iterationRunItems, 'status', 'passed');
+          return {
+            id,
+            name: iteration.name,
+            requirements: requirements.filter((item) => String(item.iterationId || '') === id).length,
+            cases: cases.filter((item) => requirements.some((requirement) => String(requirement._id) === String(item.requirementId || '') && String(requirement.iterationId || '') === id)).length,
+            executionTotal: iterationRunItems.length,
+            passRate: iterationRunItems.length > 0 ? Math.round((iterationPassed / iterationRunItems.length) * 10000) / 100 : 0,
+            activeBugs: bugs.filter((bug) => String(bug.iterationId || '') === id && !['verified', 'closed'].includes(bug.status)).length
+          };
+        }),
+        requirementCoverage: requirements.map((requirement) => {
+          const id = String(requirement._id);
+          return {
+            id,
+            title: requirement.title,
+            caseCount: cases.filter((item) => String(item.requirementId || '') === id).length,
+            bugCount: bugs.filter((item) => String(item.requirementId || '') === id).length,
+            status: requirement.status
+          };
+        })
       }
     };
   }
@@ -112,6 +170,10 @@ export class ReportService {
         ...(iterationId ? { iterationId } : {}),
         ...(requirementId ? { _id: requirementId } : {})
       },
+      iterations: {
+        ...(projectId ? { projectId } : {}),
+        ...(iterationId ? { _id: iterationId } : {})
+      },
       cases: {
         ...(projectId ? { projectId } : {}),
         ...(requirementId ? { requirementId } : {})
@@ -129,7 +191,23 @@ export class ReportService {
     };
   }
 
-  private countBy<T>(rows: T[], key: string, value: RequirementStatus | TestCaseStatus | TestRunStatus | BugStatus): number {
+  private countBy<T>(rows: T[], key: string, value: RequirementStatus | TestCaseStatus | TestRunStatus | BugStatus | Severity | Priority): number {
     return rows.filter((row) => (row as Record<string, unknown>)[key] === value).length;
+  }
+
+  private labelOf(value: string) {
+    const labels: Record<string, string> = {
+      open: '新建',
+      in_progress: '处理中',
+      resolved: '已解决',
+      verified: '已验证',
+      closed: '已关闭',
+      reopened: '重新打开',
+      S0: 'S0 致命',
+      S1: 'S1 严重',
+      S2: 'S2 一般',
+      S3: 'S3 轻微'
+    };
+    return labels[value] || value;
   }
 }

@@ -4,6 +4,7 @@ import type {
   Dictionary,
   DictionaryValue,
   Iteration,
+  PageResult,
   ProjectMember,
   Project,
   ReportSummary,
@@ -15,6 +16,20 @@ import type {
 
 const API_BASE = import.meta.env.VITE_API_BASE || '/api';
 export type ImportResult = { imported: number; errors: Array<{ row: number; message: string }> };
+export type ListParams = Record<string, string | number | undefined>;
+
+function queryString(params: ListParams = {}) {
+  const search = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== '') search.set(key, String(value));
+  });
+  const text = search.toString();
+  return text ? `?${text}` : '';
+}
+
+function itemsOf<T>(result: PageResult<T> | T[]): T[] {
+  return Array.isArray(result) ? result : result.items;
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
@@ -52,7 +67,8 @@ export const api = {
     request<UserProfile>('/auth/register', { method: 'POST', body: JSON.stringify(body) }),
   logout: () => request<{ loggedOut: boolean }>('/auth/logout', { method: 'POST' }),
 
-  projects: () => request<Project[]>('/projects'),
+  projectPage: (params?: ListParams) => request<PageResult<Project>>(`/projects${queryString(params)}`),
+  projects: async (params?: ListParams) => itemsOf(await request<PageResult<Project> | Project[]>(`/projects${queryString({ pageSize: 500, ...params })}`)),
   createProject: (body: Partial<Project>) => request<Project>('/projects', { method: 'POST', body: JSON.stringify(body) }),
   updateProject: (id: string, body: Partial<Project>) => request<Project>(`/projects/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteProject: (id: string) => request<{ deleted: true }>(`/projects/${id}`, { method: 'DELETE' }),
@@ -65,12 +81,14 @@ export const api = {
   updateUser: (id: string, body: Partial<Pick<UserProfile, 'role' | 'status'>>) =>
     request<UserProfile>(`/users/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
 
-  iterations: (projectId: string) => request<Iteration[]>(`/iterations?projectId=${projectId}`),
+  iterationPage: (projectId: string, params?: ListParams) => request<PageResult<Iteration>>(`/iterations${queryString({ projectId, ...params })}`),
+  iterations: async (projectId: string, params?: ListParams) => itemsOf(await request<PageResult<Iteration> | Iteration[]>(`/iterations${queryString({ projectId, pageSize: 500, ...params })}`)),
   createIteration: (body: Partial<Iteration>) => request<Iteration>('/iterations', { method: 'POST', body: JSON.stringify(body) }),
   updateIteration: (id: string, body: Partial<Iteration>) => request<Iteration>(`/iterations/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteIteration: (id: string) => request<{ deleted: true }>(`/iterations/${id}`, { method: 'DELETE' }),
 
-  requirements: (projectId: string) => request<Requirement[]>(`/requirements?projectId=${projectId}`),
+  requirementPage: (projectId: string, params?: ListParams) => request<PageResult<Requirement>>(`/requirements${queryString({ projectId, ...params })}`),
+  requirements: async (projectId: string, params?: ListParams) => itemsOf(await request<PageResult<Requirement> | Requirement[]>(`/requirements${queryString({ projectId, pageSize: 500, ...params })}`)),
   createRequirement: (body: Partial<Requirement>) =>
     request<Requirement>('/requirements', { method: 'POST', body: JSON.stringify(body) }),
   updateRequirement: (id: string, body: Partial<Requirement>) =>
@@ -80,19 +98,22 @@ export const api = {
     request<Requirement>(`/requirements/${id}/lark`, { method: 'PATCH', body: JSON.stringify({ larkWebhook }) }),
   sendLark: (id: string) => request<{ sent: boolean }>(`/requirements/${id}/lark/send`, { method: 'POST' }),
 
-  testCases: (projectId: string) => request<TestCase[]>(`/test-cases?projectId=${projectId}`),
+  testCasePage: (projectId: string, params?: ListParams) => request<PageResult<TestCase>>(`/test-cases${queryString({ projectId, ...params })}`),
+  testCases: async (projectId: string, params?: ListParams) => itemsOf(await request<PageResult<TestCase> | TestCase[]>(`/test-cases${queryString({ projectId, pageSize: 500, ...params })}`)),
   createTestCase: (body: Partial<TestCase>) => request<TestCase>('/test-cases', { method: 'POST', body: JSON.stringify(body) }),
   updateTestCase: (id: string, body: Partial<TestCase>) => request<TestCase>(`/test-cases/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteTestCase: (id: string) => request<{ deleted: true }>(`/test-cases/${id}`, { method: 'DELETE' }),
 
-  testPlans: (projectId: string) => request<TestPlan[]>(`/test-plans?projectId=${projectId}`),
+  testPlanPage: (projectId: string, params?: ListParams) => request<PageResult<TestPlan>>(`/test-plans${queryString({ projectId, ...params })}`),
+  testPlans: async (projectId: string, params?: ListParams) => itemsOf(await request<PageResult<TestPlan> | TestPlan[]>(`/test-plans${queryString({ projectId, pageSize: 500, ...params })}`)),
   createTestPlan: (body: Partial<TestPlan>) => request<TestPlan>('/test-plans', { method: 'POST', body: JSON.stringify(body) }),
   updateTestPlan: (id: string, body: Partial<TestPlan>) => request<TestPlan>(`/test-plans/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteTestPlan: (id: string) => request<{ deleted: true }>(`/test-plans/${id}`, { method: 'DELETE' }),
   updateRunItem: (planId: string, runItemId: string, body: { status: string; actualResult?: string }) =>
     request<TestPlan>(`/test-plans/${planId}/run-items/${runItemId}`, { method: 'PATCH', body: JSON.stringify(body) }),
 
-  bugs: (projectId: string) => request<Bug[]>(`/bugs?projectId=${projectId}`),
+  bugPage: (projectId: string, params?: ListParams) => request<PageResult<Bug>>(`/bugs${queryString({ projectId, ...params })}`),
+  bugs: async (projectId: string, params?: ListParams) => itemsOf(await request<PageResult<Bug> | Bug[]>(`/bugs${queryString({ projectId, pageSize: 500, ...params })}`)),
   createBug: (body: Partial<Bug>) => request<Bug>('/bugs', { method: 'POST', body: JSON.stringify(body) }),
   updateBug: (id: string, body: Partial<Bug>) => request<Bug>(`/bugs/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteBug: (id: string) => request<{ deleted: true }>(`/bugs/${id}`, { method: 'DELETE' }),

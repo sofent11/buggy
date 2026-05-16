@@ -37,6 +37,9 @@ export class TestRunItemEntity {
 
   @Prop({ type: [SchemaTypes.ObjectId], default: [] })
   bugIds!: Types.ObjectId[];
+
+  @Prop({ type: [SchemaTypes.Mixed], default: [] })
+  stepResults!: Array<{ stepId?: string; status: TestRunStatus; actualResult?: string }>;
 }
 
 const TestRunItemSchema = SchemaFactory.createForClass(TestRunItemEntity);

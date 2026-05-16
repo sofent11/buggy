@@ -1,4 +1,5 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { ListQueryDto } from '../dto/common.dto.js';
 import { CreateProjectDto, UpdateProjectDto, UpsertProjectMemberDto } from '../dto/project.dto.js';
 import { ProjectService } from '../services/project.service.js';
 import { ProjectCleanupService } from '../services/project-cleanup.service.js';
@@ -15,8 +16,8 @@ export class ProjectController {
   ) {}
 
   @Get()
-  list(@CurrentUser() user: SessionUser) {
-    return this.projects.list(user);
+  list(@Query() query: ListQueryDto, @CurrentUser() user: SessionUser) {
+    return this.projects.list(user, query);
   }
 
   @Post()

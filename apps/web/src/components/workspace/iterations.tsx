@@ -1,50 +1,86 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Activity, BarChart3, Bug as BugIcon, CalendarRange, Check, ClipboardCheck, FileSpreadsheet, Flag, FolderKanban, Pencil, Plus, Save, Send, Settings, Trash2, Upload, Users } from 'lucide-react';
-import type { Bug, Dictionary, Iteration, Project, ProjectMember, ReportSummary, Requirement, TestCase, TestPlan, TestRunItem, UserProfile } from '@buggy/shared-types';
-import type { UseFormRegister } from 'react-hook-form';
-import { api, downloadUrl } from '../../api.js';
+import { useMemo, useState } from 'react';
+import { CalendarRange, Pencil, Plus, Save } from 'lucide-react';
+import type { Bug, Iteration, Requirement, TestCase, TestPlan } from '@buggy/shared-types';
+import { api } from '../../api.js';
 import { Button } from '../ui/button.js';
 import { Field, FieldLabel, FormActions } from '../ui/form.js';
 import { Input } from '../ui/input.js';
-import { Textarea } from '../ui/textarea.js';
 import { labelOf } from '../../labels.js';
-import { bugStatuses, caseStatuses, iterationStatuses, planStatuses, priorities, requirementStatuses, runStatuses, severities, systemRoles, userStatuses } from '../../app/constants.js';
-import type { StringFormValues } from '../../app/types.js';
-import { bugPayload, dateInput, dateRange, executionProgress, formatDictionaryValues, importMessage, iterationName, matchKeyword, parseDictionaryValues, rate, requirementPayload, requirementTitle, testCasePayload, text, userName, userStatusLabel } from '../../app/workspace-utils.js';
-import { CardHeader, DangerButton, Drawer, EmptyState, ExportLink, HookForm, registerField, SearchBox, Section, Select, Table, TemplateLink, Toolbar, Metric } from './common.js';
+import { iterationStatuses } from '../../app/constants.js';
+import { dateInput, dateRange, matchKeyword, shortDate, text } from '../../app/workspace-utils.js';
+import { DataPage, DataTable, DangerButton, Drawer, EmptyState, HookForm, MetricCard, SearchBox, Select, StatusBadge, Toolbar } from './common.js';
 
 export function IterationSection(props: {
   projectId: string;
   rows: Iteration[];
+  requirements?: Requirement[];
+  cases?: TestCase[];
+  plans?: TestPlan[];
+  bugs?: Bug[];
   mutate: (action: () => Promise<unknown>, message: string) => Promise<void>;
 }) {
   const [keyword, setKeyword] = useState('');
+  const [status, setStatus] = useState('');
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Iteration | null>(null);
-  const rows = props.rows.filter((row) => matchKeyword([row.name, row.goal || '', row.status], keyword));
+  const rows = useMemo(() => props.rows.filter((row) => (!status || row.status === status) && matchKeyword([row.name, row.goal || '', row.status], keyword)), [props.rows, keyword, status]);
+  const active = props.rows.filter((row) => row.status === 'active').length;
+
   return (
-    <Section title="迭代管理" icon={CalendarRange}>
+    <DataPage
+      title="迭代管理"
+      icon={CalendarRange}
+      metrics={
+        <section className="insight-strip">
+          <MetricCard label="迭代总数" value={props.rows.length} detail={`${active} 个进行中`} tone="info" />
+          <MetricCard label="需求" value={props.requirements?.length || 0} detail="已纳入当前项目" />
+          <MetricCard label="执行计划" value={props.plans?.length || 0} detail="跨迭代测试轮次" />
+          <MetricCard label="活跃 Bug" value={(props.bugs || []).filter((bug) => !['verified', 'closed'].includes(bug.status)).length} detail="未验证或关闭" tone="risk" />
+        </section>
+      }
+    >
       <Toolbar>
-        <SearchBox value={keyword} onChange={setKeyword} placeholder="搜索迭代" />
+        <SearchBox value={keyword} onChange={setKeyword} placeholder="搜索迭代目标" />
+        <Select value={status} onChange={setStatus} values={iterationStatuses} emptyLabel="全部状态" />
         <span className="toolbar-summary">{rows.length} / {props.rows.length} 个迭代</span>
-        <button className="primary" type="button" onClick={() => setCreating(true)}>
-          <Plus size={16} /> 新建迭代
-        </button>
+        <button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建迭代</button>
       </Toolbar>
-      <div className="cards">
-        {rows.map((row) => (
-          <article className="item-card" key={row.id}>
-            <CardHeader
-              title={row.name}
-              meta={[row.goal || '未设置迭代目标', dateRange(row.startDate, row.endDate)]}
-              badge={labelOf(row.status)}
-            />
-            <div className="card-actions">
-              <button type="button" onClick={() => setEditing(row)}><Pencil size={15} /> 编辑</button>
-              <DangerButton onClick={() => props.mutate(() => api.deleteIteration(row.id), '迭代已删除')} />
+      <div className="split-layout">
+        <DataTable
+          headers={['迭代', '周期', '状态', '需求', '用例', '执行', '活跃 Bug', '更新时间', '操作']}
+          emptyText="暂无迭代"
+          rows={rows.map((row) => {
+            const iterationRequirements = (props.requirements || []).filter((item) => item.iterationId === row.id);
+            const requirementIds = new Set(iterationRequirements.map((item) => item.id));
+            const iterationPlans = (props.plans || []).filter((plan) => plan.iterationId === row.id);
+            const runItems = iterationPlans.flatMap((plan) => plan.runItems);
+            const passed = runItems.filter((item) => item.status === 'passed').length;
+            const activeBugs = (props.bugs || []).filter((bug) => bug.iterationId === row.id && !['verified', 'closed'].includes(bug.status)).length;
+            return [
+              <div className="cell-main"><strong>{row.name}</strong><span>{row.goal || '未设置目标'}</span></div>,
+              dateRange(row.startDate, row.endDate),
+              <StatusBadge value={row.status} />,
+              iterationRequirements.length,
+              (props.cases || []).filter((item) => item.requirementId && requirementIds.has(item.requirementId)).length,
+              `${passed}/${runItems.length}`,
+              activeBugs,
+              shortDate(row.updatedAt),
+              <div className="row-actions">
+                <Button type="button" size="sm" onClick={() => setEditing(row)}><Pencil size={14} /> 编辑</Button>
+                <DangerButton title={`删除迭代「${row.name}」？`} onConfirm={() => props.mutate(() => api.deleteIteration(row.id), '迭代已删除')} />
+              </div>
+            ];
+          })}
+        />
+        <aside className="side-summary">
+          <strong>迭代概览</strong>
+          {rows.slice(0, 5).map((row) => (
+            <div key={row.id} className="summary-line">
+              <span>{row.name}</span>
+              <small>{labelOf(row.status)} · {dateRange(row.startDate, row.endDate)}</small>
             </div>
-          </article>
-        ))}
+          ))}
+        </aside>
       </div>
       {rows.length === 0 && <EmptyState text="暂无迭代" />}
       <IterationDrawer
@@ -53,15 +89,7 @@ export function IterationSection(props: {
         onClose={() => setCreating(false)}
         onSubmit={async (form) => {
           await props.mutate(
-            () =>
-              api.createIteration({
-                projectId: props.projectId,
-                name: text(form, 'name'),
-                goal: text(form, 'goal'),
-                startDate: text(form, 'startDate') || undefined,
-                endDate: text(form, 'endDate') || undefined,
-                status: text(form, 'status') as never
-              }),
+            () => api.createIteration({ projectId: props.projectId, name: text(form, 'name'), goal: text(form, 'goal'), startDate: text(form, 'startDate') || undefined, endDate: text(form, 'endDate') || undefined, status: text(form, 'status') as never }),
             '迭代已创建'
           );
           setCreating(false);
@@ -75,66 +103,32 @@ export function IterationSection(props: {
         onSubmit={async (form) => {
           if (!editing) return;
           await props.mutate(
-            () =>
-              api.updateIteration(editing.id, {
-                name: text(form, 'name'),
-                goal: text(form, 'goal'),
-                startDate: text(form, 'startDate') || undefined,
-                endDate: text(form, 'endDate') || undefined,
-                status: text(form, 'status') as never
-              }),
+            () => api.updateIteration(editing.id, { name: text(form, 'name'), goal: text(form, 'goal'), startDate: text(form, 'startDate') || undefined, endDate: text(form, 'endDate') || undefined, status: text(form, 'status') as never }),
             '迭代已保存'
           );
           setEditing(null);
         }}
       />
-    </Section>
+    </DataPage>
   );
 }
 
-export function IterationDrawer(props: {
-  title: string;
-  row?: Iteration;
-  open: boolean;
-  onClose: () => void;
-  onSubmit: (form: FormData) => Promise<void>;
-}) {
+export function IterationDrawer(props: { title: string; row?: Iteration; open: boolean; onClose: () => void; onSubmit: (form: FormData) => Promise<void> }) {
   return (
     <Drawer title={props.title} subtitle={props.row?.name || '规划迭代目标和时间范围'} open={props.open} onClose={props.onClose}>
       <HookForm
-        defaultValues={{
-          name: props.row?.name || '',
-          goal: props.row?.goal || '',
-          startDate: dateInput(props.row?.startDate),
-          endDate: dateInput(props.row?.endDate),
-          status: props.row?.status || 'planning'
-        }}
+        defaultValues={{ name: props.row?.name || '', goal: props.row?.goal || '', startDate: dateInput(props.row?.startDate), endDate: dateInput(props.row?.endDate), status: props.row?.status || 'planning' }}
         onSubmit={async (form) => props.onSubmit(form)}
       >
         {(register) => (
           <>
-            <Field>
-              <FieldLabel>迭代名称</FieldLabel>
-              <Input {...register('name')} placeholder="例如：6 月回归" required />
-            </Field>
-            <Field>
-              <FieldLabel>迭代目标</FieldLabel>
-              <Input {...register('goal')} placeholder="本轮要交付或验证的目标" />
-            </Field>
+            <Field><FieldLabel>迭代名称</FieldLabel><Input {...register('name')} required /></Field>
+            <Field><FieldLabel>迭代目标</FieldLabel><Input {...register('goal')} /></Field>
             <div className="field-grid two">
-              <Field>
-                <FieldLabel>开始日期</FieldLabel>
-                <Input {...register('startDate')} type="date" />
-              </Field>
-              <Field>
-                <FieldLabel>结束日期</FieldLabel>
-                <Input {...register('endDate')} type="date" />
-              </Field>
+              <Field><FieldLabel>开始日期</FieldLabel><Input {...register('startDate')} type="date" /></Field>
+              <Field><FieldLabel>结束日期</FieldLabel><Input {...register('endDate')} type="date" /></Field>
             </div>
-            <Field>
-              <FieldLabel>状态</FieldLabel>
-              <Select name="status" register={register} values={iterationStatuses} defaultValue={props.row?.status || 'planning'} />
-            </Field>
+            <Field><FieldLabel>状态</FieldLabel><Select name="status" register={register} values={iterationStatuses} defaultValue={props.row?.status || 'planning'} /></Field>
             <FormActions>
               <Button type="button" onClick={props.onClose}>取消</Button>
               <Button variant="primary"><Save size={15} /> 保存</Button>
@@ -145,3 +139,4 @@ export function IterationDrawer(props: {
     </Drawer>
   );
 }
+

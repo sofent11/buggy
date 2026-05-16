@@ -3,11 +3,18 @@ import { IsArray, IsIn, IsMongoId, IsOptional, IsString, MinLength, ValidateNest
 import type { Priority, TestCaseStatus } from '@buggy/shared-types';
 
 export class TestCaseStepDto {
+  @IsOptional()
+  @IsString()
+  id?: string;
+
   @IsString()
   action!: string;
 
   @IsString()
   expected!: string;
+
+  @IsOptional()
+  sort?: number;
 }
 
 export class CreateTestCaseDto {

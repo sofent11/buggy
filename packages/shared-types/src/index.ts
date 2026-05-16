@@ -63,6 +63,8 @@ export interface Iteration {
   startDate?: string;
   endDate?: string;
   status: IterationStatus;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Requirement {
@@ -76,11 +78,15 @@ export interface Requirement {
   priority: Priority;
   larkWebhook?: string;
   tags?: string[];
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface TestCaseStep {
+  id?: Id;
   action: string;
   expected: string;
+  sort?: number;
 }
 
 export interface TestCase {
@@ -94,6 +100,14 @@ export interface TestCase {
   priority: Priority;
   status: TestCaseStatus;
   tags?: string[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface TestRunStepResult {
+  stepId?: Id;
+  status: TestRunStatus;
+  actualResult?: string;
 }
 
 export interface TestRunItem {
@@ -108,6 +122,7 @@ export interface TestRunItem {
   executorId?: Id;
   executedAt?: string;
   bugIds: Id[];
+  stepResults?: TestRunStepResult[];
 }
 
 export interface TestPlan {
@@ -121,6 +136,8 @@ export interface TestPlan {
   status: TestPlanStatus;
   caseIds: Id[];
   runItems: TestRunItem[];
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Bug {
@@ -140,6 +157,8 @@ export interface Bug {
   status: BugStatus;
   assigneeId?: Id;
   reporterId?: Id;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface DictionaryValue {
@@ -192,10 +211,20 @@ export interface ReportSummary {
     reopened: number;
     active: number;
   };
+  charts?: {
+    executionTrend: Array<{ label: string; total: number; passed: number; failed: number; blocked: number; skipped: number; passRate: number }>;
+    bugStatus: Array<{ key: BugStatus; label: string; value: number }>;
+    bugSeverity: Array<{ key: Severity; label: string; value: number }>;
+    priority: Array<{ key: Priority; label: string; value: number }>;
+    iterationRank: Array<{ id: Id; name: string; requirements: number; cases: number; executionTotal: number; passRate: number; activeBugs: number }>;
+    requirementCoverage: Array<{ id: Id; title: string; caseCount: number; bugCount: number; status: RequirementStatus }>;
+  };
 }
 
 export interface PageResult<T> {
   total: number;
+  page: number;
+  pageSize: number;
   items: T[];
 }
 

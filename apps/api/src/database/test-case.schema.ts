@@ -6,11 +6,17 @@ export type TestCaseDocument = HydratedDocument<TestCaseEntity>;
 
 @Schema({ _id: false, versionKey: false })
 export class TestCaseStepEntity {
+  @Prop({ type: String, trim: true })
+  id?: string;
+
   @Prop({ type: String, required: true, trim: true })
   action!: string;
 
   @Prop({ type: String, required: true, trim: true })
   expected!: string;
+
+  @Prop({ type: Number, default: 0 })
+  sort!: number;
 }
 
 const TestCaseStepSchema = SchemaFactory.createForClass(TestCaseStepEntity);

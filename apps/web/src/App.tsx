@@ -15,7 +15,9 @@ import {
   RefreshCw,
   Search,
   Settings,
-  ShieldCheck
+  ShieldCheck,
+  Users,
+  Zap
 } from 'lucide-react';
 import type { Project, UserProfile } from '@buggy/shared-types';
 import { api } from './api.js';
@@ -25,10 +27,10 @@ import { Input } from './components/ui/input.js';
 import { Textarea } from './components/ui/textarea.js';
 import { emptyData, LOGGED_OUT_KEY } from './app/constants.js';
 import type { AuthFormValues, Tab, WorkspaceData } from './app/types.js';
-import { filterWorkspaceData, pageInfo } from './app/workspace-utils.js';
+import { filterWorkspaceData } from './app/workspace-utils.js';
 import { labelOf } from './labels.js';
 import { NavButton } from './components/workspace/common.js';
-import { PageInsights, RecentWork, RiskBoard } from './components/workspace/overview.js';
+import { RecentWork, RiskBoard } from './components/workspace/overview.js';
 import { BugSection, CaseSection, IterationSection, PlanSection, ProjectSection, ReportSection, RequirementSection, SettingsSection } from './components/workspace/sections.js';
 
 export function App() {
@@ -175,7 +177,6 @@ export function App() {
       { label: '活跃 Bug', value: report?.bugs.active || 0, detail: `${report?.bugs.total || 0} 总数`, icon: BugIcon }
     ];
   }, [data.report]);
-  const page = pageInfo(tab);
   const visibleData = useMemo(() => filterWorkspaceData(data, deferredGlobalKeyword), [data, deferredGlobalKeyword]);
 
   if (loading) return <div className="boot">正在启动 Buggy...</div>;
@@ -233,15 +234,15 @@ export function App() {
           </div>
         </div>
         <nav>
-          <NavButton tab="overview" current={tab} icon={BarChart3} label="总览" onClick={setTab} />
-          <NavButton tab="projects" current={tab} icon={FolderKanban} label="项目" onClick={setTab} />
-          <NavButton tab="iterations" current={tab} icon={CalendarRange} label="迭代" onClick={setTab} />
-          <NavButton tab="requirements" current={tab} icon={Flag} label="需求" onClick={setTab} />
-          <NavButton tab="cases" current={tab} icon={ClipboardCheck} label="用例" onClick={setTab} />
-          <NavButton tab="plans" current={tab} icon={Activity} label="执行" onClick={setTab} />
-          <NavButton tab="bugs" current={tab} icon={BugIcon} label="Bug" onClick={setTab} />
-          <NavButton tab="reports" current={tab} icon={FileSpreadsheet} label="报告" onClick={setTab} />
-          <NavButton tab="settings" current={tab} icon={Settings} label="配置" onClick={setTab} />
+          <NavButton tab="overview" current={tab} icon={BarChart3} index={1} label="总览" onClick={setTab} />
+          <NavButton tab="projects" current={tab} icon={FolderKanban} index={2} label="项目" onClick={setTab} />
+          <NavButton tab="iterations" current={tab} icon={CalendarRange} index={3} label="迭代" onClick={setTab} />
+          <NavButton tab="requirements" current={tab} icon={Flag} index={4} label="需求" onClick={setTab} />
+          <NavButton tab="cases" current={tab} icon={ClipboardCheck} index={5} label="用例" onClick={setTab} />
+          <NavButton tab="plans" current={tab} icon={Activity} index={6} label="执行" onClick={setTab} />
+          <NavButton tab="bugs" current={tab} icon={BugIcon} index={7} label="Bug" onClick={setTab} />
+          <NavButton tab="reports" current={tab} icon={FileSpreadsheet} index={8} label="报告" onClick={setTab} />
+          <NavButton tab="settings" current={tab} icon={Settings} index={9} label="配置" onClick={setTab} />
         </nav>
         <div className="sidebar-footer">
           <button type="button" className="ghost">
@@ -254,6 +255,22 @@ export function App() {
       </aside>
 
       <section className="workspace">
+        <section className="capability-strip" aria-label="平台能力">
+          {[
+            { icon: BarChart3, title: '全流程管理', text: '覆盖测试全生命周期' },
+            { icon: ShieldCheck, title: '数据可视化', text: '多维度洞察与分析' },
+            { icon: Users, title: '团队协作', text: '高效协同与追溯' },
+            { icon: Zap, title: '持续改进', text: '质量趋势持续优化' }
+          ].map((item) => (
+            <article key={item.title}>
+              <item.icon size={26} />
+              <div>
+                <strong>{item.title}</strong>
+                <span>{item.text}</span>
+              </div>
+            </article>
+          ))}
+        </section>
         <header className="topbar">
           <label className="global-search" aria-label="全局搜索">
             <Search size={20} />
@@ -287,26 +304,6 @@ export function App() {
         </header>
 
         {notice && <div className="notice">{notice}</div>}
-
-        <div className="page-title">
-          <div>
-            <p className="eyebrow">{currentProject?.code || 'Buggy'}</p>
-            <h1>{page.title}</h1>
-            <p>{page.description(currentProject?.name || '未选择项目')}</p>
-          </div>
-          {globalKeyword && (
-            <button className="link-button" type="button" onClick={() => setGlobalKeyword('')}>
-              清除搜索
-            </button>
-          )}
-        </div>
-        <PageInsights
-          tab={tab}
-          projectCount={projects.length}
-          data={data}
-          currentProject={currentProject}
-          globalKeyword={globalKeyword}
-        />
 
         {!currentProject && tab !== 'projects' ? (
           <ProjectSection
@@ -354,6 +351,10 @@ export function App() {
               <IterationSection
                 projectId={currentProject.id}
                 rows={visibleData.iterations}
+                requirements={data.requirements}
+                cases={data.cases}
+                plans={data.plans}
+                bugs={data.bugs}
                 mutate={mutate}
               />
             )}
@@ -363,6 +364,8 @@ export function App() {
                 iterations={data.iterations}
                 users={data.users}
                 rows={visibleData.requirements}
+                cases={data.cases}
+                bugs={data.bugs}
                 mutate={mutate}
               />
             )}
@@ -383,6 +386,7 @@ export function App() {
                 rows={visibleData.plans}
                 bugs={data.bugs}
                 mutate={mutate}
+                onNotice={setNotice}
               />
             )}
             {tab === 'bugs' && currentProject && (

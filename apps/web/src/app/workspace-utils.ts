@@ -1,4 +1,4 @@
-import type { Bug, DictionaryValue, Requirement, TestCase, TestRunItem, UserProfile, Iteration } from '@buggy/shared-types';
+import type { Bug, DictionaryValue, Requirement, TestCase, TestCaseStep, TestRunItem, UserProfile, Iteration } from '@buggy/shared-types';
 import type { ImportResult } from '../api.js';
 import { labelOf } from '../labels.js';
 import type { Tab, WorkspaceData, StringFormValues } from './types.js';
@@ -106,16 +106,35 @@ export function requirementPayload(form: FormData, projectId: string): Partial<R
 }
 
 export function testCasePayload(form: FormData, projectId: string): Partial<TestCase> {
+  const stepsJson = text(form, 'stepsJson');
   return {
     projectId,
     requirementId: text(form, 'requirementId') || undefined,
     title: text(form, 'title'),
     preconditions: text(form, 'preconditions'),
-    steps: [{ action: text(form, 'step'), expected: text(form, 'expected') }],
+    steps: parseSteps(stepsJson, text(form, 'step'), text(form, 'expected')),
     expectedResult: text(form, 'expectedResult'),
     priority: text(form, 'priority') as never,
     status: text(form, 'status') as never
   };
+}
+
+export function parseSteps(value: string, fallbackAction = '', fallbackExpected = ''): TestCaseStep[] {
+  try {
+    const rows = JSON.parse(value || '[]') as TestCaseStep[];
+    const parsed = rows
+      .map((step, index) => ({
+        id: step.id,
+        action: String(step.action || '').trim(),
+        expected: String(step.expected || '').trim(),
+        sort: Number(step.sort || index + 1)
+      }))
+      .filter((step) => step.action || step.expected);
+    if (parsed.length > 0) return parsed;
+  } catch {
+    // Form data can still come from the legacy single-step fields.
+  }
+  return fallbackAction || fallbackExpected ? [{ action: fallbackAction, expected: fallbackExpected, sort: 1 }] : [];
 }
 
 export function bugPayload(form: FormData, projectId: string): Partial<Bug> {
@@ -151,6 +170,10 @@ export function importMessage(result: ImportResult) {
 export function rate(done: number, total: number) {
   if (!total) return '0%';
   return `${Math.round((done / total) * 100)}%`;
+}
+
+export function shortDate(value?: string) {
+  return value ? value.slice(0, 10) : '-';
 }
 
 export function formatDictionaryValues(values: DictionaryValue[]) {

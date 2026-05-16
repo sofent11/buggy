@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import type { TestCase } from '@buggy/shared-types';
+import type { PageResult, TestCase, TestCaseStep } from '@buggy/shared-types';
 import { TestCaseEntity } from '../database/test-case.schema.js';
 import type { ListQueryDto } from '../dto/common.dto.js';
 import type { CreateTestCaseDto, UpdateTestCaseDto } from '../dto/test-case.dto.js';
@@ -11,14 +11,28 @@ import { idOf, toObjectId } from '../shared/mongo.js';
 export class TestCaseService {
   constructor(@InjectModel(TestCaseEntity.name) private readonly cases: Model<TestCaseEntity>) {}
 
-  async list(query: ListQueryDto): Promise<TestCase[]> {
+  async list(query: ListQueryDto): Promise<PageResult<TestCase>> {
     const filter: Record<string, unknown> = {};
     if (query.projectId) filter.projectId = new Types.ObjectId(query.projectId);
     if (query.requirementId) filter.requirementId = new Types.ObjectId(query.requirementId);
     if (query.status) filter.status = query.status;
-    if (query.keyword) filter.title = { $regex: query.keyword, $options: 'i' };
-    const rows = await this.cases.find(filter).sort({ updatedAt: -1 });
-    return rows.map((row) => this.toDto(row));
+    if (query.priority) filter.priority = query.priority;
+    if (query.keyword) {
+      filter.$or = [
+        { title: { $regex: query.keyword, $options: 'i' } },
+        { preconditions: { $regex: query.keyword, $options: 'i' } },
+        { expectedResult: { $regex: query.keyword, $options: 'i' } },
+        { tags: { $regex: query.keyword, $options: 'i' } }
+      ];
+    }
+    const page = query.page || 1;
+    const pageSize = query.pageSize || 50;
+    const sort = this.sortOf(query.sortBy, query.sortOrder);
+    const [total, rows] = await Promise.all([
+      this.cases.countDocuments(filter),
+      this.cases.find(filter).sort(sort).skip((page - 1) * pageSize).limit(pageSize)
+    ]);
+    return { total, page, pageSize, items: rows.map((row) => this.toDto(row)) };
   }
 
   async create(dto: CreateTestCaseDto): Promise<TestCase> {
@@ -27,7 +41,7 @@ export class TestCaseService {
       requirementId: toObjectId(dto.requirementId),
       title: dto.title,
       preconditions: dto.preconditions || '',
-      steps: dto.steps || [],
+      steps: this.normalizeSteps(dto.steps || []),
       expectedResult: dto.expectedResult || '',
       priority: dto.priority || 'P2',
       status: dto.status || 'ready',
@@ -50,7 +64,7 @@ export class TestCaseService {
           ...(dto.requirementId !== undefined ? { requirementId: toObjectId(dto.requirementId) } : {}),
           ...(dto.title !== undefined ? { title: dto.title } : {}),
           ...(dto.preconditions !== undefined ? { preconditions: dto.preconditions } : {}),
-          ...(dto.steps !== undefined ? { steps: dto.steps } : {}),
+          ...(dto.steps !== undefined ? { steps: this.normalizeSteps(dto.steps) } : {}),
           ...(dto.expectedResult !== undefined ? { expectedResult: dto.expectedResult } : {}),
           ...(dto.priority !== undefined ? { priority: dto.priority } : {}),
           ...(dto.status !== undefined ? { status: dto.status } : {}),
@@ -74,18 +88,38 @@ export class TestCaseService {
     return idOf(row.projectId);
   }
 
-  toDto(row: TestCaseEntity & { _id: unknown }): TestCase {
+  toDto(row: TestCaseEntity & { _id: unknown; createdAt?: Date; updatedAt?: Date }): TestCase {
     return {
       id: idOf(row._id),
       projectId: idOf(row.projectId),
       requirementId: row.requirementId ? idOf(row.requirementId) : undefined,
       title: row.title,
       preconditions: row.preconditions,
-      steps: row.steps.map((step) => ({ action: step.action, expected: step.expected })),
+      steps: this.normalizeSteps(row.steps),
       expectedResult: row.expectedResult,
       priority: row.priority,
       status: row.status,
-      tags: row.tags
+      tags: row.tags,
+      createdAt: row.createdAt?.toISOString(),
+      updatedAt: row.updatedAt?.toISOString()
     };
+  }
+
+  private normalizeSteps(steps: Array<Partial<TestCaseStep>>): TestCaseStep[] {
+    return steps
+      .map((step, index) => ({
+        id: step.id || new Types.ObjectId().toString(),
+        action: String(step.action || '').trim(),
+        expected: String(step.expected || '').trim(),
+        sort: typeof step.sort === 'number' ? step.sort : index + 1
+      }))
+      .filter((step) => step.action || step.expected)
+      .sort((a, b) => (a.sort || 0) - (b.sort || 0));
+  }
+
+  private sortOf(sortBy?: string, sortOrder?: 'asc' | 'desc'): Record<string, 1 | -1> {
+    const allowed = new Set(['title', 'status', 'priority', 'createdAt', 'updatedAt']);
+    if (!sortBy || !allowed.has(sortBy)) return { updatedAt: -1 };
+    return { [sortBy]: sortOrder === 'asc' ? 1 : -1 };
   }
 }

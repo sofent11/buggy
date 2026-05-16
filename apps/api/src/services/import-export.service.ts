@@ -34,10 +34,10 @@ export class ImportExportService {
     const headers = this.headers(type);
     sheet.addRow(headers);
     let rows: Array<Requirement | TestCase | Bug | Record<string, string>> = [];
-    if (type === 'requirements') rows = await this.requirements.list({ projectId });
-    if (type === 'test-cases') rows = await this.cases.list({ projectId });
-    if (type === 'bugs') rows = await this.bugs.list({ projectId });
-    if (type === 'run-results') rows = (await this.plans.list({ projectId })).flatMap((plan) =>
+    if (type === 'requirements') rows = (await this.requirements.list({ projectId, pageSize: 500 })).items;
+    if (type === 'test-cases') rows = (await this.cases.list({ projectId, pageSize: 500 })).items;
+    if (type === 'bugs') rows = (await this.bugs.list({ projectId, pageSize: 500 })).items;
+    if (type === 'run-results') rows = (await this.plans.list({ projectId, pageSize: 500 })).items.flatMap((plan) =>
       plan.runItems.map((item) => ({
         planName: plan.name,
         testPlanId: plan.id,
