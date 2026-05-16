@@ -122,6 +122,22 @@ export class ReportService {
       })
       .filter((item): item is NonNullable<typeof item> => Boolean(item));
     const visibleIterations = query.iterationId ? allIterations.filter((iteration) => idOf(iteration._id) === query.iterationId) : allIterations;
+    const gateIssues = [
+      cases.length === 0 ? '缺少覆盖用例' : '',
+      cases.length > 0 && runItems.length === 0 ? '覆盖用例尚未纳入测试计划' : '',
+      this.countBy(runItems, 'status', 'untested') ? `${this.countBy(runItems, 'status', 'untested')} 个执行项未测` : '',
+      this.countBy(runItems, 'status', 'failed') ? `${this.countBy(runItems, 'status', 'failed')} 个执行项失败` : '',
+      this.countBy(runItems, 'status', 'blocked') ? `${this.countBy(runItems, 'status', 'blocked')} 个执行项阻塞` : '',
+      bugs.filter((bug) => !['verified', 'closed'].includes(bug.status) && ['S0', 'S1'].includes(bug.severity)).length
+        ? `${bugs.filter((bug) => !['verified', 'closed'].includes(bug.status) && ['S0', 'S1'].includes(bug.severity)).length} 个 S0/S1 活跃 Bug`
+        : ''
+    ].filter(Boolean);
+    const qualityGate = {
+      status: gateIssues.length ? ('blocked' as const) : ('pass' as const),
+      checkedAt: new Date().toISOString(),
+      summary: gateIssues.length ? `暂缓验收：${gateIssues.length} 项准入问题` : '满足验收准入',
+      issues: gateIssues
+    };
     return {
       projectId: query.projectId,
       iterationId: query.iterationId,
@@ -159,6 +175,7 @@ export class ReportService {
         active: bugs.filter((bug) => !['verified', 'closed'].includes(bug.status)).length,
         overdue: overdueBugs.length
       },
+      qualityGate,
       charts: {
         executionTrend: trendPlans,
         bugStatus: (['open', 'in_progress', 'resolved', 'verified', 'closed', 'reopened'] as BugStatus[]).map((status) => ({
@@ -277,6 +294,7 @@ export class ReportService {
   <h1>${escapeHtml(title)}</h1>
   <p>范围：${escapeHtml(summary.scope.name)}</p>
   <p>生成时间：${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}</p>
+  <p>验收准入：${escapeHtml(summary.qualityGate?.summary || '未检查')}${summary.qualityGate?.issues.length ? `（${summary.qualityGate.issues.map(escapeHtml).join('；')}）` : ''}</p>
   <div class="grid">
     <div class="card">需求总数<div class="num">${summary.requirements.total}</div></div>
     <div class="card">用例总数<div class="num">${summary.cases.total}</div></div>
@@ -324,6 +342,7 @@ export class ReportService {
       `用例：${summary.cases.total}，可执行：${summary.cases.ready}`,
       `执行通过率：${summary.execution.passRate}% (${summary.execution.passed}/${summary.execution.total})`,
       `活跃 Bug：${summary.bugs.active}，逾期 Bug：${summary.bugs.overdue}`,
+      `验收准入：${summary.qualityGate?.summary || '未检查'}`,
       '',
       '风险清单：',
       ...(summary.charts?.riskList || []).map((item) => `${item.type} | ${item.title} | ${item.reason}`)

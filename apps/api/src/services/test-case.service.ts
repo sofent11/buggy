@@ -1,8 +1,10 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import type { PageResult, TestCase, TestCaseStep } from '@buggy/shared-types';
+import { BugEntity } from '../database/bug.schema.js';
 import { TestCaseEntity } from '../database/test-case.schema.js';
+import { TestPlanEntity } from '../database/test-plan.schema.js';
 import type { ListQueryDto } from '../dto/common.dto.js';
 import type { CreateTestCaseDto, UpdateTestCaseDto } from '../dto/test-case.dto.js';
 import { idOf, toObjectId } from '../shared/mongo.js';
@@ -13,6 +15,8 @@ import type { SessionUser } from './auth.service.js';
 export class TestCaseService {
   constructor(
     @InjectModel(TestCaseEntity.name) private readonly cases: Model<TestCaseEntity>,
+    @InjectModel(TestPlanEntity.name) private readonly plans: Model<TestPlanEntity>,
+    @InjectModel(BugEntity.name) private readonly bugs: Model<BugEntity>,
     private readonly activities: ActivityService
   ) {}
 
@@ -22,11 +26,16 @@ export class TestCaseService {
     if (query.requirementId) filter.requirementId = new Types.ObjectId(query.requirementId);
     if (query.status) filter.status = query.status;
     if (query.priority) filter.priority = query.priority;
+    if (query.reviewStatus) filter.reviewStatus = query.reviewStatus;
+    if (query.automationStatus) filter.automationStatus = query.automationStatus;
+    if (query.ownerId) filter.ownerId = new Types.ObjectId(query.ownerId);
     if (query.keyword) {
       filter.$or = [
         { title: { $regex: query.keyword, $options: 'i' } },
         { preconditions: { $regex: query.keyword, $options: 'i' } },
         { expectedResult: { $regex: query.keyword, $options: 'i' } },
+        { module: { $regex: query.keyword, $options: 'i' } },
+        { suiteId: { $regex: query.keyword, $options: 'i' } },
         { tags: { $regex: query.keyword, $options: 'i' } }
       ];
     }
@@ -50,6 +59,12 @@ export class TestCaseService {
       expectedResult: dto.expectedResult || '',
       priority: dto.priority || 'P2',
       status: dto.status || 'ready',
+      module: dto.module || '',
+      suiteId: dto.suiteId || '',
+      version: dto.version || 'v1',
+      reviewStatus: dto.reviewStatus || 'draft',
+      automationStatus: dto.automationStatus || 'manual',
+      ownerId: toObjectId(dto.ownerId),
       tags: dto.tags || []
     });
     await this.activities.record({
@@ -81,6 +96,12 @@ export class TestCaseService {
           ...(dto.expectedResult !== undefined ? { expectedResult: dto.expectedResult } : {}),
           ...(dto.priority !== undefined ? { priority: dto.priority } : {}),
           ...(dto.status !== undefined ? { status: dto.status } : {}),
+          ...(dto.module !== undefined ? { module: dto.module } : {}),
+          ...(dto.suiteId !== undefined ? { suiteId: dto.suiteId } : {}),
+          ...(dto.version !== undefined ? { version: dto.version } : {}),
+          ...(dto.reviewStatus !== undefined ? { reviewStatus: dto.reviewStatus } : {}),
+          ...(dto.automationStatus !== undefined ? { automationStatus: dto.automationStatus } : {}),
+          ...(dto.ownerId !== undefined ? { ownerId: toObjectId(dto.ownerId) } : {}),
           ...(dto.tags !== undefined ? { tags: dto.tags } : {})
         }
       },
@@ -99,6 +120,15 @@ export class TestCaseService {
   }
 
   async remove(id: string): Promise<{ deleted: true }> {
+    const [planCount, bugCount] = await Promise.all([
+      this.plans.countDocuments({ $or: [{ caseIds: new Types.ObjectId(id) }, { 'runItems.caseId': new Types.ObjectId(id) }] }),
+      this.bugs.countDocuments({ testCaseId: new Types.ObjectId(id) })
+    ]);
+    const blockers = [
+      planCount ? `${planCount} 个测试计划/执行项` : '',
+      bugCount ? `${bugCount} 个 Bug` : ''
+    ].filter(Boolean);
+    if (blockers.length) throw new BadRequestException(`用例仍有关联数据，请先迁移或清理：${blockers.join('、')}`);
     await this.cases.findByIdAndDelete(id);
     return { deleted: true };
   }
@@ -120,6 +150,12 @@ export class TestCaseService {
       expectedResult: row.expectedResult,
       priority: row.priority,
       status: row.status,
+      module: row.module,
+      suiteId: row.suiteId,
+      version: row.version,
+      reviewStatus: row.reviewStatus,
+      automationStatus: row.automationStatus,
+      ownerId: row.ownerId ? idOf(row.ownerId) : undefined,
       tags: row.tags,
       createdAt: row.createdAt?.toISOString(),
       updatedAt: row.updatedAt?.toISOString()
@@ -139,7 +175,7 @@ export class TestCaseService {
   }
 
   private sortOf(sortBy?: string, sortOrder?: 'asc' | 'desc'): Record<string, 1 | -1> {
-    const allowed = new Set(['title', 'status', 'priority', 'createdAt', 'updatedAt']);
+    const allowed = new Set(['title', 'status', 'priority', 'module', 'reviewStatus', 'automationStatus', 'createdAt', 'updatedAt']);
     if (!sortBy || !allowed.has(sortBy)) return { updatedAt: -1 };
     return { [sortBy]: sortOrder === 'asc' ? 1 : -1 };
   }

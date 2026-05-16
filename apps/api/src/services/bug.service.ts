@@ -30,6 +30,7 @@ export class BugService {
     if (query.status) filter.status = query.status;
     if (query.priority) filter.priority = query.priority;
     if (query.severity) filter.severity = query.severity;
+    if (query.triageStatus) filter.triageStatus = query.triageStatus;
     if (query.assigneeId) filter.assigneeId = new Types.ObjectId(query.assigneeId);
     if (query.keyword) {
       filter.$or = [
@@ -69,6 +70,12 @@ export class BugService {
       reporterId: new Types.ObjectId(user.id),
       duplicateOfId: toObjectId(dto.duplicateOfId),
       dueAt: dto.dueAt ? new Date(dto.dueAt) : defaultDueAt(dto.severity || 'S2'),
+      environment: dto.environment || '',
+      foundVersion: dto.foundVersion || '',
+      fixVersion: dto.fixVersion || '',
+      rootCause: dto.rootCause || '',
+      watcherIds: (dto.watcherIds || []).map((id) => new Types.ObjectId(id)),
+      triageStatus: dto.triageStatus || 'new',
       comments: [],
       attachments: [],
       statusHistory: [this.statusHistoryEntry(undefined, status, user, '创建缺陷')]
@@ -105,7 +112,10 @@ export class BugService {
         actualResult: dto.actualResult || runItem.actualResult,
         severity: dto.severity,
         priority: dto.priority,
-        assigneeId: dto.assigneeId
+        assigneeId: dto.assigneeId,
+        dueAt: dto.dueAt,
+        environment: dto.environment,
+        foundVersion: dto.foundVersion
       },
       user
     );
@@ -141,6 +151,12 @@ export class BugService {
     if (dto.assigneeId !== undefined) row.assigneeId = toObjectId(dto.assigneeId);
     if (dto.duplicateOfId !== undefined) row.duplicateOfId = toObjectId(dto.duplicateOfId);
     if (dto.dueAt !== undefined) row.dueAt = dto.dueAt ? new Date(dto.dueAt) : undefined;
+    if (dto.environment !== undefined) row.environment = dto.environment;
+    if (dto.foundVersion !== undefined) row.foundVersion = dto.foundVersion;
+    if (dto.fixVersion !== undefined) row.fixVersion = dto.fixVersion;
+    if (dto.rootCause !== undefined) row.rootCause = dto.rootCause;
+    if (dto.watcherIds !== undefined) row.watcherIds = dto.watcherIds.map((watcherId) => new Types.ObjectId(watcherId));
+    if (dto.triageStatus !== undefined) row.triageStatus = dto.triageStatus;
     if (dto.status && dto.status !== previousStatus) {
       row.statusHistory = [
         ...(row.statusHistory || []),
@@ -262,6 +278,12 @@ export class BugService {
       reporterId: row.reporterId ? idOf(row.reporterId) : undefined,
       duplicateOfId: row.duplicateOfId ? idOf(row.duplicateOfId) : undefined,
       dueAt: row.dueAt?.toISOString(),
+      environment: row.environment,
+      foundVersion: row.foundVersion,
+      fixVersion: row.fixVersion,
+      rootCause: row.rootCause,
+      watcherIds: (row.watcherIds || []).map(idOf),
+      triageStatus: row.triageStatus || 'new',
       resolvedAt: row.resolvedAt?.toISOString(),
       verifiedAt: row.verifiedAt?.toISOString(),
       comments: this.normalizeComments(row.comments || []),
@@ -326,7 +348,7 @@ export class BugService {
   }
 
   private sortOf(sortBy?: string, sortOrder?: 'asc' | 'desc'): Record<string, 1 | -1> {
-    const allowed = new Set(['title', 'status', 'priority', 'severity', 'createdAt', 'updatedAt']);
+    const allowed = new Set(['title', 'status', 'priority', 'severity', 'triageStatus', 'createdAt', 'updatedAt']);
     if (!sortBy || !allowed.has(sortBy)) return { updatedAt: -1 };
     return { [sortBy]: sortOrder === 'asc' ? 1 : -1 };
   }
@@ -358,7 +380,11 @@ export class BugService {
   }
 
   private async notifyStatus(row: BugEntity & { _id: unknown }, previousStatus: Bug['status'], user?: SessionUser) {
-    const targets = [row.assigneeId ? idOf(row.assigneeId) : undefined, row.reporterId ? idOf(row.reporterId) : undefined];
+    const targets = [
+      row.assigneeId ? idOf(row.assigneeId) : undefined,
+      row.reporterId ? idOf(row.reporterId) : undefined,
+      ...(row.watcherIds || []).map(idOf)
+    ];
     await Promise.all(
       [...new Set(targets.filter(Boolean))].map((userId) =>
         this.notifications.create({

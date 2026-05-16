@@ -1,7 +1,74 @@
 import type { Project, ReportSummary, UserProfile } from '@buggy/shared-types';
+import { Activity, Bug, ClipboardCheck, FileText, Flag, FolderKanban, Users } from 'lucide-react';
 import { labelOf } from '../../labels.js';
 import type { Tab, WorkspaceData } from '../../app/types.js';
 import { DataTable, EmptyState, StatusBadge, Table } from './common.js';
+
+export function ProjectOnboarding(props: { data: WorkspaceData; currentProject?: Project; onJump?: (tab: Tab) => void }) {
+  const hasProject = Boolean(props.currentProject);
+  const hasMembers = (props.currentProject?.members.length || 0) > 1;
+  const hasRequirements = props.data.requirements.length > 0;
+  const hasCases = props.data.cases.length > 0;
+  const hasPlans = props.data.plans.length > 0;
+  const hasExecution = props.data.plans.some((plan) => plan.runItems.some((item) => item.status !== 'untested'));
+  const steps: Array<{ label: string; done: boolean; tab: Tab; icon: typeof FolderKanban }> = [
+    { label: '建立项目', done: hasProject, tab: 'projects', icon: FolderKanban },
+    { label: '补充成员', done: hasMembers, tab: 'projects', icon: Users },
+    { label: '创建需求', done: hasRequirements, tab: 'requirements', icon: Flag },
+    { label: '沉淀用例', done: hasCases, tab: 'cases', icon: ClipboardCheck },
+    { label: '组织执行', done: hasPlans, tab: 'plans', icon: Activity },
+    { label: '生成报告', done: hasExecution, tab: 'plans', icon: FileText }
+  ];
+  return (
+    <section className="panel wide onboarding-panel">
+      <h2>项目初始化清单</h2>
+      <div className="onboarding-steps">
+        {steps.map((step) => (
+          <button key={step.label} type="button" className={step.done ? 'done' : ''} onClick={() => props.onJump?.(step.tab)}>
+            <step.icon size={16} />
+            <span>{step.label}</span>
+            <strong>{step.done ? '已完成' : '去处理'}</strong>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+export function QualityHealthCenter(props: { data: WorkspaceData; onJump?: (tab: Tab) => void }) {
+  const requirementIds = new Set(props.data.requirements.map((item) => item.id));
+  const caseIds = new Set(props.data.cases.map((item) => item.id));
+  const planIds = new Set(props.data.plans.map((item) => item.id));
+  const coveredRequirementIds = new Set(props.data.cases.map((item) => item.requirementId).filter(Boolean));
+  const uncoveredRequirements = props.data.requirements.filter((item) => !coveredRequirementIds.has(item.id));
+  const orphanCases = props.data.cases.filter((item) => !item.requirementId || !requirementIds.has(item.requirementId));
+  const orphanBugs = props.data.bugs.filter((item) =>
+    (!item.requirementId || !requirementIds.has(item.requirementId)) &&
+    (!item.testCaseId || !caseIds.has(item.testCaseId)) &&
+    (!item.testPlanId || !planIds.has(item.testPlanId))
+  );
+  const failedItems = props.data.plans.flatMap((plan) => plan.runItems.filter((item) => ['failed', 'blocked'].includes(item.status)).map((item) => ({ plan, item })));
+  const severeActiveBugs = props.data.bugs.filter((bugItem) => ['S0', 'S1'].includes(bugItem.severity) && !['verified', 'closed'].includes(bugItem.status));
+  const rows = [
+    ...uncoveredRequirements.slice(0, 4).map((item) => ['未覆盖需求', item.title, '缺少可执行用例', <button className="linkish" type="button" onClick={() => props.onJump?.('requirements')}>查看需求</button>]),
+    ...orphanCases.slice(0, 4).map((item) => ['孤立用例', item.title, '未绑定有效需求', <button className="linkish" type="button" onClick={() => props.onJump?.('cases')}>查看用例</button>]),
+    ...orphanBugs.slice(0, 4).map((item) => ['孤立 Bug', item.title, '缺少需求/用例/计划来源', <button className="linkish" type="button" onClick={() => props.onJump?.('bugs')}>查看 Bug</button>]),
+    ...failedItems.slice(0, 4).map(({ plan, item }) => ['失败执行项', item.caseTitle, plan.name, <button className="linkish" type="button" onClick={() => props.onJump?.('plans')}>进入执行</button>]),
+    ...severeActiveBugs.slice(0, 4).map((item) => ['严重活跃 Bug', item.title, labelOf(item.severity), <button className="linkish" type="button" onClick={() => props.onJump?.('bugs')}>分诊</button>])
+  ];
+  return (
+    <section className="panel wide health-center">
+      <h2>追踪健康中心</h2>
+      <div className="health-metrics">
+        <button type="button" onClick={() => props.onJump?.('requirements')}><Flag size={16} /><span>未覆盖需求</span><strong>{uncoveredRequirements.length}</strong></button>
+        <button type="button" onClick={() => props.onJump?.('cases')}><ClipboardCheck size={16} /><span>孤立用例</span><strong>{orphanCases.length}</strong></button>
+        <button type="button" onClick={() => props.onJump?.('bugs')}><Bug size={16} /><span>孤立 Bug</span><strong>{orphanBugs.length}</strong></button>
+        <button type="button" onClick={() => props.onJump?.('plans')}><Activity size={16} /><span>失败/阻塞执行</span><strong>{failedItems.length}</strong></button>
+      </div>
+      {rows.length > 0 ? <DataTable headers={['风险类型', '对象', '原因', '下一步']} rows={rows} /> : <EmptyState text="追踪链路健康" detail="需求、用例、执行和 Bug 当前没有明显断点。" />}
+    </section>
+  );
+}
 
 export function RecentWork(props: { data: WorkspaceData }) {
   return (

@@ -79,7 +79,12 @@ export class ImportExportService {
             steps: [{ action: String(row.step || row['步骤'] || ''), expected: String(row.expected || row['预期'] || '') }],
             expectedResult: String(row.expectedResult || row['预期结果'] || ''),
             priority: (row.priority || row['优先级'] || 'P2') as never,
-            status: (row.status || row['状态'] || 'ready') as never
+            status: (row.status || row['状态'] || 'ready') as never,
+            module: String(row.module || row['模块'] || ''),
+            suiteId: String(row.suiteId || row['用例集'] || ''),
+            version: String(row.version || row['版本'] || 'v1'),
+            reviewStatus: (row.reviewStatus || row['评审状态'] || 'draft') as never,
+            automationStatus: (row.automationStatus || row['自动化状态'] || 'manual') as never
           });
         } else if (dto.type === 'bugs') {
           await this.bugs.create(
@@ -96,7 +101,12 @@ export class ImportExportService {
               requirementId: typeof row.requirementId === 'string' ? row.requirementId : typeof row['需求ID'] === 'string' ? row['需求ID'] : undefined,
               testCaseId: typeof row.testCaseId === 'string' ? row.testCaseId : typeof row['用例ID'] === 'string' ? row['用例ID'] : undefined,
               testPlanId: typeof row.testPlanId === 'string' ? row.testPlanId : typeof row['计划ID'] === 'string' ? row['计划ID'] : undefined,
-              dueAt: String(row.dueAt || row['截止时间'] || '')
+              dueAt: String(row.dueAt || row['截止时间'] || ''),
+              environment: String(row.environment || row['发现环境'] || ''),
+              foundVersion: String(row.foundVersion || row['发现版本'] || ''),
+              fixVersion: String(row.fixVersion || row['修复版本'] || ''),
+              rootCause: String(row.rootCause || row['根因分析'] || ''),
+              triageStatus: (row.triageStatus || row['分诊状态'] || 'new') as never
             },
             user
           );
@@ -208,8 +218,8 @@ export class ImportExportService {
 
   private headers(type: ImportRowsDto['type']): string[] {
     if (type === 'requirements') return ['标题', '描述', '优先级', '状态', 'riskOwnerId', '截止时间', '风险说明'];
-    if (type === 'test-cases') return ['标题', '前置条件', '步骤', '预期', '预期结果', '优先级', '状态', 'requirementId'];
-    if (type === 'bugs') return ['标题', '复现步骤', '实际结果', '期望结果', '严重级别', '优先级', '状态', '负责人ID', '需求ID', '用例ID', '计划ID', '截止时间'];
+    if (type === 'test-cases') return ['标题', '模块', '用例集', '版本', '评审状态', '自动化状态', '前置条件', '步骤', '预期', '预期结果', '优先级', '状态', 'requirementId'];
+    if (type === 'bugs') return ['标题', '复现步骤', '实际结果', '期望结果', '严重级别', '优先级', '状态', '分诊状态', '负责人ID', '需求ID', '用例ID', '计划ID', '截止时间', '发现环境', '发现版本', '修复版本', '根因分析'];
     return ['计划名称', '计划ID', '执行项ID', '用例标题', '需求ID', '执行状态', '实际结果', '关联Bug', '步骤结果'];
   }
 
@@ -223,6 +233,11 @@ export class ImportExportService {
       const firstStep = item.steps[0];
       return [
         item.title,
+        item.module || '',
+        item.suiteId || '',
+        item.version || 'v1',
+        item.reviewStatus || 'draft',
+        item.automationStatus || 'manual',
         item.preconditions || '',
         firstStep?.action || '',
         firstStep?.expected || '',
@@ -237,7 +252,7 @@ export class ImportExportService {
       return [item.planName || '', item.testPlanId || '', item.runItemId || '', item.caseTitle || '', item.requirementId || '', item.status || '', item.actualResult || '', item.bugIds || '', item.stepResults || ''];
     }
     const item = row as Bug;
-    return [item.title, item.reproduceSteps || '', item.actualResult || '', item.expectedResult || '', item.severity, item.priority, item.status, item.assigneeId || '', item.requirementId || '', item.testCaseId || '', item.testPlanId || '', item.dueAt || ''];
+    return [item.title, item.reproduceSteps || '', item.actualResult || '', item.expectedResult || '', item.severity, item.priority, item.status, item.triageStatus || 'new', item.assigneeId || '', item.requirementId || '', item.testCaseId || '', item.testPlanId || '', item.dueAt || '', item.environment || '', item.foundVersion || '', item.fixVersion || '', item.rootCause || ''];
   }
 
   private expectedFields(type: ImportRowsDto['type']): Array<{ field: string; label: string; required?: boolean }> {
@@ -252,6 +267,11 @@ export class ImportExportService {
     ];
     if (type === 'test-cases') return [
       { field: 'title', label: '标题', required: true },
+      { field: 'module', label: '模块' },
+      { field: 'suiteId', label: '用例集' },
+      { field: 'version', label: '版本' },
+      { field: 'reviewStatus', label: '评审状态' },
+      { field: 'automationStatus', label: '自动化状态' },
       { field: 'preconditions', label: '前置条件' },
       { field: 'step', label: '步骤' },
       { field: 'expected', label: '预期' },
@@ -267,7 +287,12 @@ export class ImportExportService {
       { field: 'expectedResult', label: '期望结果' },
       { field: 'severity', label: '严重级别' },
       { field: 'priority', label: '优先级' },
-      { field: 'status', label: '状态' }
+      { field: 'status', label: '状态' },
+      { field: 'triageStatus', label: '分诊状态' },
+      { field: 'environment', label: '发现环境' },
+      { field: 'foundVersion', label: '发现版本' },
+      { field: 'fixVersion', label: '修复版本' },
+      { field: 'rootCause', label: '根因分析' }
     ];
     return [
       { field: 'testPlanId', label: '计划ID', required: true },

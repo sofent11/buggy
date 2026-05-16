@@ -12,23 +12,39 @@ export class SavedViewService {
   constructor(@InjectModel(SavedViewEntity.name) private readonly views: Model<SavedViewEntity>) {}
 
   async list(projectId: string, user: SessionUser, tab?: string): Promise<SavedView[]> {
-    const filter: Record<string, unknown> = { projectId: new Types.ObjectId(projectId), userId: new Types.ObjectId(user.id) };
+    const filter: Record<string, unknown> = {
+      projectId: new Types.ObjectId(projectId),
+      $or: [{ userId: new Types.ObjectId(user.id) }, { visibility: 'project' }]
+    };
     if (tab) filter.tab = tab;
-    const rows = await this.views.find(filter).sort({ tab: 1, updatedAt: -1 });
+    const rows = await this.views.find(filter).sort({ isDefault: -1, tab: 1, updatedAt: -1 });
     return rows.map((row) => this.toDto(row));
   }
 
   async upsert(dto: UpsertSavedViewDto, user: SessionUser): Promise<SavedView> {
+    const visibility = dto.visibility || 'private';
+    if (dto.isDefault) {
+      const defaultFilter: Record<string, unknown> = {
+        projectId: new Types.ObjectId(dto.projectId),
+        tab: dto.tab,
+        visibility
+      };
+      if (visibility === 'private') defaultFilter.userId = new Types.ObjectId(user.id);
+      await this.views.updateMany(defaultFilter, { $set: { isDefault: false } });
+    }
     const row = await this.views.findOneAndUpdate(
       {
         projectId: new Types.ObjectId(dto.projectId),
         userId: new Types.ObjectId(user.id),
         tab: dto.tab,
-        name: dto.name
+        name: dto.name,
+        visibility
       },
       {
         $set: {
-          filters: dto.filters || {}
+          filters: dto.filters || {},
+          visibility,
+          isDefault: Boolean(dto.isDefault)
         }
       },
       { new: true, upsert: true }
@@ -50,6 +66,8 @@ export class SavedViewService {
       tab: row.tab,
       name: row.name,
       filters: (row.filters || {}) as SavedView['filters'],
+      visibility: row.visibility || 'private',
+      isDefault: Boolean(row.isDefault),
       createdAt: row.createdAt?.toISOString(),
       updatedAt: row.updatedAt?.toISOString()
     };

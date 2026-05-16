@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Activity, Bug as BugIcon, Pencil, Plus, Save } from 'lucide-react';
-import type { Bug, Iteration, Requirement, TestCase, TestPlan, TestRunItem, TestRunStatus } from '@buggy/shared-types';
+import type { Bug, Iteration, Requirement, TestCase, TestPlan, TestRunItem, TestRunStatus, UserProfile } from '@buggy/shared-types';
 import { api } from '../../api.js';
 import { Button } from '../ui/button.js';
 import { Field, FieldLabel, FormActions } from '../ui/form.js';
 import { Input } from '../ui/input.js';
 import { Textarea } from '../ui/textarea.js';
 import { labelOf } from '../../labels.js';
-import { planStatuses, runStatuses } from '../../app/constants.js';
+import { planStatuses, priorities, runStatuses, severities } from '../../app/constants.js';
 import { executionProgress, iterationName, requirementTitle, text } from '../../app/workspace-utils.js';
-import { ConfirmDialog, DataPage, DataTable, DangerButton, Drawer, EmptyState, HookForm, MetricCard, SearchBox, Select, StatusBadge, TextConfirmDialog, Toolbar } from './common.js';
+import { DataPage, DataTable, DangerButton, Drawer, EmptyState, HookForm, MetricCard, SearchBox, Select, StatusBadge, TextConfirmDialog, Toolbar } from './common.js';
 
 export function PlanSection(props: {
   projectId: string;
@@ -18,6 +18,7 @@ export function PlanSection(props: {
   cases: TestCase[];
   rows: TestPlan[];
   bugs: Bug[];
+  users: UserProfile[];
   globalKeyword?: string;
   canWrite?: boolean;
   canManage?: boolean;
@@ -66,8 +67,9 @@ export function PlanSection(props: {
         <span className="toolbar-summary">{rows.length} 个测试计划 · {props.cases.length} 条可选用例</span>
         {props.canWrite && <button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建计划</button>}
       </Toolbar>
+      <ExecutionWorkbench rows={props.rows} bugs={props.bugs} />
       <div className="plan-stack">
-        {rows.map((plan) => <PlanCard key={plan.id} plan={plan} iterations={props.iterations} requirements={props.requirements} cases={props.cases} bugs={props.bugs} canWrite={props.canWrite} canManage={props.canManage} mutate={props.mutate} />)}
+        {rows.map((plan) => <PlanCard key={plan.id} plan={plan} iterations={props.iterations} requirements={props.requirements} cases={props.cases} bugs={props.bugs} users={props.users} canWrite={props.canWrite} canManage={props.canManage} mutate={props.mutate} />)}
       </div>
       {rows.length === 0 && (
         <EmptyState
@@ -87,6 +89,46 @@ export function PlanSection(props: {
         onClose={() => setCreating(false)}
       />
     </DataPage>
+  );
+}
+
+function ExecutionWorkbench(props: { rows: TestPlan[]; bugs: Bug[] }) {
+  const runItems = props.rows.flatMap((plan) => plan.runItems.map((item) => ({ plan, item })));
+  const groups = [
+    { label: '未测', status: 'untested', detail: '等待执行' },
+    { label: '失败', status: 'failed', detail: '优先建 Bug 或重测' },
+    { label: '阻塞', status: 'blocked', detail: '需要协同解除' },
+    { label: '待复测', status: 'resolved', detail: '已解决 Bug 待验证', value: props.bugs.filter((bug) => bug.status === 'resolved').length }
+  ];
+  const riskRows = runItems
+    .filter(({ item }) => ['failed', 'blocked', 'untested'].includes(item.status))
+    .slice(0, 6)
+    .map(({ plan, item }) => [
+      item.status === 'untested' ? '待执行' : item.status === 'blocked' ? '阻塞' : '失败',
+      item.caseTitle,
+      plan.name,
+      item.actualResult || '暂无记录',
+      <StatusBadge value={item.status} dictionaryType="testRunStatus" />
+    ]);
+  return (
+    <section className="execution-workbench">
+      <div className="section-heading compact">
+        <div>
+          <span>执行工作台</span>
+          <strong>按状态聚合待办</strong>
+        </div>
+      </div>
+      <div className="workbench-metrics">
+        {groups.map((group) => (
+          <article key={group.label}>
+            <span>{group.label}</span>
+            <strong>{group.value ?? runItems.filter(({ item }) => item.status === group.status).length}</strong>
+            <small>{group.detail}</small>
+          </article>
+        ))}
+      </div>
+      {riskRows.length > 0 && <DataTable headers={['队列', '执行项', '计划', '记录', '状态']} rows={riskRows} />}
+    </section>
   );
 }
 
@@ -143,11 +185,19 @@ function PlanCreateDrawer(props: {
   );
 }
 
-export function PlanCard(props: { plan: TestPlan; iterations: Iteration[]; requirements: Requirement[]; cases: TestCase[]; bugs: Bug[]; canWrite?: boolean; canManage?: boolean; mutate: (action: () => Promise<unknown>, message: string) => Promise<void> }) {
+export function PlanCard(props: { plan: TestPlan; iterations: Iteration[]; requirements: Requirement[]; cases: TestCase[]; bugs: Bug[]; users: UserProfile[]; canWrite?: boolean; canManage?: boolean; mutate: (action: () => Promise<unknown>, message: string) => Promise<void> }) {
   const [editing, setEditing] = useState(false);
   const [caseIds, setCaseIds] = useState(props.plan.caseIds);
   const [batchStatus, setBatchStatus] = useState<TestRunStatus | null>(null);
   useEffect(() => setCaseIds(props.plan.caseIds), [props.plan.caseIds]);
+  useEffect(() => {
+    const open = (event: Event) => {
+      const detail = (event as CustomEvent<{ entityType?: string; entityId?: string }>).detail;
+      if (detail?.entityType === 'test_plan' && detail.entityId === props.plan.id) setEditing(true);
+    };
+    window.addEventListener('buggy:open-entity', open);
+    return () => window.removeEventListener('buggy:open-entity', open);
+  }, [props.plan.id]);
   const batchLabel = batchStatus === 'passed' ? '全部通过' : batchStatus === 'failed' ? '全部失败' : '批量更新';
   return (
     <article className="plan-card">
@@ -165,7 +215,7 @@ export function PlanCard(props: { plan: TestPlan; iterations: Iteration[]; requi
           </>
         )}
         <Button type="button" size="sm" onClick={() => setEditing(true)}><Pencil size={14} /> 详情</Button>
-        {props.canManage && <DangerButton title={`删除测试计划「${props.plan.name}」？`} onConfirm={() => props.mutate(() => api.deleteTestPlan(props.plan.id), '测试计划已删除')} />}
+        {props.canManage && <DangerButton title={`删除测试计划「${props.plan.name}」？`} description={`关联 ${props.bugs.filter((bug) => bug.testPlanId === props.plan.id).length} 个 Bug。有关联缺陷时系统会阻止删除，请先迁移或关闭。`} onConfirm={() => props.mutate(() => api.deleteTestPlan(props.plan.id), '测试计划已删除')} />}
       </header>
       <DataTable
         headers={['执行项', '状态', '实际结果', '执行人/时间', '关联 Bug', '快捷操作']}
@@ -175,7 +225,7 @@ export function PlanCard(props: { plan: TestPlan; iterations: Iteration[]; requi
           item.actualResult || '-',
           item.executedAt ? new Date(item.executedAt).toLocaleString('zh-CN') : '-',
           props.bugs.filter((bug) => item.bugIds.includes(bug.id)).map((bug) => bug.title).join('、') || '-',
-          <RunItemActions planId={props.plan.id} item={item} canWrite={props.canWrite} mutate={props.mutate} />
+          <RunItemActions planId={props.plan.id} item={item} users={props.users} canWrite={props.canWrite} mutate={props.mutate} />
         ])}
       />
       <Drawer title="编辑测试计划" subtitle={props.plan.name} open={editing} onClose={() => setEditing(false)}>
@@ -224,30 +274,86 @@ export function PlanCard(props: { plan: TestPlan; iterations: Iteration[]; requi
   );
 }
 
-function RunItemActions(props: { planId: string; item: TestRunItem; canWrite?: boolean; mutate: (action: () => Promise<unknown>, message: string) => Promise<void> }) {
+function RunItemActions(props: { planId: string; item: TestRunItem; users: UserProfile[]; canWrite?: boolean; mutate: (action: () => Promise<unknown>, message: string) => Promise<void> }) {
   const [editing, setEditing] = useState(false);
-  const [bugConfirm, setBugConfirm] = useState(false);
+  const [bugOpen, setBugOpen] = useState(false);
   const [stepResults, setStepResults] = useState(() => initialStepResults(props.item));
   useEffect(() => setStepResults(initialStepResults(props.item)), [props.item]);
+  useEffect(() => {
+    const open = (event: Event) => {
+      const detail = (event as CustomEvent<{ entityType?: string; entityId?: string }>).detail;
+      if (detail?.entityType === 'run_item' && detail.entityId === props.item.id) setEditing(true);
+    };
+    window.addEventListener('buggy:open-entity', open);
+    return () => window.removeEventListener('buggy:open-entity', open);
+  }, [props.item.id]);
   return (
     <div className="row-actions">
       {props.canWrite && (['passed', 'failed', 'blocked'] as const).map((status) => (
         <Button key={status} type="button" size="sm" onClick={() => props.mutate(() => api.updateRunItem(props.planId, props.item.id, { status, actualResult: props.item.actualResult }), '执行结果已更新')}>{labelOf(status)}</Button>
       ))}
       {props.canWrite && <Button type="button" size="sm" onClick={() => setEditing(true)}><Pencil size={14} /> 记录</Button>}
-      {props.canWrite && <Button type="button" size="sm" onClick={() => setBugConfirm(true)}><BugIcon size={14} /> 建 Bug</Button>}
-      <ConfirmDialog open={bugConfirm} title="从执行项创建 Bug？" description={props.item.caseTitle} confirmText="创建 Bug" onCancel={() => setBugConfirm(false)} onConfirm={() => {
-        setBugConfirm(false);
-        props.mutate(() => api.createBugFromRun({ testPlanId: props.planId, runItemId: props.item.id, title: `${props.item.caseTitle} 执行失败`, actualResult: props.item.actualResult }), 'Bug 已从执行项创建');
-      }} />
+      {props.canWrite && <Button type="button" size="sm" onClick={() => setBugOpen(true)}><BugIcon size={14} /> 建 Bug</Button>}
+      <Drawer title="从执行项创建 Bug" subtitle={props.item.caseTitle} open={bugOpen} onClose={() => setBugOpen(false)}>
+        <HookForm
+          defaultValues={{
+            title: `${props.item.caseTitle} 执行失败`,
+            actualResult: props.item.actualResult || '',
+            reproduceSteps: props.item.steps.map((step, index) => `${index + 1}. ${step.action}`).join('\n'),
+            severity: 'S2',
+            priority: 'P2',
+            assigneeId: '',
+            dueAt: '',
+            environment: '',
+            foundVersion: ''
+          }}
+          onSubmit={async (form) => {
+            await props.mutate(
+              () => api.createBugFromRun({
+                testPlanId: props.planId,
+                runItemId: props.item.id,
+                title: text(form, 'title'),
+                actualResult: text(form, 'actualResult'),
+                reproduceSteps: text(form, 'reproduceSteps'),
+                severity: text(form, 'severity') as never,
+                priority: text(form, 'priority') as never,
+                assigneeId: text(form, 'assigneeId') || undefined,
+                dueAt: text(form, 'dueAt') || undefined,
+                environment: text(form, 'environment'),
+                foundVersion: text(form, 'foundVersion')
+              }),
+              'Bug 已从执行项创建'
+            );
+            setBugOpen(false);
+          }}
+        >
+          {(register) => (
+            <>
+              <Field><FieldLabel>Bug 标题</FieldLabel><Input {...register('title')} required /></Field>
+              <Field><FieldLabel>负责人</FieldLabel><select {...register('assigneeId')}><option value="">未指派</option>{props.users.map((user) => <option key={user.id} value={user.id}>{user.username}</option>)}</select></Field>
+              <div className="field-grid two">
+                <Field><FieldLabel>严重级别</FieldLabel><Select name="severity" register={register} values={severities} dictionaryType="severity" defaultValue="S2" /></Field>
+                <Field><FieldLabel>优先级</FieldLabel><Select name="priority" register={register} values={priorities} dictionaryType="priority" defaultValue="P2" /></Field>
+                <Field><FieldLabel>SLA 截止</FieldLabel><Input type="date" {...register('dueAt')} /></Field>
+                <Field><FieldLabel>发现版本</FieldLabel><Input {...register('foundVersion')} /></Field>
+              </div>
+              <Field><FieldLabel>发现环境</FieldLabel><Input {...register('environment')} placeholder="测试环境、浏览器或设备" /></Field>
+              <Field><FieldLabel>复现步骤</FieldLabel><Textarea {...register('reproduceSteps')} /></Field>
+              <Field><FieldLabel>实际结果</FieldLabel><Textarea {...register('actualResult')} /></Field>
+              <FormActions><Button type="button" onClick={() => setBugOpen(false)}>取消</Button><Button variant="primary"><BugIcon size={15} /> 创建 Bug</Button></FormActions>
+            </>
+          )}
+        </HookForm>
+      </Drawer>
       <Drawer title="记录执行结果" subtitle={props.item.caseTitle} open={editing} onClose={() => setEditing(false)}>
         <HookForm defaultValues={{ status: props.item.status, actualResult: props.item.actualResult || '' }} onSubmit={async (form) => {
-          await props.mutate(() => api.updateRunItem(props.planId, props.item.id, { status: text(form, 'status'), actualResult: text(form, 'actualResult'), stepResults: parseStepResults(text(form, 'stepResultsJson')) }), '执行结果已更新');
+          await props.mutate(() => api.updateRunItem(props.planId, props.item.id, { status: text(form, 'status'), actualResult: text(form, 'actualResult'), executorId: text(form, 'executorId') || undefined, stepResults: parseStepResults(text(form, 'stepResultsJson')) }), '执行结果已更新');
           setEditing(false);
         }}>
           {(register) => (
             <>
               <Field><FieldLabel>执行状态</FieldLabel><Select name="status" register={register} values={runStatuses} dictionaryType="testRunStatus" defaultValue={props.item.status} /></Field>
+              <Field><FieldLabel>执行人</FieldLabel><select {...register('executorId')} defaultValue={props.item.executorId || ''}><option value="">当前用户</option>{props.users.map((user) => <option key={user.id} value={user.id}>{user.username}</option>)}</select></Field>
               <Field><FieldLabel>实际结果</FieldLabel><Textarea {...register('actualResult')} /></Field>
               <div className="step-result-editor">
                 <input type="hidden" name="stepResultsJson" value={JSON.stringify(stepResults)} readOnly />

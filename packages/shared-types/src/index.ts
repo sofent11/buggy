@@ -24,6 +24,18 @@ export type TestRunStatus = 'untested' | 'passed' | 'failed' | 'blocked' | 'skip
 export type BugStatus = 'open' | 'in_progress' | 'resolved' | 'verified' | 'closed' | 'reopened';
 export type Priority = 'P0' | 'P1' | 'P2' | 'P3';
 export type Severity = 'S0' | 'S1' | 'S2' | 'S3';
+export type RequirementAcceptanceStatus = 'not_ready' | 'ready' | 'approved' | 'rejected';
+export type TestCaseReviewStatus = 'draft' | 'in_review' | 'approved' | 'changes_requested';
+export type TestCaseAutomationStatus = 'manual' | 'candidate' | 'automated';
+export type BugTriageStatus = 'new' | 'triaged' | 'needs_info' | 'duplicate' | 'accepted';
+export type SavedViewVisibility = 'private' | 'project';
+
+export interface QualityGateResult {
+  status: 'pass' | 'risk' | 'blocked';
+  checkedAt: string;
+  summary: string;
+  issues: string[];
+}
 
 export type Id = string;
 
@@ -79,6 +91,9 @@ export interface Requirement {
   riskNote?: string;
   status: RequirementStatus;
   priority: Priority;
+  acceptanceStatus?: RequirementAcceptanceStatus;
+  qualityGateResult?: QualityGateResult;
+  reviewerId?: Id;
   larkWebhook?: string;
   tags?: string[];
   createdAt?: string;
@@ -102,6 +117,12 @@ export interface TestCase {
   expectedResult?: string;
   priority: Priority;
   status: TestCaseStatus;
+  module?: string;
+  suiteId?: string;
+  version?: string;
+  reviewStatus?: TestCaseReviewStatus;
+  automationStatus?: TestCaseAutomationStatus;
+  ownerId?: Id;
   tags?: string[];
   createdAt?: string;
   updatedAt?: string;
@@ -193,6 +214,12 @@ export interface Bug {
   reporterId?: Id;
   duplicateOfId?: Id;
   dueAt?: string;
+  environment?: string;
+  foundVersion?: string;
+  fixVersion?: string;
+  rootCause?: string;
+  watcherIds?: Id[];
+  triageStatus?: BugTriageStatus;
   resolvedAt?: string;
   verifiedAt?: string;
   comments?: BugComment[];
@@ -240,6 +267,8 @@ export interface SavedView {
   tab: string;
   name: string;
   filters: SavedViewFilters;
+  visibility: SavedViewVisibility;
+  isDefault: boolean;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -310,6 +339,7 @@ export interface ReportSummary {
     active: number;
     overdue: number;
   };
+  qualityGate?: QualityGateResult;
   charts?: {
     executionTrend: Array<{ label: string; total: number; passed: number; failed: number; blocked: number; skipped: number; passRate: number }>;
     bugStatus: Array<{ key: BugStatus; label: string; value: number }>;

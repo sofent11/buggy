@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, SchemaTypes, Types } from 'mongoose';
+import type { SavedViewVisibility } from '@buggy/shared-types';
 
 export type SavedViewDocument = HydratedDocument<SavedViewEntity>;
 
@@ -19,7 +20,13 @@ export class SavedViewEntity {
 
   @Prop({ type: SchemaTypes.Mixed, default: {} })
   filters!: Record<string, unknown>;
+
+  @Prop({ type: String, required: true, default: 'private' })
+  visibility!: SavedViewVisibility;
+
+  @Prop({ type: Boolean, default: false })
+  isDefault!: boolean;
 }
 
 export const SavedViewSchema = SchemaFactory.createForClass(SavedViewEntity);
-SavedViewSchema.index({ projectId: 1, userId: 1, tab: 1, name: 1 }, { unique: true });
+SavedViewSchema.index({ projectId: 1, userId: 1, tab: 1, name: 1, visibility: 1 }, { unique: true });

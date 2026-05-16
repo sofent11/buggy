@@ -30,7 +30,7 @@ import { labelOf } from './labels.js';
 import { DataTable, Drawer, NavButton, StatusBadge } from './components/workspace/common.js';
 import { DictionaryProvider } from './components/workspace/dictionary.js';
 import { HelpCenter } from './components/workspace/help.js';
-import { MyTodo, RecentWork, RiskBoard, TraceabilityMatrix } from './components/workspace/overview.js';
+import { MyTodo, ProjectOnboarding, QualityHealthCenter, RecentWork, RiskBoard, TraceabilityMatrix } from './components/workspace/overview.js';
 import { BugSection, CaseSection, IterationSection, PlanSection, ProjectSection, RequirementSection, SettingsSection } from './components/workspace/sections.js';
 
 const LAST_PROJECT_KEY = 'buggy_last_project_id';
@@ -345,7 +345,7 @@ export function App() {
                 }}
               >
                 <option value="">应用保存视图</option>
-                {data.savedViews.filter((item) => item.tab === tab).map((view) => <option key={view.id} value={view.id}>{view.name}</option>)}
+                {data.savedViews.filter((item) => item.tab === tab).map((view) => <option key={view.id} value={view.id}>{view.isDefault ? '默认 · ' : ''}{view.name}{view.visibility === 'project' ? ' · 共享' : ''}</option>)}
               </select>
               <Button type="button" onClick={() => setSavedViewOpen(true)}>
                 保存视图
@@ -402,6 +402,8 @@ export function App() {
                     <small>{item.detail}</small>
                   </article>
                 ))}
+                <ProjectOnboarding data={data} currentProject={currentProject} onJump={setTab} />
+                <QualityHealthCenter data={data} onJump={setTab} />
                 <RecentWork data={visibleData} />
                 <section className="panel">
                   <h2>消息通知</h2>
@@ -476,6 +478,7 @@ export function App() {
               <CaseSection
                 projectId={currentProject.id}
                 requirements={data.requirements}
+                users={data.users}
                 plans={data.plans}
                 bugs={data.bugs}
                 rows={data.cases}
@@ -493,6 +496,7 @@ export function App() {
                 cases={data.cases}
                 rows={visibleData.plans}
                 bugs={data.bugs}
+                users={data.users}
                 globalKeyword={deferredGlobalKeyword}
                 canWrite={canExecute}
                 canManage={canManageProject}
@@ -548,6 +552,9 @@ export function App() {
           if (nextTab) {
             setTab(nextTab);
             setNotificationOpen(false);
+            window.setTimeout(() => {
+              window.dispatchEvent(new CustomEvent('buggy:open-entity', { detail: { entityType: notification.entityType, entityId: notification.entityId } }));
+            }, 80);
           }
         }}
       />
@@ -559,12 +566,14 @@ export function App() {
           views={data.savedViews.filter((item) => item.tab === tab)}
           onClose={() => setSavedViewOpen(false)}
           onDelete={(id) => mutate(() => api.deleteSavedView(id), '视图已删除')}
-          onSave={(name) => mutate(
+          onSave={(name, options) => mutate(
             () => api.upsertSavedView({
               projectId: currentProject.id,
               tab,
               name,
-              filters: { ...(tabFilters[tab] || {}), globalKeyword }
+              filters: { ...(tabFilters[tab] || {}), globalKeyword },
+              visibility: options.visibility,
+              isDefault: options.isDefault
             }),
             '视图已保存'
           )}
@@ -660,15 +669,19 @@ function SavedViewDialog(props: {
   defaultName: string;
   views: SavedView[];
   onClose: () => void;
-  onSave: (name: string) => Promise<void>;
+  onSave: (name: string, options: { visibility: SavedView['visibility']; isDefault: boolean }) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
 }) {
   const [name, setName] = useState(props.defaultName);
   const [selectedId, setSelectedId] = useState('');
+  const [visibility, setVisibility] = useState<SavedView['visibility']>('private');
+  const [isDefault, setIsDefault] = useState(false);
   useEffect(() => {
     if (!props.open) return;
     const selected = props.views.find((view) => view.id === selectedId);
     setName(selected?.name || props.defaultName);
+    setVisibility(selected?.visibility || 'private');
+    setIsDefault(Boolean(selected?.isDefault));
   }, [props.open, props.defaultName, props.views, selectedId]);
   if (!props.open) return null;
   return (
@@ -687,14 +700,30 @@ function SavedViewDialog(props: {
           <span>视图名称</span>
           <Input value={name} onChange={(event) => setName(event.target.value)} />
         </label>
+        <label className="dialog-field">
+          <span>可见范围</span>
+          <select value={visibility} onChange={(event) => setVisibility(event.target.value as SavedView['visibility'])}>
+            <option value="private">仅自己</option>
+            <option value="project">项目共享</option>
+          </select>
+        </label>
+        <label className="check-row compact-check-row">
+          <input type="checkbox" checked={isDefault} onChange={(event) => setIsDefault(event.target.checked)} />
+          <span>设为当前模块默认视图</span>
+        </label>
         <div className="form-actions">
+          <Button type="button" onClick={() => {
+            const url = new URL(window.location.href);
+            url.searchParams.set('view', selectedId || name.trim());
+            void navigator.clipboard?.writeText(url.toString());
+          }}>复制链接</Button>
           {selectedId && <Button type="button" variant="destructive" onClick={async () => {
             await props.onDelete(selectedId);
             setSelectedId('');
           }}>删除视图</Button>}
           <Button type="button" onClick={props.onClose}>取消</Button>
           <Button type="button" variant="primary" disabled={!name.trim()} onClick={async () => {
-            await props.onSave(name.trim());
+            await props.onSave(name.trim(), { visibility, isDefault });
             props.onClose();
           }}>保存</Button>
         </div>

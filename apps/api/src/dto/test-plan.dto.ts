@@ -58,6 +58,10 @@ export class UpdateRunItemDto {
   actualResult?: string;
 
   @IsOptional()
+  @IsMongoId()
+  executorId?: string;
+
+  @IsOptional()
   stepResults?: Array<{ stepId?: string; status: TestRunStatus; actualResult?: string }>;
 }
 
@@ -72,4 +76,8 @@ export class BatchUpdateRunItemsDto {
   @IsString()
   @MinLength(2)
   actualResult!: string;
+
+  @IsOptional()
+  @IsMongoId()
+  executorId?: string;
 }

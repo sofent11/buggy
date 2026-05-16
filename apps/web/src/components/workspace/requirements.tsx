@@ -7,7 +7,7 @@ import { Button } from '../ui/button.js';
 import { Field, FieldLabel, FormActions } from '../ui/form.js';
 import { Input } from '../ui/input.js';
 import { Textarea } from '../ui/textarea.js';
-import { priorities, requirementStatuses } from '../../app/constants.js';
+import { acceptanceStatuses, priorities, requirementStatuses } from '../../app/constants.js';
 import type { StringFormValues } from '../../app/types.js';
 import { iterationName, matchKeyword, requirementPayload, shortDate, testCasePayload, userName } from '../../app/workspace-utils.js';
 import { DataPage, DataTable, DangerButton, Drawer, EmptyState, FilterChips, HookForm, MetricCard, registerField, SearchBox, Select, StatusBadge, Toolbar } from './common.js';
@@ -53,6 +53,17 @@ export function RequirementSection(props: {
     return () => window.removeEventListener('buggy:apply-view', apply);
   }, []);
 
+  useEffect(() => {
+    const open = (event: Event) => {
+      const detail = (event as CustomEvent<{ entityType?: string; entityId?: string }>).detail;
+      if (detail?.entityType !== 'requirement' || !detail.entityId) return;
+      const row = props.rows.find((item) => item.id === detail.entityId);
+      if (row) setEditing(row);
+    };
+    window.addEventListener('buggy:open-entity', open);
+    return () => window.removeEventListener('buggy:open-entity', open);
+  }, [props.rows]);
+
   return (
     <DataPage
       title="需求管理"
@@ -86,12 +97,16 @@ export function RequirementSection(props: {
         { label: '负责人', value: ownerId ? userName(props.users, ownerId) : '', onClear: () => setOwnerId('') }
       ]} />
       <DataTable
-        headers={['需求', '迭代', '负责人', '风险', '优先级', '状态', '用例', 'Bug', '更新时间', '操作']}
+        headers={['需求', '迭代', '负责人', '准入', '风险', '优先级', '状态', '用例', 'Bug', '更新时间', '操作']}
         emptyText="暂无需求"
         rows={rows.map((row) => [
           <div className="cell-main"><strong>{row.title}</strong><span>{row.description || '未填写描述'}</span></div>,
           row.iterationId ? iterationName(props.iterations, row.iterationId) : '-',
           row.ownerId ? userName(props.users, row.ownerId) : '-',
+          <div className="cell-main">
+            <StatusBadge value={row.qualityGateResult?.status === 'pass' ? 'approved' : row.acceptanceStatus || 'not_ready'} />
+            <span>{row.qualityGateResult?.summary || '待检查'}</span>
+          </div>,
           <div className="cell-main"><strong>{row.riskOwnerId ? userName(props.users, row.riskOwnerId) : '-'}</strong><span>{row.dueDate ? `截止 ${shortDate(row.dueDate)}` : row.riskNote || '暂无风险'}</span></div>,
           <StatusBadge value={row.priority} dictionaryType="priority" />,
           props.canWrite ? <Select value={row.status} onChange={(value) => props.mutate(() => api.updateRequirement(row.id, { status: value as never }), '需求状态已更新')} values={requirementStatuses} dictionaryType="requirementStatus" /> : <StatusBadge value={row.status} dictionaryType="requirementStatus" />,
@@ -103,7 +118,7 @@ export function RequirementSection(props: {
             <Button type="button" size="sm" onClick={() => setReporting(row)}><FileText size={14} /> 验收报告</Button>
             {props.canWrite && <Button type="button" size="sm" onClick={() => setCaseRequirement(row)}><Plus size={14} /> 建用例</Button>}
             {props.canWrite && <Button type="button" size="sm" onClick={() => props.mutate(() => api.sendLark(row.id), 'Lark 日报已发送')}><Send size={14} /> Lark</Button>}
-            {props.canManage && <DangerButton title={`删除需求「${row.title}」？`} onConfirm={() => props.mutate(() => api.deleteRequirement(row.id), '需求已删除')} />}
+            {props.canManage && <DangerButton title={`删除需求「${row.title}」？`} description={`关联 ${(props.cases || []).filter((item) => item.requirementId === row.id).length} 条用例、${(props.bugs || []).filter((item) => item.requirementId === row.id).length} 个 Bug。有关联数据时系统会阻止删除，请先迁移或清理。`} onConfirm={() => props.mutate(() => api.deleteRequirement(row.id), '需求已删除')} />}
           </div>
         ])}
       />
@@ -127,6 +142,7 @@ export function RequirementSection(props: {
         title="从需求新建用例"
         open={Boolean(caseRequirement)}
         requirements={props.rows}
+        users={props.users}
         defaultRequirementId={caseRequirement?.id}
         canWrite={props.canWrite}
         onClose={() => setCaseRequirement(null)}
@@ -159,6 +175,8 @@ export function RequirementFields(props: { row?: Requirement; iterations: Iterat
       <Field><FieldLabel>风险截止时间</FieldLabel><Input type="date" {...registerField(props.register, 'dueDate')} defaultValue={props.row?.dueDate ? props.row.dueDate.slice(0, 10) : ''} /></Field>
       <Field><FieldLabel>优先级</FieldLabel><Select name="priority" register={props.register} values={priorities} dictionaryType="priority" defaultValue={props.row?.priority || 'P2'} /></Field>
       <Field><FieldLabel>状态</FieldLabel><Select name="status" register={props.register} values={requirementStatuses} dictionaryType="requirementStatus" defaultValue={props.row?.status || 'ready'} /></Field>
+      <Field><FieldLabel>验收状态</FieldLabel><Select name="acceptanceStatus" register={props.register} values={acceptanceStatuses} defaultValue={props.row?.acceptanceStatus || 'not_ready'} /></Field>
+      <Field><FieldLabel>验收人</FieldLabel><select {...registerField(props.register, 'reviewerId')} defaultValue={props.row?.reviewerId || ''}><option value="">未指定验收人</option>{props.users.map((item) => <option key={item.id} value={item.id}>{item.username}</option>)}</select></Field>
       <Field className="span-two"><FieldLabel>Lark Webhook</FieldLabel><Input {...registerField(props.register, 'larkWebhook')} defaultValue={props.row?.larkWebhook} /></Field>
       <Field className="span-two"><FieldLabel>风险说明</FieldLabel><Input {...registerField(props.register, 'riskNote')} defaultValue={props.row?.riskNote} placeholder="风险原因、依赖方或处理策略" /></Field>
       <Field className="span-four"><FieldLabel>需求描述</FieldLabel><Textarea {...registerField(props.register, 'description')} defaultValue={props.row?.description} /></Field>

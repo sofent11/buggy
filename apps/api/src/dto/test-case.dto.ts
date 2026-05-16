@@ -1,6 +1,6 @@
 import { Type } from 'class-transformer';
 import { IsArray, IsIn, IsMongoId, IsOptional, IsString, MinLength, ValidateNested } from 'class-validator';
-import type { Priority, TestCaseStatus } from '@buggy/shared-types';
+import type { Priority, TestCaseAutomationStatus, TestCaseReviewStatus, TestCaseStatus } from '@buggy/shared-types';
 
 export class TestCaseStepDto {
   @IsOptional()
@@ -52,6 +52,30 @@ export class CreateTestCaseDto {
   status?: TestCaseStatus;
 
   @IsOptional()
+  @IsString()
+  module?: string;
+
+  @IsOptional()
+  @IsString()
+  suiteId?: string;
+
+  @IsOptional()
+  @IsString()
+  version?: string;
+
+  @IsOptional()
+  @IsIn(['draft', 'in_review', 'approved', 'changes_requested'])
+  reviewStatus?: TestCaseReviewStatus;
+
+  @IsOptional()
+  @IsIn(['manual', 'candidate', 'automated'])
+  automationStatus?: TestCaseAutomationStatus;
+
+  @IsOptional()
+  @IsMongoId()
+  ownerId?: string;
+
+  @IsOptional()
   @IsArray()
   tags?: string[];
 }
@@ -90,6 +114,30 @@ export class UpdateTestCaseDto {
   @IsOptional()
   @IsIn(['draft', 'ready', 'deprecated'])
   status?: TestCaseStatus;
+
+  @IsOptional()
+  @IsString()
+  module?: string;
+
+  @IsOptional()
+  @IsString()
+  suiteId?: string;
+
+  @IsOptional()
+  @IsString()
+  version?: string;
+
+  @IsOptional()
+  @IsIn(['draft', 'in_review', 'approved', 'changes_requested'])
+  reviewStatus?: TestCaseReviewStatus;
+
+  @IsOptional()
+  @IsIn(['manual', 'candidate', 'automated'])
+  automationStatus?: TestCaseAutomationStatus;
+
+  @IsOptional()
+  @IsMongoId()
+  ownerId?: string;
 
   @IsOptional()
   @IsArray()

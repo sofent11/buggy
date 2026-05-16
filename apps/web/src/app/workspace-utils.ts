@@ -103,6 +103,8 @@ export function requirementPayload(form: FormData, projectId: string): Partial<R
     description: text(form, 'description'),
     priority: text(form, 'priority') as never,
     status: text(form, 'status') as never,
+    acceptanceStatus: text(form, 'acceptanceStatus') as never,
+    reviewerId: text(form, 'reviewerId') || undefined,
     larkWebhook: text(form, 'larkWebhook')
   };
 }
@@ -117,7 +119,17 @@ export function testCasePayload(form: FormData, projectId: string): Partial<Test
     steps: parseSteps(stepsJson, text(form, 'step'), text(form, 'expected')),
     expectedResult: text(form, 'expectedResult'),
     priority: text(form, 'priority') as never,
-    status: text(form, 'status') as never
+    status: text(form, 'status') as never,
+    module: text(form, 'module'),
+    suiteId: text(form, 'suiteId'),
+    version: text(form, 'version') || 'v1',
+    reviewStatus: text(form, 'reviewStatus') as never,
+    automationStatus: text(form, 'automationStatus') as never,
+    ownerId: text(form, 'ownerId') || undefined,
+    tags: text(form, 'tags')
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean)
   };
 }
 
@@ -155,7 +167,16 @@ export function bugPayload(form: FormData, projectId: string): Partial<Bug> {
     expectedResult: text(form, 'expectedResult'),
     severity: text(form, 'severity') as never,
     priority: text(form, 'priority') as never,
-    status: text(form, 'status') as never
+    status: text(form, 'status') as never,
+    environment: text(form, 'environment'),
+    foundVersion: text(form, 'foundVersion'),
+    fixVersion: text(form, 'fixVersion'),
+    rootCause: text(form, 'rootCause'),
+    triageStatus: text(form, 'triageStatus') as never,
+    watcherIds: text(form, 'watcherIds')
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean)
   };
 }
 

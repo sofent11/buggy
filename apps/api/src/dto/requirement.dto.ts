@@ -1,5 +1,5 @@
 import { IsArray, IsIn, IsMongoId, IsOptional, IsString, MinLength } from 'class-validator';
-import type { Priority, RequirementStatus } from '@buggy/shared-types';
+import type { Priority, RequirementAcceptanceStatus, RequirementStatus } from '@buggy/shared-types';
 
 export class CreateRequirementDto {
   @IsMongoId()
@@ -40,6 +40,14 @@ export class CreateRequirementDto {
   @IsOptional()
   @IsIn(['P0', 'P1', 'P2', 'P3'])
   priority?: Priority;
+
+  @IsOptional()
+  @IsIn(['not_ready', 'ready', 'approved', 'rejected'])
+  acceptanceStatus?: RequirementAcceptanceStatus;
+
+  @IsOptional()
+  @IsMongoId()
+  reviewerId?: string;
 
   @IsOptional()
   @IsString()
@@ -90,6 +98,14 @@ export class UpdateRequirementDto {
   @IsOptional()
   @IsIn(['P0', 'P1', 'P2', 'P3'])
   priority?: Priority;
+
+  @IsOptional()
+  @IsIn(['not_ready', 'ready', 'approved', 'rejected'])
+  acceptanceStatus?: RequirementAcceptanceStatus;
+
+  @IsOptional()
+  @IsMongoId()
+  reviewerId?: string;
 
   @IsOptional()
   @IsString()

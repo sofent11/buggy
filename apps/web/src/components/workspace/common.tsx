@@ -414,6 +414,12 @@ export function StepEditor(props: { name?: string; initialSteps?: TestCaseStep[]
           <Button type="button" size="icon" variant="ghost" onClick={() => setSteps((current) => current.filter((_, itemIndex) => itemIndex !== index))}>
             <Trash2 size={14} />
           </Button>
+          <Button type="button" size="icon" variant="ghost" disabled={index === 0} onClick={() => setSteps((current) => moveStep(current, index, index - 1))}>
+            <ChevronUp size={14} />
+          </Button>
+          <Button type="button" size="icon" variant="ghost" disabled={index === ordered.length - 1} onClick={() => setSteps((current) => moveStep(current, index, index + 1))}>
+            <ChevronDown size={14} />
+          </Button>
         </div>
       ))}
       <Button
@@ -425,6 +431,14 @@ export function StepEditor(props: { name?: string; initialSteps?: TestCaseStep[]
       </Button>
     </div>
   );
+}
+
+function moveStep(steps: TestCaseStep[], from: number, to: number) {
+  const next = [...steps];
+  const [item] = next.splice(from, 1);
+  if (!item) return steps;
+  next.splice(to, 0, item);
+  return next;
 }
 
 function normalizeInitialSteps(steps?: TestCaseStep[]) {

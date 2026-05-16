@@ -49,6 +49,18 @@ export class ListQueryDto {
   severity?: string;
 
   @IsOptional()
+  @IsString()
+  triageStatus?: string;
+
+  @IsOptional()
+  @IsString()
+  reviewStatus?: string;
+
+  @IsOptional()
+  @IsString()
+  automationStatus?: string;
+
+  @IsOptional()
   @IsMongoId()
   assigneeId?: string;
 

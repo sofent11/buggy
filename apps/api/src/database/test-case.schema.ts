@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, SchemaTypes, Types } from 'mongoose';
-import type { Priority, TestCaseStatus } from '@buggy/shared-types';
+import type { Priority, TestCaseAutomationStatus, TestCaseReviewStatus, TestCaseStatus } from '@buggy/shared-types';
 
 export type TestCaseDocument = HydratedDocument<TestCaseEntity>;
 
@@ -46,6 +46,24 @@ export class TestCaseEntity {
 
   @Prop({ type: String, required: true, default: 'ready' })
   status!: TestCaseStatus;
+
+  @Prop({ type: String, trim: true, default: '' })
+  module!: string;
+
+  @Prop({ type: String, trim: true, default: '' })
+  suiteId!: string;
+
+  @Prop({ type: String, trim: true, default: 'v1' })
+  version!: string;
+
+  @Prop({ type: String, required: true, default: 'draft' })
+  reviewStatus!: TestCaseReviewStatus;
+
+  @Prop({ type: String, required: true, default: 'manual' })
+  automationStatus!: TestCaseAutomationStatus;
+
+  @Prop({ type: SchemaTypes.ObjectId, ref: 'UserEntity' })
+  ownerId?: Types.ObjectId;
 
   @Prop({ type: [String], default: [] })
   tags!: string[];

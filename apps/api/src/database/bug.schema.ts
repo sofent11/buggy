@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, SchemaTypes, Types } from 'mongoose';
-import type { BugStatus, Priority, Severity } from '@buggy/shared-types';
+import type { BugStatus, BugTriageStatus, Priority, Severity } from '@buggy/shared-types';
 
 export type BugDocument = HydratedDocument<BugEntity>;
 
@@ -56,6 +56,24 @@ export class BugEntity {
 
   @Prop({ type: Date })
   dueAt?: Date;
+
+  @Prop({ type: String, trim: true, default: '' })
+  environment!: string;
+
+  @Prop({ type: String, trim: true, default: '' })
+  foundVersion!: string;
+
+  @Prop({ type: String, trim: true, default: '' })
+  fixVersion!: string;
+
+  @Prop({ type: String, trim: true, default: '' })
+  rootCause!: string;
+
+  @Prop({ type: [SchemaTypes.ObjectId], ref: 'UserEntity', default: [] })
+  watcherIds!: Types.ObjectId[];
+
+  @Prop({ type: String, required: true, default: 'new' })
+  triageStatus!: BugTriageStatus;
 
   @Prop({ type: Date })
   resolvedAt?: Date;

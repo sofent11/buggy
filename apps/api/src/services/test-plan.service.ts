@@ -1,7 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import type { PageResult, TestCaseStep, TestPlan, TestRunItem } from '@buggy/shared-types';
+import { BugEntity } from '../database/bug.schema.js';
 import { TestCaseEntity } from '../database/test-case.schema.js';
 import { TestPlanEntity, TestRunItemEntity } from '../database/test-plan.schema.js';
 import type { ListQueryDto } from '../dto/common.dto.js';
@@ -15,6 +16,7 @@ export class TestPlanService {
   constructor(
     @InjectModel(TestPlanEntity.name) private readonly plans: Model<TestPlanEntity>,
     @InjectModel(TestCaseEntity.name) private readonly cases: Model<TestCaseEntity>,
+    @InjectModel(BugEntity.name) private readonly bugs: Model<BugEntity>,
     private readonly activities: ActivityService
   ) {}
 
@@ -127,8 +129,8 @@ export class TestPlanService {
     item.status = dto.status;
     item.actualResult = dto.actualResult || '';
     item.stepResults = dto.stepResults || item.stepResults || [];
-    item.executorId = new Types.ObjectId(user.id);
-    item.executedAt = new Date();
+    item.executorId = new Types.ObjectId(dto.executorId || user.id);
+    if (dto.status !== 'untested') item.executedAt = new Date();
     if (row.status === 'draft') row.status = 'active';
     await row.save();
     await this.activities.record({
@@ -152,8 +154,8 @@ export class TestPlanService {
       if (!targetIds.has(idOf(item._id))) continue;
       item.status = dto.status;
       item.actualResult = dto.actualResult;
-      item.executorId = new Types.ObjectId(user.id);
-      item.executedAt = new Date();
+      item.executorId = new Types.ObjectId(dto.executorId || user.id);
+      if (dto.status !== 'untested') item.executedAt = new Date();
       updated += 1;
     }
     if (updated > 0 && row.status === 'draft') row.status = 'active';
@@ -182,6 +184,8 @@ export class TestPlanService {
   }
 
   async remove(id: string): Promise<{ deleted: true }> {
+    const bugCount = await this.bugs.countDocuments({ testPlanId: new Types.ObjectId(id) });
+    if (bugCount) throw new BadRequestException(`测试计划仍关联 ${bugCount} 个 Bug，请先迁移或关闭后再删除`);
     await this.plans.findByIdAndDelete(id);
     return { deleted: true };
   }

@@ -7,7 +7,7 @@ import { Button } from '../ui/button.js';
 import { Field, FieldLabel, FormActions } from '../ui/form.js';
 import { Input } from '../ui/input.js';
 import { Textarea } from '../ui/textarea.js';
-import { bugStatuses, priorities, severities } from '../../app/constants.js';
+import { bugStatuses, priorities, severities, triageStatuses } from '../../app/constants.js';
 import type { StringFormValues } from '../../app/types.js';
 import { bugPayload, matchKeyword, requirementTitle, shortDate, testCasePayload, userName } from '../../app/workspace-utils.js';
 import { ColumnChooser, DataPage, DataTable, DangerButton, Drawer, EmptyState, FilterChips, HookForm, MetricCard, Pagination, registerField, SearchBox, Select, StatusBadge, TextConfirmDialog, Toolbar } from './common.js';
@@ -15,6 +15,7 @@ import { ColumnChooser, DataPage, DataTable, DangerButton, Drawer, EmptyState, F
 const bugColumns = [
   { key: 'bug', label: 'Bug', locked: true, sortKey: 'title' },
   { key: 'source', label: '来源' },
+  { key: 'triage', label: '分诊' },
   { key: 'assignee', label: '负责人' },
   { key: 'collab', label: '协作' },
   { key: 'sla', label: 'SLA' },
@@ -42,6 +43,7 @@ export function BugSection(props: {
   const [keyword, setKeyword] = useState('');
   const [status, setStatus] = useState('');
   const [severity, setSeverity] = useState('');
+  const [triageStatus, setTriageStatus] = useState('');
   const [assigneeId, setAssigneeId] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
@@ -65,13 +67,19 @@ export function BugSection(props: {
     let active = true;
     setLoadingPage(true);
     api
-      .bugPage(props.projectId, { page, pageSize, keyword: effectiveKeyword, status, severity, assigneeId, sortBy, sortOrder })
+      .bugPage(props.projectId, { page, pageSize, keyword: effectiveKeyword, status, severity, triageStatus, assigneeId, sortBy, sortOrder })
       .then((result) => {
         if (active) setPageResult(result);
       })
       .catch(() => {
         if (!active) return;
-        const fallback = props.rows.filter((row) => (!status || row.status === status) && (!severity || row.severity === severity) && (!assigneeId || row.assigneeId === assigneeId) && matchKeyword([row.title, row.actualResult || '', row.reproduceSteps || '', row.severity], effectiveKeyword));
+        const fallback = props.rows.filter((row) =>
+          (!status || row.status === status) &&
+          (!severity || row.severity === severity) &&
+          (!triageStatus || row.triageStatus === triageStatus) &&
+          (!assigneeId || row.assigneeId === assigneeId) &&
+          matchKeyword([row.title, row.actualResult || '', row.reproduceSteps || '', row.severity, row.environment || '', row.foundVersion || '', row.rootCause || ''], effectiveKeyword)
+        );
         setPageResult({ total: fallback.length, page, pageSize, items: fallback.slice((page - 1) * pageSize, page * pageSize) });
       })
       .finally(() => {
@@ -80,12 +88,12 @@ export function BugSection(props: {
     return () => {
       active = false;
     };
-  }, [props.projectId, props.rows, page, pageSize, effectiveKeyword, status, severity, assigneeId, sortBy, sortOrder]);
+  }, [props.projectId, props.rows, page, pageSize, effectiveKeyword, status, severity, triageStatus, assigneeId, sortBy, sortOrder]);
 
   useEffect(() => {
-    const filters = { keyword, status, severity, assigneeId, pageSize, sortBy, sortOrder, columns: visibleColumns };
+    const filters = { keyword, status, severity, triageStatus, assigneeId, pageSize, sortBy, sortOrder, columns: visibleColumns };
     window.dispatchEvent(new CustomEvent('buggy:filters-change', { detail: { tab: 'bugs', filters } }));
-  }, [keyword, status, severity, assigneeId, pageSize, sortBy, sortOrder, visibleColumns]);
+  }, [keyword, status, severity, triageStatus, assigneeId, pageSize, sortBy, sortOrder, visibleColumns]);
 
   useEffect(() => {
     const apply = (event: Event) => {
@@ -95,6 +103,7 @@ export function BugSection(props: {
       setKeyword(typeof filters.keyword === 'string' ? filters.keyword : '');
       setStatus(typeof filters.status === 'string' ? filters.status : '');
       setSeverity(typeof filters.severity === 'string' ? filters.severity : '');
+      setTriageStatus(typeof filters.triageStatus === 'string' ? filters.triageStatus : '');
       setAssigneeId(typeof filters.assigneeId === 'string' ? filters.assigneeId : '');
       setPageSize(typeof filters.pageSize === 'number' ? filters.pageSize : 20);
       setSortBy(typeof filters.sortBy === 'string' ? filters.sortBy : 'updatedAt');
@@ -104,6 +113,17 @@ export function BugSection(props: {
     window.addEventListener('buggy:apply-view', apply);
     return () => window.removeEventListener('buggy:apply-view', apply);
   }, []);
+
+  useEffect(() => {
+    const open = (event: Event) => {
+      const detail = (event as CustomEvent<{ entityType?: string; entityId?: string }>).detail;
+      if (detail?.entityType !== 'bug' || !detail.entityId) return;
+      const row = props.rows.find((item) => item.id === detail.entityId);
+      if (row) setEditing(row);
+    };
+    window.addEventListener('buggy:open-entity', open);
+    return () => window.removeEventListener('buggy:open-entity', open);
+  }, [props.rows]);
 
   const sorted = (key: string) => {
     if (sortBy === key) setSortOrder((current) => current === 'asc' ? 'desc' : 'asc');
@@ -131,6 +151,7 @@ export function BugSection(props: {
         <SearchBox value={keyword} onChange={setKeyword} placeholder="搜索 Bug、复现、实际结果" />
         <Select value={status} onChange={setStatus} values={bugStatuses} dictionaryType="bugStatus" emptyLabel="全部状态" />
         <Select value={severity} onChange={setSeverity} values={severities} dictionaryType="severity" emptyLabel="全部严重级别" />
+        <Select value={triageStatus} onChange={setTriageStatus} values={triageStatuses} emptyLabel="全部分诊" />
         <select value={assigneeId} onChange={(event) => setAssigneeId(event.target.value)}>
           <option value="">全部负责人</option>
           {props.users.map((user) => <option key={user.id} value={user.id}>{user.username}</option>)}
@@ -147,6 +168,7 @@ export function BugSection(props: {
       <FilterChips filters={[
         { label: '状态', value: status, onClear: () => setStatus('') },
         { label: '严重级别', value: severity, onClear: () => setSeverity('') },
+        { label: '分诊', value: triageStatus, onClear: () => setTriageStatus('') },
         { label: '负责人', value: assigneeId ? userName(props.users, assigneeId) : '', onClear: () => setAssigneeId('') }
       ]} />
       <DataTable
@@ -160,6 +182,7 @@ export function BugSection(props: {
           const cells: Record<string, ReactNode> = {
             bug: <div className="cell-main"><strong>{row.title}</strong><span>{row.actualResult || row.reproduceSteps || '未填写问题详情'}</span></div>,
             source: bugSource(row, props.requirements, props.cases, props.plans),
+            triage: <StatusBadge value={row.triageStatus || 'new'} />,
             assignee: row.assigneeId ? userName(props.users, row.assigneeId) : '-',
             collab: `${row.comments?.length || 0} 评论 · ${row.attachments?.length || 0} 附件${row.duplicateOfId ? ' · 重复' : ''}`,
             sla: slaText(row),
@@ -253,6 +276,7 @@ export function BugFields(props: { row?: Bug; requirements: Requirement[]; cases
       <Field><FieldLabel>重复缺陷</FieldLabel><select {...registerField(props.register, 'duplicateOfId')} defaultValue={props.row?.duplicateOfId || ''}><option value="">不标记重复</option>{props.bugs.filter((item) => item.id !== props.row?.id).map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></Field>
       <Field><FieldLabel>严重级别</FieldLabel><Select name="severity" register={props.register} values={severities} dictionaryType="severity" defaultValue={props.row?.severity || 'S2'} /></Field>
       <Field><FieldLabel>优先级</FieldLabel><Select name="priority" register={props.register} values={priorities} dictionaryType="priority" defaultValue={props.row?.priority || 'P2'} /></Field>
+      <Field><FieldLabel>分诊状态</FieldLabel><Select name="triageStatus" register={props.register} values={triageStatuses} defaultValue={props.row?.triageStatus || 'new'} /></Field>
       <Field>
         <FieldLabel>{props.row ? '当前状态' : '状态'}</FieldLabel>
         {props.row ? (
@@ -265,9 +289,14 @@ export function BugFields(props: { row?: Bug; requirements: Requirement[]; cases
         )}
       </Field>
       <Field><FieldLabel>SLA 截止时间</FieldLabel><Input type="date" {...registerField(props.register, 'dueAt')} defaultValue={props.row?.dueAt ? props.row.dueAt.slice(0, 10) : ''} /></Field>
+      <Field><FieldLabel>发现环境</FieldLabel><Input {...registerField(props.register, 'environment')} defaultValue={props.row?.environment} placeholder="浏览器 / 设备 / 环境" /></Field>
+      <Field><FieldLabel>发现版本</FieldLabel><Input {...registerField(props.register, 'foundVersion')} defaultValue={props.row?.foundVersion} /></Field>
+      <Field><FieldLabel>修复版本</FieldLabel><Input {...registerField(props.register, 'fixVersion')} defaultValue={props.row?.fixVersion} /></Field>
+      <Field><FieldLabel>关注人 ID</FieldLabel><Input {...registerField(props.register, 'watcherIds')} defaultValue={(props.row?.watcherIds || []).join(',')} placeholder="多个用户 ID 用逗号分隔" /></Field>
       <Field className="span-four"><FieldLabel>复现步骤</FieldLabel><Textarea {...registerField(props.register, 'reproduceSteps')} defaultValue={props.row?.reproduceSteps} /></Field>
       <Field className="span-two"><FieldLabel>实际结果</FieldLabel><Textarea {...registerField(props.register, 'actualResult')} defaultValue={props.row?.actualResult} /></Field>
       <Field className="span-two"><FieldLabel>期望结果</FieldLabel><Textarea {...registerField(props.register, 'expectedResult')} defaultValue={props.row?.expectedResult} /></Field>
+      <Field className="span-four"><FieldLabel>根因分析</FieldLabel><Textarea {...registerField(props.register, 'rootCause')} defaultValue={props.row?.rootCause} /></Field>
     </div>
   );
 }

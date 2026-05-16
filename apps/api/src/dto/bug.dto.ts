@@ -1,5 +1,5 @@
-import { IsIn, IsMongoId, IsOptional, IsString, MinLength } from 'class-validator';
-import type { BugStatus, Priority, Severity } from '@buggy/shared-types';
+import { IsArray, IsIn, IsMongoId, IsOptional, IsString, MinLength } from 'class-validator';
+import type { BugStatus, BugTriageStatus, Priority, Severity } from '@buggy/shared-types';
 
 export class CreateBugDto {
   @IsMongoId()
@@ -64,6 +64,31 @@ export class CreateBugDto {
   @IsOptional()
   @IsString()
   dueAt?: string;
+
+  @IsOptional()
+  @IsString()
+  environment?: string;
+
+  @IsOptional()
+  @IsString()
+  foundVersion?: string;
+
+  @IsOptional()
+  @IsString()
+  fixVersion?: string;
+
+  @IsOptional()
+  @IsString()
+  rootCause?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsMongoId({ each: true })
+  watcherIds?: string[];
+
+  @IsOptional()
+  @IsIn(['new', 'triaged', 'needs_info', 'duplicate', 'accepted'])
+  triageStatus?: BugTriageStatus;
 }
 
 export class UpdateBugDto {
@@ -133,6 +158,31 @@ export class UpdateBugDto {
 
   @IsOptional()
   @IsString()
+  environment?: string;
+
+  @IsOptional()
+  @IsString()
+  foundVersion?: string;
+
+  @IsOptional()
+  @IsString()
+  fixVersion?: string;
+
+  @IsOptional()
+  @IsString()
+  rootCause?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsMongoId({ each: true })
+  watcherIds?: string[];
+
+  @IsOptional()
+  @IsIn(['new', 'triaged', 'needs_info', 'duplicate', 'accepted'])
+  triageStatus?: BugTriageStatus;
+
+  @IsOptional()
+  @IsString()
   statusReason?: string;
 }
 
@@ -183,6 +233,18 @@ export class CreateBugFromRunDto {
   @IsOptional()
   @IsMongoId()
   assigneeId?: string;
+
+  @IsOptional()
+  @IsString()
+  dueAt?: string;
+
+  @IsOptional()
+  @IsString()
+  environment?: string;
+
+  @IsOptional()
+  @IsString()
+  foundVersion?: string;
 }
 
 export class AddBugCommentDto {

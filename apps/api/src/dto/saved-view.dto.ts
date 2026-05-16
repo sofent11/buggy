@@ -1,4 +1,5 @@
-import { IsMongoId, IsObject, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsBoolean, IsIn, IsMongoId, IsObject, IsOptional, IsString, MinLength } from 'class-validator';
+import type { SavedViewVisibility } from '@buggy/shared-types';
 
 export class UpsertSavedViewDto {
   @IsMongoId()
@@ -14,4 +15,12 @@ export class UpsertSavedViewDto {
   @IsOptional()
   @IsObject()
   filters?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsIn(['private', 'project'])
+  visibility?: SavedViewVisibility;
+
+  @IsOptional()
+  @IsBoolean()
+  isDefault?: boolean;
 }
