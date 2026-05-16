@@ -7,6 +7,7 @@ import { Button } from '../ui/button.js';
 import { Field, FieldLabel, FormActions } from '../ui/form.js';
 import { Input } from '../ui/input.js';
 import { Textarea } from '../ui/textarea.js';
+import { labelOf } from '../../labels.js';
 import { acceptanceStatuses, priorities, requirementStatuses } from '../../app/constants.js';
 import type { StringFormValues } from '../../app/types.js';
 import { iterationName, matchKeyword, requirementPayload, shortDate, testCasePayload, userName } from '../../app/workspace-utils.js';
@@ -116,6 +117,11 @@ export function RequirementSection(props: {
           <div className="row-actions">
             <Button type="button" size="sm" onClick={() => setEditing(row)}><Pencil size={14} /> 详情</Button>
             <Button type="button" size="sm" onClick={() => setReporting(row)}><FileText size={14} /> 验收报告</Button>
+            {props.canWrite && requirementAcceptanceActions(row.acceptanceStatus || 'not_ready').map((action) => (
+              <Button key={action.status} type="button" size="sm" onClick={() => props.mutate(() => api.updateRequirement(row.id, { acceptanceStatus: action.status, ...(action.status === 'approved' ? { status: 'done' as never } : {}) }), action.message)}>
+                {action.label}
+              </Button>
+            ))}
             {props.canWrite && <Button type="button" size="sm" onClick={() => setCaseRequirement(row)}><Plus size={14} /> 建用例</Button>}
             {props.canWrite && <Button type="button" size="sm" onClick={() => props.mutate(() => api.sendLark(row.id), 'Lark 日报已发送')}><Send size={14} /> Lark</Button>}
             {props.canManage && <DangerButton title={`删除需求「${row.title}」？`} description={`关联 ${(props.cases || []).filter((item) => item.requirementId === row.id).length} 条用例、${(props.bugs || []).filter((item) => item.requirementId === row.id).length} 个 Bug。有关联数据时系统会阻止删除，请先迁移或清理。`} onConfirm={() => props.mutate(() => api.deleteRequirement(row.id), '需求已删除')} />}
@@ -165,6 +171,15 @@ export function RequirementSection(props: {
   );
 }
 
+function requirementAcceptanceActions(status: Requirement['acceptanceStatus']) {
+  if (status === 'not_ready' || status === 'rejected') return [{ status: 'ready' as const, label: '提交验收', message: '需求已提交验收' }];
+  if (status === 'ready') return [
+    { status: 'approved' as const, label: '通过验收', message: '需求验收已通过' },
+    { status: 'rejected' as const, label: '驳回验收', message: '需求验收已驳回' }
+  ];
+  return [];
+}
+
 export function RequirementFields(props: { row?: Requirement; iterations: Iteration[]; users: UserProfile[]; register?: UseFormRegister<StringFormValues> }) {
   return (
     <div className="field-grid">
@@ -191,10 +206,35 @@ export function RequirementDrawer(props: { title: string; row?: Requirement; ope
         {(register) => (
           <>
             <RequirementFields row={props.row} iterations={props.iterations} users={props.users} register={register} />
+            {props.row && <RequirementWorkflowHistory row={props.row} />}
             <FormActions><Button type="button" onClick={props.onClose}>取消</Button>{props.canWrite && <Button variant="primary"><Save size={15} /> 保存需求</Button>}</FormActions>
           </>
         )}
       </HookForm>
     </Drawer>
   );
+}
+
+function RequirementWorkflowHistory(props: { row: Requirement }) {
+  return (
+    <section className="history-panel span-four">
+      <div className="sub-title">验收与状态历史</div>
+      <div className="timeline-list compact-timeline">
+        {(props.row.workflowHistory || []).length === 0 ? <span className="muted">暂无历史</span> : (props.row.workflowHistory || []).map((item) => (
+          <article key={item.id}>
+            <strong>{workflowLabel(item.action)}{item.fromStatus || item.toStatus ? ` · ${item.fromStatus ? labelOf(item.fromStatus) : '-'} -> ${item.toStatus ? labelOf(item.toStatus) : '-'}` : ''}</strong>
+            <span>{item.operatorName || '系统'} · {new Date(item.createdAt).toLocaleString('zh-CN')}</span>
+            {item.note && <p>{item.note}</p>}
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function workflowLabel(action: string) {
+  if (action === 'acceptance_changed') return '验收状态变更';
+  if (action === 'status_changed') return '需求状态变更';
+  if (action === 'created') return '创建';
+  return action;
 }

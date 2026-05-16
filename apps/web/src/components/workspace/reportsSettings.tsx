@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { ArrowDown, ArrowUp, Download, FileText, Plus, Save, Settings, Trash2, Upload } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ArrowDown, ArrowUp, CheckCircle2, Download, FileText, Plus, Save, Settings, Trash2, Upload, XCircle } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { DEFAULT_DICTIONARIES, type Dictionary, type DictionaryValue, type ImportPreview, type ReportSummary, type UserProfile } from '@buggy/shared-types';
 import { api, downloadUrl, type ImportResult } from '../../api.js';
@@ -8,7 +8,7 @@ import { Input } from '../ui/input.js';
 import { labelOf } from '../../labels.js';
 import { systemRoles, userStatuses } from '../../app/constants.js';
 import { importMessage, rate, userStatusLabel } from '../../app/workspace-utils.js';
-import { ConfirmDialog, DataPage, DataTable, Drawer, EmptyState, MetricCard, Pagination, SearchBox, StatusBadge, TemplateLink } from './common.js';
+import { ConfirmDialog, DataPage, DataTable, Drawer, EmptyState, MetricCard, Pagination, SearchBox, StatusBadge, TemplateLink, TextConfirmDialog } from './common.js';
 
 const chartColors = ['#2563eb', '#16a34a', '#f97316', '#dc2626', '#7c3aed', '#64748b'];
 const fallbackColor = '#64748b';
@@ -39,28 +39,32 @@ export function ScopedReportDrawer(props: {
   const [report, setReport] = useState<ReportSummary | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  useEffect(() => {
-    if (!props.open) return;
+  const loadReport = useCallback(() => {
     setLoading(true);
     setError('');
-    api.reportSummary({ projectId: props.projectId, iterationId: props.iterationId, requirementId: props.requirementId })
+    return api.reportSummary({ projectId: props.projectId, iterationId: props.iterationId, requirementId: props.requirementId })
       .then(setReport)
       .catch((reason: Error) => setError(reason.message))
       .finally(() => setLoading(false));
-  }, [props.open, props.projectId, props.iterationId, props.requirementId]);
+  }, [props.projectId, props.iterationId, props.requirementId]);
+  useEffect(() => {
+    if (!props.open) return;
+    void loadReport();
+  }, [props.open, loadReport]);
 
   return (
     <Drawer title={props.title} subtitle={props.subtitle} open={props.open} onClose={props.onClose} size="wide">
       {loading && <EmptyState text="正在生成报告" detail="正在汇总需求、用例、执行和 Bug 数据。" />}
       {error && <EmptyState text="报告生成失败" detail={error} />}
-      {!loading && !error && report && <ScopedReportContent report={report} query={reportQuery(props)} />}
+      {!loading && !error && report && <ScopedReportContent report={report} query={reportQuery(props)} requirementId={props.requirementId} onRefresh={loadReport} />}
       {!loading && !error && !report && <EmptyState text="暂无报告数据" />}
     </Drawer>
   );
 }
 
-function ScopedReportContent(props: { report: ReportSummary; query: string }) {
+function ScopedReportContent(props: { report: ReportSummary; query: string; requirementId?: string; onRefresh: () => Promise<void> }) {
   const report = props.report;
+  const [signoffAction, setSignoffAction] = useState<'signed' | 'rejected' | null>(null);
   const isRequirement = report.scope.type === 'requirement';
   const gate = report.qualityGate;
   const acceptance = isRequirement
@@ -79,6 +83,20 @@ function ScopedReportContent(props: { report: ReportSummary; query: string }) {
           <strong>{acceptance.title}</strong>
           <span>{acceptance.detail}</span>
         </div>
+      )}
+      {isRequirement && props.requirementId && (
+        <section className={`report-signoff-card tone-${report.reportSignoff?.status || 'pending'}`}>
+          <div>
+            <span>报告签核</span>
+            <strong>{reportSignoffLabel(report.reportSignoff?.status)}</strong>
+            <small>{report.reportSignoff?.signerName ? `${report.reportSignoff.signerName} · ${report.reportSignoff.signedAt ? new Date(report.reportSignoff.signedAt).toLocaleString('zh-CN') : ''}` : '等待负责人确认验收报告'}</small>
+            {report.reportSignoff?.note && <p>{report.reportSignoff.note}</p>}
+          </div>
+          <div className="report-actions">
+            <Button type="button" variant="primary" onClick={() => setSignoffAction('signed')}><CheckCircle2 size={15} /> 签核通过</Button>
+            <Button type="button" variant="destructive" onClick={() => setSignoffAction('rejected')}><XCircle size={15} /> 驳回</Button>
+          </div>
+        </section>
       )}
           <section className="insight-strip">
             <MetricCard label="需求完成率" value={rate(report.requirements.done, report.requirements.total)} detail={`${report.requirements.done}/${report.requirements.total}`} tone="good" />
@@ -145,6 +163,17 @@ function ScopedReportContent(props: { report: ReportSummary; query: string }) {
             ])}
           />
           <DataTable
+            headers={['审批动作', '状态变化', '操作人', '说明', '时间']}
+            emptyText="暂无验收审批历史"
+            rows={(report.details?.requirementHistory || []).map((item) => [
+              workflowLabel(item.action),
+              item.fromStatus || item.toStatus ? `${item.fromStatus ? labelOf(item.fromStatus) : '-'} -> ${item.toStatus ? labelOf(item.toStatus) : '-'}` : '-',
+              item.operatorName || '系统',
+              item.note || '-',
+              new Date(item.createdAt).toLocaleString('zh-CN')
+            ])}
+          />
+          <DataTable
             headers={['覆盖用例', '优先级', '状态']}
             emptyText="暂无覆盖用例"
             rows={(report.details?.cases || []).map((item) => [
@@ -175,6 +204,24 @@ function ScopedReportContent(props: { report: ReportSummary; query: string }) {
               item.dueAt ? item.dueAt.slice(0, 10) : '-'
             ])}
           />
+      {props.requirementId && (
+        <TextConfirmDialog
+          open={Boolean(signoffAction)}
+          title={signoffAction === 'signed' ? '签核通过报告？' : '驳回报告？'}
+          description={report.scope.name}
+          label={signoffAction === 'signed' ? '签核意见' : '驳回原因'}
+          placeholder={signoffAction === 'signed' ? '说明验收依据、发布范围或保留风险' : '说明需要补充的证据、未关闭风险或修正项'}
+          confirmText={signoffAction === 'signed' ? '签核通过' : '驳回'}
+          destructive={signoffAction === 'rejected'}
+          onCancel={() => setSignoffAction(null)}
+          onConfirm={async (note) => {
+            if (!signoffAction || !props.requirementId) return;
+            await api.updateRequirement(props.requirementId, { reportSignoffStatus: signoffAction, reportSignoffNote: note });
+            setSignoffAction(null);
+            await props.onRefresh();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -185,6 +232,20 @@ function reportQuery(params: { projectId: string; iterationId?: string; requirem
   if (params.iterationId) search.set('iterationId', params.iterationId);
   if (params.requirementId) search.set('requirementId', params.requirementId);
   return search.toString();
+}
+
+function workflowLabel(action: string) {
+  if (action === 'acceptance_changed') return '验收状态变更';
+  if (action === 'status_changed') return '需求状态变更';
+  if (action === 'created') return '创建';
+  return action;
+}
+
+function reportSignoffLabel(status?: string) {
+  if (status === 'signed') return '已签核';
+  if (status === 'rejected') return '已驳回';
+  if (status === 'pending') return '待签核';
+  return '未签核';
 }
 
 export function SettingsSection(props: {

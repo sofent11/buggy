@@ -76,6 +76,22 @@ export class CreateTestCaseDto {
   ownerId?: string;
 
   @IsOptional()
+  @IsMongoId()
+  reviewerId?: string;
+
+  @IsOptional()
+  @IsString()
+  reviewedAt?: string;
+
+  @IsOptional()
+  @IsString()
+  changeSummary?: string;
+
+  @IsOptional()
+  @IsString()
+  baselineVersion?: string;
+
+  @IsOptional()
   @IsArray()
   tags?: string[];
 }
@@ -138,6 +154,22 @@ export class UpdateTestCaseDto {
   @IsOptional()
   @IsMongoId()
   ownerId?: string;
+
+  @IsOptional()
+  @IsMongoId()
+  reviewerId?: string;
+
+  @IsOptional()
+  @IsString()
+  reviewedAt?: string;
+
+  @IsOptional()
+  @IsString()
+  changeSummary?: string;
+
+  @IsOptional()
+  @IsString()
+  baselineVersion?: string;
 
   @IsOptional()
   @IsArray()

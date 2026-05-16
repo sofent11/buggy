@@ -50,6 +50,12 @@ export class RequirementEntity {
 
   @Prop({ type: [String], default: [] })
   tags!: string[];
+
+  @Prop({ type: [SchemaTypes.Mixed], default: [] })
+  workflowHistory!: Array<{ id: string; action: string; fromStatus?: string; toStatus?: string; operatorId?: string; operatorName?: string; note?: string; createdAt: string }>;
+
+  @Prop({ type: SchemaTypes.Mixed })
+  reportSignoff?: { status: 'pending' | 'signed' | 'rejected'; signerId?: string; signerName?: string; note?: string; signedAt?: string };
 }
 
 export const RequirementSchema = SchemaFactory.createForClass(RequirementEntity);

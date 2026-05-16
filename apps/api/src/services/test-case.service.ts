@@ -65,7 +65,15 @@ export class TestCaseService {
       reviewStatus: dto.reviewStatus || 'draft',
       automationStatus: dto.automationStatus || 'manual',
       ownerId: toObjectId(dto.ownerId),
-      tags: dto.tags || []
+      reviewerId: toObjectId(dto.reviewerId),
+      reviewedAt: dto.reviewedAt ? new Date(dto.reviewedAt) : undefined,
+      changeSummary: dto.changeSummary || '',
+      baselineVersion: dto.baselineVersion || '',
+      baselineAt: dto.baselineVersion ? new Date() : undefined,
+      baselineById: dto.baselineVersion && user?.id ? new Types.ObjectId(user.id) : undefined,
+      baselineByName: dto.baselineVersion ? user?.username || '' : '',
+      tags: dto.tags || [],
+      workflowHistory: [this.workflowEntry('created', undefined, dto.status || 'ready', user, '创建用例')]
     });
     await this.activities.record({
       projectId: idOf(row.projectId),
@@ -85,6 +93,11 @@ export class TestCaseService {
   }
 
   async update(id: string, dto: UpdateTestCaseDto, user?: SessionUser): Promise<TestCase> {
+    const previous = await this.cases.findById(id);
+    if (!previous) throw new NotFoundException('用例不存在');
+    const previousStatus = previous.status;
+    const previousReviewStatus = previous.reviewStatus;
+    const approvedReviewerId = dto.reviewStatus === 'approved' ? dto.reviewerId || user?.id : undefined;
     const row = await this.cases.findByIdAndUpdate(
       id,
       {
@@ -102,12 +115,39 @@ export class TestCaseService {
           ...(dto.reviewStatus !== undefined ? { reviewStatus: dto.reviewStatus } : {}),
           ...(dto.automationStatus !== undefined ? { automationStatus: dto.automationStatus } : {}),
           ...(dto.ownerId !== undefined ? { ownerId: toObjectId(dto.ownerId) } : {}),
+          ...(dto.reviewerId !== undefined ? { reviewerId: toObjectId(dto.reviewerId) } : {}),
+          ...(approvedReviewerId ? { reviewerId: new Types.ObjectId(approvedReviewerId), reviewedAt: new Date() } : {}),
+          ...(dto.reviewedAt !== undefined ? { reviewedAt: dto.reviewedAt ? new Date(dto.reviewedAt) : undefined } : {}),
+          ...(dto.changeSummary !== undefined ? { changeSummary: dto.changeSummary } : {}),
+          ...(dto.baselineVersion !== undefined ? {
+            baselineVersion: dto.baselineVersion,
+            baselineAt: new Date(),
+            ...(user?.id ? { baselineById: new Types.ObjectId(user.id) } : {}),
+            baselineByName: user?.username || ''
+          } : {}),
           ...(dto.tags !== undefined ? { tags: dto.tags } : {})
         }
       },
       { new: true }
     );
     if (!row) throw new NotFoundException('用例不存在');
+    const history: Array<{ id: string; action: string; fromStatus?: string; toStatus?: string; operatorId?: string; operatorName?: string; note?: string; createdAt: string }> = [];
+    if (dto.status && dto.status !== previousStatus) {
+      history.push(this.workflowEntry('status_changed', previousStatus, dto.status, user, dto.changeSummary || '状态更新'));
+    }
+    if (dto.reviewStatus && dto.reviewStatus !== previousReviewStatus) {
+      history.push(this.workflowEntry(reviewAction(dto.reviewStatus), previousReviewStatus, dto.reviewStatus, user, dto.changeSummary || '评审状态更新'));
+    }
+    if (dto.changeSummary && history.length === 0) {
+      history.push(this.workflowEntry('content_changed', undefined, undefined, user, dto.changeSummary));
+    }
+    if (dto.baselineVersion !== undefined) {
+      history.push(this.workflowEntry('baseline_set', previous.baselineVersion || undefined, dto.baselineVersion, user, dto.changeSummary || '设置用例基线'));
+    }
+    if (history.length) {
+      row.workflowHistory = [...(row.workflowHistory || []), ...history];
+      await row.save();
+    }
     await this.activities.record({
       projectId: idOf(row.projectId),
       entityType: 'test_case',
@@ -156,10 +196,46 @@ export class TestCaseService {
       reviewStatus: row.reviewStatus,
       automationStatus: row.automationStatus,
       ownerId: row.ownerId ? idOf(row.ownerId) : undefined,
+      reviewerId: row.reviewerId ? idOf(row.reviewerId) : undefined,
+      reviewedAt: row.reviewedAt?.toISOString(),
+      changeSummary: row.changeSummary,
+      baselineVersion: row.baselineVersion,
+      baselineAt: row.baselineAt?.toISOString(),
+      baselineById: row.baselineById ? idOf(row.baselineById) : undefined,
+      baselineByName: row.baselineByName,
       tags: row.tags,
+      workflowHistory: this.normalizeWorkflow(row.workflowHistory || []),
       createdAt: row.createdAt?.toISOString(),
       updatedAt: row.updatedAt?.toISOString()
     };
+  }
+
+  private workflowEntry(action: string, fromStatus?: string, toStatus?: string, user?: SessionUser, note?: string) {
+    return {
+      id: new Types.ObjectId().toString(),
+      action,
+      fromStatus,
+      toStatus,
+      operatorId: user?.id,
+      operatorName: user?.username,
+      note,
+      createdAt: new Date().toISOString()
+    };
+  }
+
+  private normalizeWorkflow(rows: Array<{ id?: string; action?: string; fromStatus?: string; toStatus?: string; operatorId?: string; operatorName?: string; note?: string; createdAt?: string }>) {
+    return rows
+      .map((row) => ({
+        id: String(row.id || new Types.ObjectId()),
+        action: String(row.action || 'updated'),
+        fromStatus: row.fromStatus,
+        toStatus: row.toStatus,
+        operatorId: row.operatorId,
+        operatorName: row.operatorName,
+        note: row.note,
+        createdAt: String(row.createdAt || new Date().toISOString())
+      }))
+      .filter((row) => row.action);
   }
 
   private normalizeSteps(steps: Array<Partial<TestCaseStep>>): TestCaseStep[] {
@@ -179,4 +255,11 @@ export class TestCaseService {
     if (!sortBy || !allowed.has(sortBy)) return { updatedAt: -1 };
     return { [sortBy]: sortOrder === 'asc' ? 1 : -1 };
   }
+}
+
+function reviewAction(status: TestCase['reviewStatus']) {
+  if (status === 'in_review') return 'review_submitted';
+  if (status === 'approved') return 'review_approved';
+  if (status === 'changes_requested') return 'review_rejected';
+  return 'review_reset';
 }

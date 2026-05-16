@@ -56,6 +56,14 @@ export class CreateRequirementDto {
   @IsOptional()
   @IsArray()
   tags?: string[];
+
+  @IsOptional()
+  @IsIn(['pending', 'signed', 'rejected'])
+  reportSignoffStatus?: 'pending' | 'signed' | 'rejected';
+
+  @IsOptional()
+  @IsString()
+  reportSignoffNote?: string;
 }
 
 export class UpdateRequirementDto {
@@ -114,6 +122,14 @@ export class UpdateRequirementDto {
   @IsOptional()
   @IsArray()
   tags?: string[];
+
+  @IsOptional()
+  @IsIn(['pending', 'signed', 'rejected'])
+  reportSignoffStatus?: 'pending' | 'signed' | 'rejected';
+
+  @IsOptional()
+  @IsString()
+  reportSignoffNote?: string;
 }
 
 export class BindLarkDto {

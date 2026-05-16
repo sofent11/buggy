@@ -69,6 +69,15 @@ export class BugEntity {
   @Prop({ type: String, trim: true, default: '' })
   rootCause!: string;
 
+  @Prop({ type: String, trim: true, default: '' })
+  resolution!: string;
+
+  @Prop({ type: String, trim: true, default: '' })
+  verifyResult!: string;
+
+  @Prop({ type: String, default: 'normal' })
+  slaLevel!: 'critical' | 'high' | 'normal' | 'low';
+
   @Prop({ type: [SchemaTypes.ObjectId], ref: 'UserEntity', default: [] })
   watcherIds!: Types.ObjectId[];
 

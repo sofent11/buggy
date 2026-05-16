@@ -37,6 +37,25 @@ export interface QualityGateResult {
   issues: string[];
 }
 
+export interface WorkflowHistoryEntry {
+  id: Id;
+  action: string;
+  fromStatus?: string;
+  toStatus?: string;
+  operatorId?: Id;
+  operatorName?: string;
+  note?: string;
+  createdAt: string;
+}
+
+export interface ReportSignoff {
+  status: 'pending' | 'signed' | 'rejected';
+  signerId?: Id;
+  signerName?: string;
+  note?: string;
+  signedAt?: string;
+}
+
 export type Id = string;
 
 export interface UserProfile {
@@ -96,6 +115,8 @@ export interface Requirement {
   reviewerId?: Id;
   larkWebhook?: string;
   tags?: string[];
+  workflowHistory?: WorkflowHistoryEntry[];
+  reportSignoff?: ReportSignoff;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -123,7 +144,15 @@ export interface TestCase {
   reviewStatus?: TestCaseReviewStatus;
   automationStatus?: TestCaseAutomationStatus;
   ownerId?: Id;
+  reviewerId?: Id;
+  reviewedAt?: string;
+  changeSummary?: string;
+  baselineVersion?: string;
+  baselineAt?: string;
+  baselineById?: Id;
+  baselineByName?: string;
   tags?: string[];
+  workflowHistory?: WorkflowHistoryEntry[];
   createdAt?: string;
   updatedAt?: string;
 }
@@ -141,6 +170,8 @@ export interface TestRunItem {
   requirementId?: Id;
   steps: TestCaseStep[];
   expectedResult?: string;
+  caseVersion?: string;
+  caseUpdatedAt?: string;
   status: TestRunStatus;
   actualResult?: string;
   executorId?: Id;
@@ -218,6 +249,9 @@ export interface Bug {
   foundVersion?: string;
   fixVersion?: string;
   rootCause?: string;
+  resolution?: string;
+  verifyResult?: string;
+  slaLevel?: 'critical' | 'high' | 'normal' | 'low';
   watcherIds?: Id[];
   triageStatus?: BugTriageStatus;
   resolvedAt?: string;
@@ -340,6 +374,7 @@ export interface ReportSummary {
     overdue: number;
   };
   qualityGate?: QualityGateResult;
+  reportSignoff?: ReportSignoff;
   charts?: {
     executionTrend: Array<{ label: string; total: number; passed: number; failed: number; blocked: number; skipped: number; passRate: number }>;
     bugStatus: Array<{ key: BugStatus; label: string; value: number }>;
@@ -350,6 +385,7 @@ export interface ReportSummary {
     riskList: Array<{ id: Id; type: 'requirement' | 'bug' | 'execution'; title: string; ownerId?: Id; dueDate?: string; reason: string; severity: 'high' | 'medium' | 'low' }>;
   };
   details?: {
+    requirementHistory?: WorkflowHistoryEntry[];
     cases: Array<{ id: Id; title: string; requirementId?: Id; priority: Priority; status: TestCaseStatus }>;
     executionItems: Array<{
       id: Id;

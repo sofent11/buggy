@@ -3251,6 +3251,297 @@ tbody tr:hover {
   color: var(--muted);
 }
 
+.workflow-lanes {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0 0 12px;
+}
+
+.workflow-lanes button {
+  min-height: 82px;
+  display: grid;
+  justify-items: start;
+  align-content: center;
+  gap: 4px;
+  border-color: var(--line);
+  background: white;
+  text-align: left;
+  white-space: normal;
+}
+
+.workflow-lanes button:hover,
+.workflow-lanes button:focus-visible {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  box-shadow: var(--shadow-soft);
+}
+
+.workflow-lanes span,
+.sla-cell span,
+.entity-overview span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.workflow-lanes strong {
+  color: var(--text);
+  font-size: 24px;
+  line-height: 30px;
+}
+
+.workflow-lanes small,
+.entity-overview small {
+  color: var(--muted);
+}
+
+.workflow-lanes .tone-risk,
+.workflow-lanes .tone-risk:hover {
+  border-color: #f2bab2;
+  background: var(--danger-soft);
+}
+
+.drawer-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 10px;
+}
+
+.drawer-tabs button {
+  min-height: 32px;
+  border-color: var(--line);
+  background: white;
+}
+
+.drawer-tabs button.active {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: white;
+}
+
+.entity-overview {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.entity-overview > article,
+.evidence-block,
+.history-panel,
+.queue-card {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  padding: 12px;
+}
+
+.entity-overview > article {
+  display: grid;
+  gap: 4px;
+}
+
+.entity-overview > article > strong,
+.evidence-block > strong,
+.queue-card > strong {
+  color: var(--text);
+}
+
+.evidence-block {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 8px;
+}
+
+.evidence-block p {
+  margin: 0;
+  color: var(--muted);
+  white-space: pre-wrap;
+}
+
+.evidence-block ol {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--muted);
+}
+
+.history-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.sla-cell {
+  display: grid;
+  gap: 2px;
+}
+
+.sla-cell strong {
+  color: var(--text);
+}
+
+.sla-cell.is-overdue strong {
+  color: var(--danger);
+}
+
+select[multiple] {
+  min-height: 88px;
+  padding: 7px;
+}
+
+.execution-queues {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.queue-card {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+}
+
+.queue-card .data-table-wrap table {
+  min-width: 0;
+}
+
+.snapshot-drift {
+  color: var(--muted-soft);
+}
+
+.snapshot-drift.is-stale {
+  color: var(--warning);
+  font-weight: 800;
+}
+
+.active-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid #b8d1ff;
+  border-radius: 8px;
+  background: var(--primary-soft);
+  color: var(--primary-dark);
+  padding: 8px 10px;
+  margin-bottom: 12px;
+}
+
+.active-filter-bar span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.active-filter-bar strong {
+  overflow-wrap: anywhere;
+}
+
+.active-filter-bar button {
+  min-height: 28px;
+  margin-left: auto;
+  border-color: #a9c7ff;
+  color: var(--primary-dark);
+}
+
+/* P2 design-system consolidation: governance bars, signoff, and baseline surfaces. */
+.bulk-action-bar,
+.select-visible-row,
+.report-signoff-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.03);
+}
+
+.bulk-action-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+}
+
+.bulk-action-bar strong {
+  color: var(--primary-dark);
+  margin-right: 4px;
+}
+
+.bulk-action-bar select {
+  min-width: 132px;
+}
+
+.select-visible-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+  padding: 9px 10px;
+  color: var(--text);
+  font-weight: 750;
+}
+
+.select-visible-row input {
+  min-height: auto;
+}
+
+.select-visible-row small {
+  color: var(--muted);
+  font-weight: 650;
+}
+
+.report-signoff-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  padding: 14px;
+}
+
+.report-signoff-card > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.report-signoff-card span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.report-signoff-card strong {
+  color: var(--text);
+  font-size: 20px;
+  line-height: 26px;
+}
+
+.report-signoff-card small,
+.report-signoff-card p {
+  color: var(--muted);
+}
+
+.report-signoff-card p {
+  margin: 0;
+}
+
+.report-signoff-card.tone-signed {
+  border-color: #b9dcc5;
+  background: var(--success-soft);
+}
+
+.report-signoff-card.tone-rejected {
+  border-color: #f2bab2;
+  background: var(--danger-soft);
+}
+
+.report-signoff-card.tone-pending {
+  border-color: #f5cf75;
+  background: var(--warning-soft);
+}
+
 @media (max-width: 980px) {
   .dictionary-toolbar {
     grid-template-columns: 1fr;
@@ -3337,7 +3628,10 @@ tbody tr:hover {
 
   .onboarding-steps,
   .health-metrics,
-  .workbench-metrics {
+  .workbench-metrics,
+  .workflow-lanes,
+  .execution-queues,
+  .entity-overview {
     grid-template-columns: 1fr;
   }
 
@@ -3346,5 +3640,59 @@ tbody tr:hover {
     left: 18px;
     right: 18px;
     max-width: none;
+  }
+
+  .report-signoff-card {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .sidebar nav {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    overflow: visible;
+  }
+
+  .sidebar nav button:nth-child(2),
+  .sidebar nav button:nth-child(3),
+  .sidebar nav button:nth-child(8) {
+    display: none;
+  }
+}
+
+@media (max-width: 620px) {
+  .top-actions {
+    grid-template-columns: minmax(0, 1fr) minmax(96px, auto);
+  }
+
+  .project-combobox,
+  .global-search,
+  .user-pill {
+    grid-column: 1 / -1;
+  }
+
+  .sync-status {
+    display: none;
+  }
+
+  .refresh-button,
+  .notification-chip {
+    width: auto;
+  }
+
+  .workflow-lanes button,
+  .insight-card {
+    min-height: 66px;
+  }
+
+  .bulk-action-bar {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .bulk-action-bar select,
+  .bulk-action-bar button {
+    width: 100%;
   }
 }

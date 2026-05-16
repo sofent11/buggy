@@ -176,6 +176,7 @@ export class ReportService {
         overdue: overdueBugs.length
       },
       qualityGate,
+      reportSignoff: query.requirementId ? requirements[0]?.reportSignoff : undefined,
       charts: {
         executionTrend: trendPlans,
         bugStatus: (['open', 'in_progress', 'resolved', 'verified', 'closed', 'reopened'] as BugStatus[]).map((status) => ({
@@ -226,6 +227,18 @@ export class ReportService {
         riskList
       },
       details: {
+        requirementHistory: requirements.flatMap((requirement) =>
+          (requirement.workflowHistory || []).map((item) => ({
+            id: String(item.id || new Types.ObjectId()),
+            action: String(item.action || 'updated'),
+            fromStatus: item.fromStatus,
+            toStatus: item.toStatus,
+            operatorId: item.operatorId,
+            operatorName: item.operatorName,
+            note: item.note,
+            createdAt: String(item.createdAt || new Date().toISOString())
+          }))
+        ),
         cases: cases.map((testCase) => ({
           id: idOf(testCase._id),
           title: testCase.title,
@@ -275,6 +288,9 @@ export class ReportService {
     const bugRows = (summary.details?.bugs || [])
       .map((item) => `<tr><td>${escapeHtml(item.title)}</td><td>${this.labelOf(item.severity)}</td><td>${this.labelOf(item.status)}</td><td>${item.dueAt ? item.dueAt.slice(0, 10) : '-'}</td></tr>`)
       .join('');
+    const historyRows = (summary.details?.requirementHistory || [])
+      .map((item) => `<tr><td>${escapeHtml(this.workflowLabel(item.action))}</td><td>${escapeHtml(item.fromStatus || '-')} -> ${escapeHtml(item.toStatus || '-')}</td><td>${escapeHtml(item.operatorName || '系统')}</td><td>${escapeHtml(item.note || '-')}</td><td>${escapeHtml(new Date(item.createdAt).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }))}</td></tr>`)
+      .join('');
     return `<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -295,6 +311,7 @@ export class ReportService {
   <p>范围：${escapeHtml(summary.scope.name)}</p>
   <p>生成时间：${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}</p>
   <p>验收准入：${escapeHtml(summary.qualityGate?.summary || '未检查')}${summary.qualityGate?.issues.length ? `（${summary.qualityGate.issues.map(escapeHtml).join('；')}）` : ''}</p>
+  <p>报告签核：${escapeHtml(this.reportSignoffLabel(summary.reportSignoff?.status))}${summary.reportSignoff?.signerName ? ` / ${escapeHtml(summary.reportSignoff.signerName)}` : ''}${summary.reportSignoff?.note ? ` / ${escapeHtml(summary.reportSignoff.note)}` : ''}</p>
   <div class="grid">
     <div class="card">需求总数<div class="num">${summary.requirements.total}</div></div>
     <div class="card">用例总数<div class="num">${summary.cases.total}</div></div>
@@ -316,6 +333,11 @@ export class ReportService {
   <table>
     <tr><th>类型</th><th>事项</th><th>原因</th><th>截止时间</th></tr>
     ${(summary.charts?.riskList || []).map((item) => `<tr><td>${item.type}</td><td>${escapeHtml(item.title)}</td><td>${escapeHtml(item.reason)}</td><td>${item.dueDate ? item.dueDate.slice(0, 10) : '-'}</td></tr>`).join('') || '<tr><td colspan="4">暂无风险</td></tr>'}
+  </table>
+  <h2>验收审批历史</h2>
+  <table>
+    <tr><th>动作</th><th>状态变化</th><th>操作人</th><th>说明</th><th>时间</th></tr>
+    ${historyRows || '<tr><td colspan="5">暂无验收审批历史</td></tr>'}
   </table>
   <h2>执行明细</h2>
   <table>
@@ -343,6 +365,7 @@ export class ReportService {
       `执行通过率：${summary.execution.passRate}% (${summary.execution.passed}/${summary.execution.total})`,
       `活跃 Bug：${summary.bugs.active}，逾期 Bug：${summary.bugs.overdue}`,
       `验收准入：${summary.qualityGate?.summary || '未检查'}`,
+      `报告签核：${this.reportSignoffLabel(summary.reportSignoff?.status)}${summary.reportSignoff?.signerName ? ` / ${summary.reportSignoff.signerName}` : ''}`,
       '',
       '风险清单：',
       ...(summary.charts?.riskList || []).map((item) => `${item.type} | ${item.title} | ${item.reason}`)
@@ -373,6 +396,9 @@ export class ReportService {
       testing: '测试中',
       done: '已完成',
       blocked: '阻塞',
+      not_ready: '未就绪',
+      approved: '已通过',
+      rejected: '已驳回',
       untested: '未测',
       passed: '通过',
       failed: '失败',
@@ -383,6 +409,20 @@ export class ReportService {
       S3: 'S3 轻微'
     };
     return labels[value] || value;
+  }
+
+  private workflowLabel(action: string) {
+    if (action === 'acceptance_changed') return '验收状态变更';
+    if (action === 'status_changed') return '需求状态变更';
+    if (action === 'created') return '创建';
+    return action;
+  }
+
+  private reportSignoffLabel(status?: string) {
+    if (status === 'signed') return '已签核';
+    if (status === 'rejected') return '已驳回';
+    if (status === 'pending') return '待签核';
+    return '未签核';
   }
 }
 

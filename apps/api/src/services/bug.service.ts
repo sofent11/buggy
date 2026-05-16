@@ -74,6 +74,9 @@ export class BugService {
       foundVersion: dto.foundVersion || '',
       fixVersion: dto.fixVersion || '',
       rootCause: dto.rootCause || '',
+      resolution: dto.resolution || '',
+      verifyResult: dto.verifyResult || '',
+      slaLevel: dto.slaLevel || slaLevelOf(dto.severity || 'S2'),
       watcherIds: (dto.watcherIds || []).map((id) => new Types.ObjectId(id)),
       triageStatus: dto.triageStatus || 'new',
       comments: [],
@@ -155,6 +158,9 @@ export class BugService {
     if (dto.foundVersion !== undefined) row.foundVersion = dto.foundVersion;
     if (dto.fixVersion !== undefined) row.fixVersion = dto.fixVersion;
     if (dto.rootCause !== undefined) row.rootCause = dto.rootCause;
+    if (dto.resolution !== undefined) row.resolution = dto.resolution;
+    if (dto.verifyResult !== undefined) row.verifyResult = dto.verifyResult;
+    if (dto.slaLevel !== undefined) row.slaLevel = dto.slaLevel;
     if (dto.watcherIds !== undefined) row.watcherIds = dto.watcherIds.map((watcherId) => new Types.ObjectId(watcherId));
     if (dto.triageStatus !== undefined) row.triageStatus = dto.triageStatus;
     if (dto.status && dto.status !== previousStatus) {
@@ -185,6 +191,8 @@ export class BugService {
       {
         status: dto.nextStatus,
         statusReason: dto.reason.trim(),
+        ...(dto.nextStatus === 'resolved' ? { resolution: dto.resolution || dto.reason.trim() } : {}),
+        ...(dto.nextStatus === 'verified' || dto.nextStatus === 'closed' ? { verifyResult: dto.verifyResult || dto.reason.trim() } : {}),
         ...(dto.assigneeId !== undefined ? { assigneeId: dto.assigneeId } : {}),
         ...(dto.dueAt !== undefined ? { dueAt: dto.dueAt } : {})
       },
@@ -282,6 +290,9 @@ export class BugService {
       foundVersion: row.foundVersion,
       fixVersion: row.fixVersion,
       rootCause: row.rootCause,
+      resolution: row.resolution,
+      verifyResult: row.verifyResult,
+      slaLevel: row.slaLevel || slaLevelOf(row.severity),
       watcherIds: (row.watcherIds || []).map(idOf),
       triageStatus: row.triageStatus || 'new',
       resolvedAt: row.resolvedAt?.toISOString(),
@@ -406,4 +417,11 @@ function defaultDueAt(severity: Bug['severity']) {
   const date = new Date();
   date.setDate(date.getDate() + days[severity]);
   return date;
+}
+
+function slaLevelOf(severity: Bug['severity']): Bug['slaLevel'] {
+  if (severity === 'S0') return 'critical';
+  if (severity === 'S1') return 'high';
+  if (severity === 'S3') return 'low';
+  return 'normal';
 }

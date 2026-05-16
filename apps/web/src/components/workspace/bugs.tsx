@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Bug as BugIcon, CheckCircle2, MessageSquare, Paperclip, Pencil, Plus, RotateCcw, Save } from 'lucide-react';
-import type { Bug, BugStatus, PageResult, Requirement, TestCase, TestPlan, UserProfile } from '@buggy/shared-types';
+import type { Bug, BugStatus, PageResult, ProjectMember, Requirement, TestCase, TestPlan, UserProfile } from '@buggy/shared-types';
 import type { UseFormRegister } from 'react-hook-form';
 import { api } from '../../api.js';
 import { Button } from '../ui/button.js';
 import { Field, FieldLabel, FormActions } from '../ui/form.js';
 import { Input } from '../ui/input.js';
 import { Textarea } from '../ui/textarea.js';
+import { labelOf } from '../../labels.js';
 import { bugStatuses, priorities, severities, triageStatuses } from '../../app/constants.js';
 import type { StringFormValues } from '../../app/types.js';
-import { bugPayload, matchKeyword, requirementTitle, shortDate, testCasePayload, userName } from '../../app/workspace-utils.js';
+import { bugPayload, matchKeyword, requirementTitle, shortDate, userName } from '../../app/workspace-utils.js';
 import { ColumnChooser, DataPage, DataTable, DangerButton, Drawer, EmptyState, FilterChips, HookForm, MetricCard, Pagination, registerField, SearchBox, Select, StatusBadge, TextConfirmDialog, Toolbar } from './common.js';
 
 const bugColumns = [
@@ -34,6 +35,7 @@ export function BugSection(props: {
   cases: TestCase[];
   plans: TestPlan[];
   users: UserProfile[];
+  projectMembers?: ProjectMember[];
   rows: Bug[];
   globalKeyword?: string;
   canWrite?: boolean;
@@ -58,6 +60,11 @@ export function BugSection(props: {
   const editingRow = editing ? props.rows.find((row) => row.id === editing.id) || editing : null;
   const effectiveKeyword = keyword || props.globalKeyword || '';
   const rows = pageResult.items;
+  const memberUsers = useMemo(() => {
+    const ids = new Set((props.projectMembers || []).map((member) => member.userId));
+    const scoped = ids.size ? props.users.filter((user) => ids.has(user.id)) : props.users;
+    return scoped.length ? scoped : props.users;
+  }, [props.projectMembers, props.users]);
 
   useEffect(() => {
     setPage(1);
@@ -154,7 +161,7 @@ export function BugSection(props: {
         <Select value={triageStatus} onChange={setTriageStatus} values={triageStatuses} emptyLabel="全部分诊" />
         <select value={assigneeId} onChange={(event) => setAssigneeId(event.target.value)}>
           <option value="">全部负责人</option>
-          {props.users.map((user) => <option key={user.id} value={user.id}>{user.username}</option>)}
+          {memberUsers.map((user) => <option key={user.id} value={user.id}>{user.username}</option>)}
         </select>
         <select value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))} aria-label="每页条数">
           <option value={10}>10 / 页</option>
@@ -171,6 +178,7 @@ export function BugSection(props: {
         { label: '分诊', value: triageStatus, onClear: () => setTriageStatus('') },
         { label: '负责人', value: assigneeId ? userName(props.users, assigneeId) : '', onClear: () => setAssigneeId('') }
       ]} />
+      <BugTriageBoard rows={props.rows} onTriage={setTriageStatus} onStatus={setStatus} />
       <DataTable
         headers={visibleDefinitions.map((column) => column.label)}
         sortKeys={visibleDefinitions.map((column) => column.sortKey || '')}
@@ -185,7 +193,7 @@ export function BugSection(props: {
             triage: <StatusBadge value={row.triageStatus || 'new'} />,
             assignee: row.assigneeId ? userName(props.users, row.assigneeId) : '-',
             collab: `${row.comments?.length || 0} 评论 · ${row.attachments?.length || 0} 附件${row.duplicateOfId ? ' · 重复' : ''}`,
-            sla: slaText(row),
+            sla: <SlaCell row={row} />,
             severity: <StatusBadge value={row.severity} dictionaryType="severity" />,
             priority: <StatusBadge value={row.priority} dictionaryType="priority" />,
             status: <StatusBadge value={row.status} dictionaryType="bugStatus" />,
@@ -211,11 +219,11 @@ export function BugSection(props: {
           action={props.canWrite ? <button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建 Bug</button> : undefined}
         />
       )}
-      <BugDrawer title="新建 Bug" open={creating} requirements={props.requirements} cases={props.cases} plans={props.plans} bugs={props.rows} users={props.users} canWrite={props.canWrite} onClose={() => setCreating(false)} onSubmit={async (form) => {
+      <BugDrawer title="新建 Bug" open={creating} requirements={props.requirements} cases={props.cases} plans={props.plans} bugs={props.rows} users={memberUsers} canWrite={props.canWrite} onClose={() => setCreating(false)} onSubmit={async (form) => {
         await props.mutate(() => api.createBug(bugPayload(form, props.projectId)), 'Bug 已创建');
         setCreating(false);
       }} />
-      <BugDrawer title="编辑 Bug" row={editingRow || undefined} open={Boolean(editing)} requirements={props.requirements} cases={props.cases} plans={props.plans} bugs={props.rows} users={props.users} canWrite={props.canWrite} onClose={() => setEditing(null)} onSubmit={async (form) => {
+      <BugDrawer title="编辑 Bug" row={editingRow || undefined} open={Boolean(editing)} requirements={props.requirements} cases={props.cases} plans={props.plans} bugs={props.rows} users={memberUsers} canWrite={props.canWrite} onClose={() => setEditing(null)} onSubmit={async (form) => {
         if (!editingRow) return;
         await props.mutate(() => api.updateBug(editingRow.id, bugPayload(form, props.projectId)), 'Bug 已保存');
         setEditing(null);
@@ -233,14 +241,19 @@ export function BugSection(props: {
         open={Boolean(transition)}
         title={transition ? `确认${transition.label} Bug？` : '确认流转 Bug？'}
         description={transition?.bug.title}
-        label="流转原因"
-        placeholder="填写修复说明、验证结论或重开原因"
+        label={transition?.status === 'resolved' ? '修复说明' : transition?.status === 'verified' ? '验证结论' : '流转原因'}
+        placeholder={transition?.status === 'resolved' ? '说明根因、修复版本和修复范围' : transition?.status === 'verified' ? '说明复测环境、数据和验证结论' : '填写处理说明或重开原因'}
         confirmText={transition?.label || '确认'}
         destructive={transition?.status === 'reopened'}
         onCancel={() => setTransition(null)}
         onConfirm={async (reason) => {
           if (!transition) return;
-          await props.mutate(() => api.transitionBug(transition.bug.id, { nextStatus: transition.status, reason }), 'Bug 状态已流转');
+          await props.mutate(() => api.transitionBug(transition.bug.id, {
+            nextStatus: transition.status,
+            reason,
+            resolution: transition.status === 'resolved' ? reason : undefined,
+            verifyResult: ['verified', 'closed'].includes(transition.status) ? reason : undefined
+          }), 'Bug 状态已流转');
           setTransition(null);
         }}
       />
@@ -257,12 +270,60 @@ function bugSource(row: Bug, requirements: Requirement[], cases: TestCase[], pla
   return parts.length ? parts.join(' / ') : '-';
 }
 
-function slaText(row: Bug) {
-  if (!row.dueAt) return '-';
-  const due = new Date(row.dueAt).getTime();
-  const closed = ['verified', 'closed'].includes(row.status);
-  const overdue = due < Date.now() && !closed;
-  return `${overdue ? '逾期 ' : ''}${shortDate(row.dueAt)}`;
+function BugTriageBoard(props: { rows: Bug[]; onTriage: (value: string) => void; onStatus: (value: string) => void }) {
+  const activeRows = props.rows.filter((row) => !['verified', 'closed'].includes(row.status));
+  const needTriage = activeRows.filter((row) => row.triageStatus === 'new' || row.triageStatus === 'needs_info');
+  const overdue = activeRows.filter((row) => isOverdue(row));
+  const readyForRetest = props.rows.filter((row) => row.status === 'resolved');
+  return (
+    <section className="workflow-lanes" aria-label="Bug 分诊工作台">
+      <button type="button" onClick={() => props.onTriage('new')}>
+        <span>待分诊</span>
+        <strong>{needTriage.length}</strong>
+        <small>新建或需补充信息</small>
+      </button>
+      <button type="button" onClick={() => props.onStatus('resolved')}>
+        <span>待复测</span>
+        <strong>{readyForRetest.length}</strong>
+        <small>已解决，等待验证结论</small>
+      </button>
+      <button type="button" className={overdue.length ? 'tone-risk' : ''} onClick={() => props.onStatus('')}>
+        <span>SLA 风险</span>
+        <strong>{overdue.length}</strong>
+        <small>逾期且仍未关闭</small>
+      </button>
+    </section>
+  );
+}
+
+function SlaCell(props: { row: Bug }) {
+  if (!props.row.dueAt) return <span>-</span>;
+  const days = daysUntil(props.row.dueAt);
+  const closed = ['verified', 'closed'].includes(props.row.status);
+  const overdue = days < 0 && !closed;
+  const label = overdue ? `逾期 ${Math.abs(days)} 天` : closed ? '已停止计时' : days === 0 ? '今日到期' : `${days} 天`;
+  return (
+    <div className={`sla-cell ${overdue ? 'is-overdue' : ''}`}>
+      <strong>{label}</strong>
+      <span>{shortDate(props.row.dueAt)} · {slaLevelLabel(props.row.slaLevel)}</span>
+    </div>
+  );
+}
+
+function isOverdue(row: Bug) {
+  return Boolean(row.dueAt && new Date(row.dueAt).getTime() < Date.now() && !['verified', 'closed'].includes(row.status));
+}
+
+function daysUntil(value: string) {
+  const ms = new Date(value).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0);
+  return Math.ceil(ms / 86_400_000);
+}
+
+function slaLevelLabel(value?: Bug['slaLevel']) {
+  if (value === 'critical') return '紧急 SLA';
+  if (value === 'high') return '高 SLA';
+  if (value === 'low') return '低 SLA';
+  return '标准 SLA';
 }
 
 export function BugFields(props: { row?: Bug; requirements: Requirement[]; cases: TestCase[]; plans: TestPlan[]; bugs: Bug[]; users: UserProfile[]; register?: UseFormRegister<StringFormValues> }) {
@@ -292,11 +353,19 @@ export function BugFields(props: { row?: Bug; requirements: Requirement[]; cases
       <Field><FieldLabel>发现环境</FieldLabel><Input {...registerField(props.register, 'environment')} defaultValue={props.row?.environment} placeholder="浏览器 / 设备 / 环境" /></Field>
       <Field><FieldLabel>发现版本</FieldLabel><Input {...registerField(props.register, 'foundVersion')} defaultValue={props.row?.foundVersion} /></Field>
       <Field><FieldLabel>修复版本</FieldLabel><Input {...registerField(props.register, 'fixVersion')} defaultValue={props.row?.fixVersion} /></Field>
-      <Field><FieldLabel>关注人 ID</FieldLabel><Input {...registerField(props.register, 'watcherIds')} defaultValue={(props.row?.watcherIds || []).join(',')} placeholder="多个用户 ID 用逗号分隔" /></Field>
+      <Field><FieldLabel>SLA 等级</FieldLabel><select {...registerField(props.register, 'slaLevel')} defaultValue={props.row?.slaLevel || 'normal'}><option value="critical">紧急</option><option value="high">高</option><option value="normal">标准</option><option value="low">低</option></select></Field>
+      <Field className="span-two">
+        <FieldLabel>关注人</FieldLabel>
+        <select name="watcherIds" multiple defaultValue={props.row?.watcherIds || []} aria-label="关注人">
+          {props.users.map((item) => <option key={item.id} value={item.id}>{item.username}</option>)}
+        </select>
+      </Field>
       <Field className="span-four"><FieldLabel>复现步骤</FieldLabel><Textarea {...registerField(props.register, 'reproduceSteps')} defaultValue={props.row?.reproduceSteps} /></Field>
       <Field className="span-two"><FieldLabel>实际结果</FieldLabel><Textarea {...registerField(props.register, 'actualResult')} defaultValue={props.row?.actualResult} /></Field>
       <Field className="span-two"><FieldLabel>期望结果</FieldLabel><Textarea {...registerField(props.register, 'expectedResult')} defaultValue={props.row?.expectedResult} /></Field>
-      <Field className="span-four"><FieldLabel>根因分析</FieldLabel><Textarea {...registerField(props.register, 'rootCause')} defaultValue={props.row?.rootCause} /></Field>
+      <Field className="span-two"><FieldLabel>根因分析</FieldLabel><Textarea {...registerField(props.register, 'rootCause')} defaultValue={props.row?.rootCause} /></Field>
+      <Field className="span-two"><FieldLabel>修复说明</FieldLabel><Textarea {...registerField(props.register, 'resolution')} defaultValue={props.row?.resolution} /></Field>
+      <Field className="span-four"><FieldLabel>验证结论</FieldLabel><Textarea {...registerField(props.register, 'verifyResult')} defaultValue={props.row?.verifyResult} /></Field>
     </div>
   );
 }
@@ -317,18 +386,70 @@ export function BugDrawer(props: {
   onAttachment?: (attachment: { name: string; url: string }) => Promise<void>;
   onFileAttachment?: (file: File) => Promise<void>;
 }) {
+  const [activePanel, setActivePanel] = useState<'overview' | 'edit' | 'collab' | 'history'>(props.row ? 'overview' : 'edit');
+  useEffect(() => {
+    if (props.open) setActivePanel(props.row ? 'overview' : 'edit');
+  }, [props.open, props.row?.id]);
   return (
     <Drawer title={props.title} subtitle={props.row?.title || '记录复现步骤、预期结果和责任人'} open={props.open} onClose={props.onClose}>
       <HookForm onSubmit={async (form) => props.onSubmit(form)}>
         {(register) => (
           <>
-            <BugFields row={props.row} requirements={props.requirements} cases={props.cases} plans={props.plans} bugs={props.bugs} users={props.users} register={register} />
-            {props.row && <BugCollaboration row={props.row} canWrite={props.canWrite} onComment={props.onComment} onAttachment={props.onAttachment} onFileAttachment={props.onFileAttachment} />}
-            <FormActions><Button type="button" onClick={props.onClose}>取消</Button>{props.canWrite && <Button variant="primary"><Save size={15} /> 保存 Bug</Button>}</FormActions>
+            {props.row && (
+              <div className="drawer-tabs" role="tablist" aria-label="Bug 详情视图">
+                <button type="button" className={activePanel === 'overview' ? 'active' : ''} onClick={() => setActivePanel('overview')}>概览</button>
+                <button type="button" className={activePanel === 'edit' ? 'active' : ''} onClick={() => setActivePanel('edit')}>编辑</button>
+                <button type="button" className={activePanel === 'collab' ? 'active' : ''} onClick={() => setActivePanel('collab')}>协作</button>
+                <button type="button" className={activePanel === 'history' ? 'active' : ''} onClick={() => setActivePanel('history')}>历史</button>
+              </div>
+            )}
+            {props.row && activePanel === 'overview' && <BugOverview row={props.row} requirements={props.requirements} cases={props.cases} plans={props.plans} users={props.users} />}
+            {activePanel === 'edit' && <BugFields row={props.row} requirements={props.requirements} cases={props.cases} plans={props.plans} bugs={props.bugs} users={props.users} register={register} />}
+            {props.row && activePanel === 'collab' && <BugCollaboration row={props.row} canWrite={props.canWrite} onComment={props.onComment} onAttachment={props.onAttachment} onFileAttachment={props.onFileAttachment} />}
+            {props.row && activePanel === 'history' && <BugStatusTimeline row={props.row} />}
+            <FormActions>
+              <Button type="button" onClick={props.onClose}>取消</Button>
+              {props.canWrite && activePanel === 'edit' && <Button variant="primary"><Save size={15} /> 保存 Bug</Button>}
+            </FormActions>
           </>
         )}
       </HookForm>
     </Drawer>
+  );
+}
+
+function BugOverview(props: { row: Bug; requirements: Requirement[]; cases: TestCase[]; plans: TestPlan[]; users: UserProfile[] }) {
+  const watchers = (props.row.watcherIds || []).map((id) => userName(props.users, id)).join('、') || '-';
+  return (
+    <div className="entity-overview">
+      <article>
+        <span>来源链路</span>
+        <strong>{bugSource(props.row, props.requirements, props.cases, props.plans)}</strong>
+      </article>
+      <article>
+        <span>负责人 / 关注人</span>
+        <strong>{props.row.assigneeId ? userName(props.users, props.row.assigneeId) : '未指派'}</strong>
+        <small>{watchers}</small>
+      </article>
+      <article>
+        <span>SLA</span>
+        <SlaCell row={props.row} />
+      </article>
+      <article>
+        <span>分诊</span>
+        <strong>{labelOf(props.row.triageStatus || 'new')}</strong>
+        <small>{props.row.duplicateOfId ? '已标记重复缺陷' : '未标记重复'}</small>
+      </article>
+      <section className="evidence-block">
+        <strong>问题证据</strong>
+        <p>{props.row.reproduceSteps || props.row.actualResult || '暂无复现步骤或实际结果'}</p>
+      </section>
+      <section className="evidence-block">
+        <strong>修复与验证</strong>
+        <p>{props.row.resolution || '暂无修复说明'}</p>
+        <p>{props.row.verifyResult || '暂无验证结论'}</p>
+      </section>
+    </div>
   );
 }
 
@@ -385,19 +506,24 @@ function BugCollaboration(props: { row: Bug; canWrite?: boolean; onComment?: (bo
           }}><Paperclip size={15} /> 添加</Button>
         </div>}
       </section>
-      <section>
-        <div className="sub-title">状态历史</div>
-        <div className="timeline-list compact-timeline">
-          {(props.row.statusHistory || []).length === 0 ? <span className="muted">暂无状态历史</span> : (props.row.statusHistory || []).map((item) => (
-            <article key={item.id}>
-              <strong>{item.fromStatus ? `${item.fromStatus} -> ${item.toStatus}` : item.toStatus}</strong>
-              <span>{item.operatorName || '系统'} · {new Date(item.createdAt).toLocaleString('zh-CN')}</span>
-              {item.note && <p>{item.note}</p>}
-            </article>
-          ))}
-        </div>
-      </section>
     </div>
+  );
+}
+
+function BugStatusTimeline(props: { row: Bug }) {
+  return (
+    <section className="history-panel">
+      <div className="sub-title">状态历史</div>
+      <div className="timeline-list compact-timeline">
+        {(props.row.statusHistory || []).length === 0 ? <span className="muted">暂无状态历史</span> : (props.row.statusHistory || []).map((item) => (
+          <article key={item.id}>
+            <strong>{item.fromStatus ? `${labelOf(item.fromStatus)} -> ${labelOf(item.toStatus)}` : labelOf(item.toStatus)}</strong>
+            <span>{item.operatorName || '系统'} · {new Date(item.createdAt).toLocaleString('zh-CN')}</span>
+            {item.note && <p>{item.note}</p>}
+          </article>
+        ))}
+      </div>
+    </section>
   );
 }
 

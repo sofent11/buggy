@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Activity, Bug as BugIcon, Pencil, Plus, Save } from 'lucide-react';
 import type { Bug, Iteration, Requirement, TestCase, TestPlan, TestRunItem, TestRunStatus, UserProfile } from '@buggy/shared-types';
 import { api } from '../../api.js';
@@ -19,6 +19,7 @@ export function PlanSection(props: {
   rows: TestPlan[];
   bugs: Bug[];
   users: UserProfile[];
+  currentUser: UserProfile;
   globalKeyword?: string;
   canWrite?: boolean;
   canManage?: boolean;
@@ -67,7 +68,7 @@ export function PlanSection(props: {
         <span className="toolbar-summary">{rows.length} 个测试计划 · {props.cases.length} 条可选用例</span>
         {props.canWrite && <button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建计划</button>}
       </Toolbar>
-      <ExecutionWorkbench rows={props.rows} bugs={props.bugs} />
+      <ExecutionWorkbench rows={props.rows} bugs={props.bugs} users={props.users} currentUser={props.currentUser} canWrite={props.canWrite} mutate={props.mutate} />
       <div className="plan-stack">
         {rows.map((plan) => <PlanCard key={plan.id} plan={plan} iterations={props.iterations} requirements={props.requirements} cases={props.cases} bugs={props.bugs} users={props.users} canWrite={props.canWrite} canManage={props.canManage} mutate={props.mutate} />)}
       </div>
@@ -92,24 +93,16 @@ export function PlanSection(props: {
   );
 }
 
-function ExecutionWorkbench(props: { rows: TestPlan[]; bugs: Bug[] }) {
+function ExecutionWorkbench(props: { rows: TestPlan[]; bugs: Bug[]; users: UserProfile[]; currentUser: UserProfile; canWrite?: boolean; mutate: (action: () => Promise<unknown>, message: string) => Promise<void> }) {
   const runItems = props.rows.flatMap((plan) => plan.runItems.map((item) => ({ plan, item })));
+  const myQueue = runItems.filter(({ item }) => item.status === 'untested' && (!item.executorId || item.executorId === props.currentUser.id));
+  const failedQueue = runItems.filter(({ item }) => ['failed', 'blocked'].includes(item.status) && item.bugIds.length === 0);
+  const retestQueue = props.bugs.filter((bug) => bug.status === 'resolved');
   const groups = [
-    { label: '未测', status: 'untested', detail: '等待执行' },
-    { label: '失败', status: 'failed', detail: '优先建 Bug 或重测' },
-    { label: '阻塞', status: 'blocked', detail: '需要协同解除' },
+    { label: '我的待执行', status: 'untested', detail: '等待记录结果', value: myQueue.length },
+    { label: '失败待建 Bug', status: 'failed', detail: '优先补齐缺陷来源', value: failedQueue.length },
     { label: '待复测', status: 'resolved', detail: '已解决 Bug 待验证', value: props.bugs.filter((bug) => bug.status === 'resolved').length }
   ];
-  const riskRows = runItems
-    .filter(({ item }) => ['failed', 'blocked', 'untested'].includes(item.status))
-    .slice(0, 6)
-    .map(({ plan, item }) => [
-      item.status === 'untested' ? '待执行' : item.status === 'blocked' ? '阻塞' : '失败',
-      item.caseTitle,
-      plan.name,
-      item.actualResult || '暂无记录',
-      <StatusBadge value={item.status} dictionaryType="testRunStatus" />
-    ]);
   return (
     <section className="execution-workbench">
       <div className="section-heading compact">
@@ -127,8 +120,48 @@ function ExecutionWorkbench(props: { rows: TestPlan[]; bugs: Bug[] }) {
           </article>
         ))}
       </div>
-      {riskRows.length > 0 && <DataTable headers={['队列', '执行项', '计划', '记录', '状态']} rows={riskRows} />}
+      <div className="execution-queues">
+        <QueueTable
+          title="我的待执行"
+          empty="暂无待执行项"
+          rows={myQueue.slice(0, 5).map(({ plan, item }) => [
+            item.caseTitle,
+            plan.name,
+            <StatusBadge value={item.status} dictionaryType="testRunStatus" />,
+            <RunItemActions planId={plan.id} item={item} users={props.users} canWrite={props.canWrite} mutate={props.mutate} />
+          ])}
+        />
+        <QueueTable
+          title="失败/阻塞待处理"
+          empty="暂无失败或阻塞项"
+          rows={failedQueue.slice(0, 5).map(({ plan, item }) => [
+            item.caseTitle,
+            item.actualResult || '暂无记录',
+            <StatusBadge value={item.status} dictionaryType="testRunStatus" />,
+            <RunItemActions planId={plan.id} item={item} users={props.users} canWrite={props.canWrite} mutate={props.mutate} />
+          ])}
+        />
+        <QueueTable
+          title="已解决待复测"
+          empty="暂无待复测 Bug"
+          rows={retestQueue.slice(0, 5).map((bug) => [
+            bug.title,
+            bug.resolution || bug.actualResult || '暂无修复说明',
+            <StatusBadge value={bug.status} dictionaryType="bugStatus" />,
+            bug.verifyResult || '待验证结论'
+          ])}
+        />
+      </div>
     </section>
+  );
+}
+
+function QueueTable(props: { title: string; empty: string; rows: Array<Array<ReactNode>> }) {
+  return (
+    <article className="queue-card">
+      <strong>{props.title}</strong>
+      <DataTable headers={['对象', '上下文', '状态', '操作']} emptyText={props.empty} rows={props.rows} />
+    </article>
   );
 }
 
@@ -189,7 +222,10 @@ export function PlanCard(props: { plan: TestPlan; iterations: Iteration[]; requi
   const [editing, setEditing] = useState(false);
   const [caseIds, setCaseIds] = useState(props.plan.caseIds);
   const [batchStatus, setBatchStatus] = useState<TestRunStatus | null>(null);
+  const [selectedRunItemIds, setSelectedRunItemIds] = useState<string[]>([]);
+  const casesById = useMemo(() => new Map(props.cases.map((testCase) => [testCase.id, testCase])), [props.cases]);
   useEffect(() => setCaseIds(props.plan.caseIds), [props.plan.caseIds]);
+  useEffect(() => setSelectedRunItemIds((current) => current.filter((id) => props.plan.runItems.some((item) => item.id === id))), [props.plan.runItems]);
   useEffect(() => {
     const open = (event: Event) => {
       const detail = (event as CustomEvent<{ entityType?: string; entityId?: string }>).detail;
@@ -199,6 +235,8 @@ export function PlanCard(props: { plan: TestPlan; iterations: Iteration[]; requi
     return () => window.removeEventListener('buggy:open-entity', open);
   }, [props.plan.id]);
   const batchLabel = batchStatus === 'passed' ? '全部通过' : batchStatus === 'failed' ? '全部失败' : '批量更新';
+  const batchTargets = selectedRunItemIds.length ? selectedRunItemIds : props.plan.runItems.map((item) => item.id);
+  const batchScopeText = selectedRunItemIds.length ? `${selectedRunItemIds.length} 个已选执行项` : `${props.plan.runItems.length} 个全部执行项`;
   return (
     <article className="plan-card">
       <header>
@@ -210,23 +248,33 @@ export function PlanCard(props: { plan: TestPlan; iterations: Iteration[]; requi
         <span className="progress-pill">{executionProgress(props.plan.runItems)}</span>
         {props.canWrite && props.plan.runItems.length > 0 && (
           <>
-            <Button type="button" size="sm" onClick={() => setBatchStatus('passed')}>全部通过</Button>
-            <Button type="button" size="sm" onClick={() => setBatchStatus('failed')}>全部失败</Button>
+            <Button type="button" size="sm" onClick={() => setBatchStatus('passed')}>{selectedRunItemIds.length ? '所选通过' : '全部通过'}</Button>
+            <Button type="button" size="sm" onClick={() => setBatchStatus('failed')}>{selectedRunItemIds.length ? '所选失败' : '全部失败'}</Button>
           </>
         )}
         <Button type="button" size="sm" onClick={() => setEditing(true)}><Pencil size={14} /> 详情</Button>
         {props.canManage && <DangerButton title={`删除测试计划「${props.plan.name}」？`} description={`关联 ${props.bugs.filter((bug) => bug.testPlanId === props.plan.id).length} 个 Bug。有关联缺陷时系统会阻止删除，请先迁移或关闭。`} onConfirm={() => props.mutate(() => api.deleteTestPlan(props.plan.id), '测试计划已删除')} />}
       </header>
       <DataTable
-        headers={['执行项', '状态', '实际结果', '执行人/时间', '关联 Bug', '快捷操作']}
-        rows={props.plan.runItems.map((item) => [
-          <div className="cell-main"><strong>{item.caseTitle}</strong><span>{item.steps.map((step, index) => `${index + 1}. ${step.action}`).join(' / ') || '无步骤快照'}</span></div>,
+        headers={['选择', '执行项', '状态', '实际结果', '执行人/时间', '关联 Bug', '快捷操作']}
+        rows={props.plan.runItems.map((item) => {
+          const currentCase = casesById.get(item.caseId);
+          const snapshotChanged = Boolean(currentCase && item.caseVersion && item.caseVersion !== (currentCase.version || 'v1'));
+          return [
+          <input
+            type="checkbox"
+            aria-label={`选择 ${item.caseTitle}`}
+            checked={selectedRunItemIds.includes(item.id)}
+            onChange={(event) => setSelectedRunItemIds((current) => event.target.checked ? [...current, item.id] : current.filter((id) => id !== item.id))}
+          />,
+          <div className="cell-main"><strong>{item.caseTitle}</strong><span>{item.steps.map((step, index) => `${index + 1}. ${step.action}`).join(' / ') || '无步骤快照'}</span><span className={snapshotChanged ? 'snapshot-drift is-stale' : 'snapshot-drift'}>{snapshotChanged ? `快照 ${item.caseVersion}，当前 ${currentCase?.version || 'v1'}` : `快照 ${item.caseVersion || 'v1'}`}</span></div>,
           <StatusBadge value={item.status} dictionaryType="testRunStatus" />,
           item.actualResult || '-',
           item.executedAt ? new Date(item.executedAt).toLocaleString('zh-CN') : '-',
           props.bugs.filter((bug) => item.bugIds.includes(bug.id)).map((bug) => bug.title).join('、') || '-',
           <RunItemActions planId={props.plan.id} item={item} users={props.users} canWrite={props.canWrite} mutate={props.mutate} />
-        ])}
+        ];
+        })}
       />
       <Drawer title="编辑测试计划" subtitle={props.plan.name} open={editing} onClose={() => setEditing(false)}>
         <HookForm defaultValues={{ name: props.plan.name, round: props.plan.round, status: props.plan.status }} onSubmit={async (form) => {
@@ -255,7 +303,7 @@ export function PlanCard(props: { plan: TestPlan; iterations: Iteration[]; requi
       <TextConfirmDialog
         open={Boolean(batchStatus)}
         title={`${batchLabel}？`}
-        description={`将影响「${props.plan.name}」中的 ${props.plan.runItems.length} 个执行项。`}
+        description={`将影响「${props.plan.name}」中的 ${batchScopeText}。`}
         label={batchStatus === 'failed' ? '失败原因' : '执行备注'}
         placeholder={batchStatus === 'failed' ? '说明失败范围、环境或主要现象' : '说明本次批量通过的验证依据'}
         confirmText={batchLabel}
@@ -264,9 +312,10 @@ export function PlanCard(props: { plan: TestPlan; iterations: Iteration[]; requi
         onConfirm={async (note) => {
           if (!batchStatus) return;
           await props.mutate(
-            () => api.batchUpdateRunItems(props.plan.id, { runItemIds: props.plan.runItems.map((item) => item.id), status: batchStatus, actualResult: note }),
+            () => api.batchUpdateRunItems(props.plan.id, { runItemIds: batchTargets, status: batchStatus, actualResult: note }),
             batchStatus === 'passed' ? '执行项已批量通过' : '执行项已批量失败'
           );
+          setSelectedRunItemIds([]);
           setBatchStatus(null);
         }}
       />

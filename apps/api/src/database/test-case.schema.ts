@@ -65,8 +65,32 @@ export class TestCaseEntity {
   @Prop({ type: SchemaTypes.ObjectId, ref: 'UserEntity' })
   ownerId?: Types.ObjectId;
 
+  @Prop({ type: SchemaTypes.ObjectId, ref: 'UserEntity' })
+  reviewerId?: Types.ObjectId;
+
+  @Prop({ type: Date })
+  reviewedAt?: Date;
+
+  @Prop({ type: String, trim: true, default: '' })
+  changeSummary!: string;
+
+  @Prop({ type: String, trim: true, default: '' })
+  baselineVersion!: string;
+
+  @Prop({ type: Date })
+  baselineAt?: Date;
+
+  @Prop({ type: SchemaTypes.ObjectId, ref: 'UserEntity' })
+  baselineById?: Types.ObjectId;
+
+  @Prop({ type: String, trim: true, default: '' })
+  baselineByName!: string;
+
   @Prop({ type: [String], default: [] })
   tags!: string[];
+
+  @Prop({ type: [SchemaTypes.Mixed], default: [] })
+  workflowHistory!: Array<{ id: string; action: string; fromStatus?: string; toStatus?: string; operatorId?: string; operatorName?: string; note?: string; createdAt: string }>;
 }
 
 export const TestCaseSchema = SchemaFactory.createForClass(TestCaseEntity);

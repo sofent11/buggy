@@ -82,6 +82,18 @@ export class CreateBugDto {
   rootCause?: string;
 
   @IsOptional()
+  @IsString()
+  resolution?: string;
+
+  @IsOptional()
+  @IsString()
+  verifyResult?: string;
+
+  @IsOptional()
+  @IsIn(['critical', 'high', 'normal', 'low'])
+  slaLevel?: 'critical' | 'high' | 'normal' | 'low';
+
+  @IsOptional()
   @IsArray()
   @IsMongoId({ each: true })
   watcherIds?: string[];
@@ -173,6 +185,18 @@ export class UpdateBugDto {
   rootCause?: string;
 
   @IsOptional()
+  @IsString()
+  resolution?: string;
+
+  @IsOptional()
+  @IsString()
+  verifyResult?: string;
+
+  @IsOptional()
+  @IsIn(['critical', 'high', 'normal', 'low'])
+  slaLevel?: 'critical' | 'high' | 'normal' | 'low';
+
+  @IsOptional()
   @IsArray()
   @IsMongoId({ each: true })
   watcherIds?: string[];
@@ -201,6 +225,14 @@ export class TransitionBugDto {
   @IsOptional()
   @IsString()
   dueAt?: string;
+
+  @IsOptional()
+  @IsString()
+  resolution?: string;
+
+  @IsOptional()
+  @IsString()
+  verifyResult?: string;
 }
 
 export class CreateBugFromRunDto {

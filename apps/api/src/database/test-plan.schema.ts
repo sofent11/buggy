@@ -23,6 +23,12 @@ export class TestRunItemEntity {
   @Prop({ type: String, default: '' })
   expectedResult!: string;
 
+  @Prop({ type: String, default: 'v1' })
+  caseVersion!: string;
+
+  @Prop({ type: Date })
+  caseUpdatedAt?: Date;
+
   @Prop({ type: String, required: true, default: 'untested' })
   status!: TestRunStatus;
 

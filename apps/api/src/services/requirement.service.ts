@@ -63,7 +63,8 @@ export class RequirementService {
       acceptanceStatus: dto.acceptanceStatus || 'not_ready',
       reviewerId: toObjectId(dto.reviewerId),
       larkWebhook: dto.larkWebhook || '',
-      tags: dto.tags || []
+      tags: dto.tags || [],
+      workflowHistory: [this.workflowEntry('created', undefined, dto.status || 'ready', user, '创建需求')]
     });
     await this.activities.record({
       projectId: idOf(row.projectId),
@@ -90,6 +91,10 @@ export class RequirementService {
         throw new BadRequestException(`需求未满足验收准入：${gate.issues.join('；')}`);
       }
     }
+    const previous = await this.requirements.findById(id);
+    if (!previous) throw new NotFoundException('需求不存在');
+    const previousStatus = previous.status;
+    const previousAcceptance = previous.acceptanceStatus;
     const row = await this.requirements.findByIdAndUpdate(
       id,
       {
@@ -106,13 +111,33 @@ export class RequirementService {
           ...(dto.acceptanceStatus !== undefined ? { acceptanceStatus: dto.acceptanceStatus } : {}),
           ...(dto.reviewerId !== undefined ? { reviewerId: toObjectId(dto.reviewerId) } : {}),
           ...(dto.larkWebhook !== undefined ? { larkWebhook: dto.larkWebhook } : {}),
-          ...(dto.tags !== undefined ? { tags: dto.tags } : {})
+          ...(dto.tags !== undefined ? { tags: dto.tags } : {}),
+          ...(dto.reportSignoffStatus !== undefined ? {
+            reportSignoff: {
+              status: dto.reportSignoffStatus,
+              signerId: user?.id,
+              signerName: user?.username,
+              note: dto.reportSignoffNote || '',
+              signedAt: new Date().toISOString()
+            }
+          } : {})
         }
       },
       { new: true }
     );
     if (!row) throw new NotFoundException('需求不存在');
     row.qualityGateResult = await this.qualityGate(id);
+    const history: Array<{ id: string; action: string; fromStatus?: string; toStatus?: string; operatorId?: string; operatorName?: string; note?: string; createdAt: string }> = [];
+    if (dto.status && dto.status !== previousStatus) {
+      history.push(this.workflowEntry('status_changed', previousStatus, dto.status, user, dto.riskNote || dto.description || '状态更新'));
+    }
+    if (dto.acceptanceStatus && dto.acceptanceStatus !== previousAcceptance) {
+      history.push(this.workflowEntry('acceptance_changed', previousAcceptance, dto.acceptanceStatus, user, dto.riskNote || '验收状态更新'));
+    }
+    if (dto.reportSignoffStatus !== undefined) {
+      history.push(this.workflowEntry('report_signoff', previous.reportSignoff?.status, dto.reportSignoffStatus, user, dto.reportSignoffNote || '报告签核'));
+    }
+    if (history.length) row.workflowHistory = [...(row.workflowHistory || []), ...history];
     await row.save();
     await this.activities.record({
       projectId: idOf(row.projectId),
@@ -180,9 +205,39 @@ export class RequirementService {
       reviewerId: row.reviewerId ? idOf(row.reviewerId) : undefined,
       larkWebhook: row.larkWebhook,
       tags: row.tags,
+      workflowHistory: this.normalizeWorkflow(row.workflowHistory || []),
+      reportSignoff: row.reportSignoff,
       createdAt: row.createdAt?.toISOString(),
       updatedAt: row.updatedAt?.toISOString()
     };
+  }
+
+  private workflowEntry(action: string, fromStatus?: string, toStatus?: string, user?: SessionUser, note?: string) {
+    return {
+      id: new Types.ObjectId().toString(),
+      action,
+      fromStatus,
+      toStatus,
+      operatorId: user?.id,
+      operatorName: user?.username,
+      note,
+      createdAt: new Date().toISOString()
+    };
+  }
+
+  private normalizeWorkflow(rows: Array<{ id?: string; action?: string; fromStatus?: string; toStatus?: string; operatorId?: string; operatorName?: string; note?: string; createdAt?: string }>) {
+    return rows
+      .map((row) => ({
+        id: String(row.id || new Types.ObjectId()),
+        action: String(row.action || 'updated'),
+        fromStatus: row.fromStatus,
+        toStatus: row.toStatus,
+        operatorId: row.operatorId,
+        operatorName: row.operatorName,
+        note: row.note,
+        createdAt: String(row.createdAt || new Date().toISOString())
+      }))
+      .filter((row) => row.action);
   }
 
   private sortOf(sortBy?: string, sortOrder?: 'asc' | 'desc'): Record<string, 1 | -1> {

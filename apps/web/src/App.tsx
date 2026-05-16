@@ -53,6 +53,7 @@ export function App() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [savedViewOpen, setSavedViewOpen] = useState(false);
+  const [appliedUrlViewKey, setAppliedUrlViewKey] = useState('');
   const [tabFilters, setTabFilters] = useState<TabFilters>({});
   const currentProject = useMemo(
     () => projects.find((project) => project.id === currentProjectId),
@@ -204,6 +205,15 @@ export function App() {
       window.dispatchEvent(new CustomEvent('buggy:apply-view', { detail: { tab: view.tab, filters } }));
     }, 0);
   }, []);
+
+  useEffect(() => {
+    const viewKey = new URL(window.location.href).searchParams.get('view');
+    if (!viewKey || !currentProject || data.savedViews.length === 0 || appliedUrlViewKey === viewKey) return;
+    const view = data.savedViews.find((item) => item.id === viewKey || item.name === viewKey);
+    if (!view) return;
+    setAppliedUrlViewKey(viewKey);
+    applySavedView(view);
+  }, [appliedUrlViewKey, applySavedView, currentProject, data.savedViews]);
 
   const dashboard = useMemo(() => {
     const report = data.report;
@@ -377,6 +387,14 @@ export function App() {
           </div>
         </section>
 
+        {globalKeyword && (
+          <section className="active-filter-bar" aria-label="当前全局筛选">
+            <span>全局条件</span>
+            <strong>{globalKeyword}</strong>
+            <button type="button" onClick={() => setGlobalKeyword('')}>清除</button>
+          </section>
+        )}
+
         {notice && <div className="notice">{notice}</div>}
 
         {!currentProject && tab !== 'projects' ? (
@@ -497,6 +515,7 @@ export function App() {
                 rows={visibleData.plans}
                 bugs={data.bugs}
                 users={data.users}
+                currentUser={user}
                 globalKeyword={deferredGlobalKeyword}
                 canWrite={canExecute}
                 canManage={canManageProject}
@@ -511,6 +530,7 @@ export function App() {
                 cases={data.cases}
                 plans={data.plans}
                 users={data.users}
+                projectMembers={currentProject.members}
                 rows={data.bugs}
                 globalKeyword={deferredGlobalKeyword}
                 canWrite={canWriteProject}
@@ -688,7 +708,7 @@ function SavedViewDialog(props: {
     <div className="confirm-layer" role="presentation">
       <section className="confirm-dialog saved-view-dialog" role="dialog" aria-modal="true" aria-label="保存视图">
         <h3>保存当前视图</h3>
-        <p>会保存当前模块的搜索、筛选、排序、页大小和列配置。</p>
+        <p>会保存当前模块真实支持的搜索、筛选、排序、页大小和列配置。</p>
         <label className="dialog-field">
           <span>覆盖已有视图</span>
           <select value={selectedId} onChange={(event) => setSelectedId(event.target.value)}>
@@ -712,11 +732,11 @@ function SavedViewDialog(props: {
           <span>设为当前模块默认视图</span>
         </label>
         <div className="form-actions">
-          <Button type="button" onClick={() => {
+          <Button type="button" disabled={!selectedId} onClick={() => {
             const url = new URL(window.location.href);
-            url.searchParams.set('view', selectedId || name.trim());
+            url.searchParams.set('view', selectedId);
             void navigator.clipboard?.writeText(url.toString());
-          }}>复制链接</Button>
+          }}>复制已有视图链接</Button>
           {selectedId && <Button type="button" variant="destructive" onClick={async () => {
             await props.onDelete(selectedId);
             setSelectedId('');

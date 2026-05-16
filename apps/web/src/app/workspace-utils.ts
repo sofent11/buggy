@@ -126,6 +126,9 @@ export function testCasePayload(form: FormData, projectId: string): Partial<Test
     reviewStatus: text(form, 'reviewStatus') as never,
     automationStatus: text(form, 'automationStatus') as never,
     ownerId: text(form, 'ownerId') || undefined,
+    reviewerId: text(form, 'reviewerId') || undefined,
+    changeSummary: text(form, 'changeSummary'),
+    baselineVersion: text(form, 'baselineVersion') || undefined,
     tags: text(form, 'tags')
       .split(',')
       .map((item) => item.trim())
@@ -152,6 +155,7 @@ export function parseSteps(value: string, fallbackAction = '', fallbackExpected 
 }
 
 export function bugPayload(form: FormData, projectId: string): Partial<Bug> {
+  const watcherValues = form.getAll('watcherIds').map(String).filter(Boolean);
   return {
     projectId,
     requirementId: text(form, 'requirementId') || undefined,
@@ -172,11 +176,14 @@ export function bugPayload(form: FormData, projectId: string): Partial<Bug> {
     foundVersion: text(form, 'foundVersion'),
     fixVersion: text(form, 'fixVersion'),
     rootCause: text(form, 'rootCause'),
+    resolution: text(form, 'resolution'),
+    verifyResult: text(form, 'verifyResult'),
+    slaLevel: text(form, 'slaLevel') as never,
     triageStatus: text(form, 'triageStatus') as never,
-    watcherIds: text(form, 'watcherIds')
+    watcherIds: (watcherValues.length ? watcherValues : text(form, 'watcherIds')
       .split(',')
       .map((item) => item.trim())
-      .filter(Boolean)
+      .filter(Boolean))
   };
 }
 
