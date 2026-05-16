@@ -1820,6 +1820,8 @@ tr:last-child td {
   color: var(--text);
   border-right: 1px solid var(--line);
   box-shadow: 8px 0 30px rgba(23, 105, 255, 0.06);
+  gap: 18px;
+  padding: 18px 14px 16px;
 }
 
 .brand-mark {
@@ -1843,6 +1845,19 @@ tr:last-child td {
   gap: 8px;
   border-radius: 8px;
   background: transparent;
+  align-items: center;
+  height: 44px;
+  min-height: 44px;
+  padding: 0 14px;
+}
+
+.sidebar nav {
+  align-content: start;
+  gap: 8px;
+}
+
+.sidebar-footer {
+  gap: 8px;
 }
 
 .sidebar button.active,
