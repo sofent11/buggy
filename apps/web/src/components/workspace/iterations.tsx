@@ -41,7 +41,7 @@ export function IterationSection(props: {
     >
       <Toolbar>
         <SearchBox value={keyword} onChange={setKeyword} placeholder="搜索迭代目标" />
-        <Select value={status} onChange={setStatus} values={iterationStatuses} emptyLabel="全部状态" />
+        <Select value={status} onChange={setStatus} values={iterationStatuses} dictionaryType="iterationStatus" emptyLabel="全部状态" />
         <span className="toolbar-summary">{rows.length} / {props.rows.length} 个迭代</span>
         <button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建迭代</button>
       </Toolbar>
@@ -59,7 +59,7 @@ export function IterationSection(props: {
             return [
               <div className="cell-main"><strong>{row.name}</strong><span>{row.goal || '未设置目标'}</span></div>,
               dateRange(row.startDate, row.endDate),
-              <StatusBadge value={row.status} />,
+              <StatusBadge value={row.status} dictionaryType="iterationStatus" />,
               iterationRequirements.length,
               (props.cases || []).filter((item) => item.requirementId && requirementIds.has(item.requirementId)).length,
               `${passed}/${runItems.length}`,
@@ -82,7 +82,13 @@ export function IterationSection(props: {
           ))}
         </aside>
       </div>
-      {rows.length === 0 && <EmptyState text="暂无迭代" />}
+      {rows.length === 0 && (
+        <EmptyState
+          text="暂无迭代"
+          detail="迭代用于汇总需求、执行计划和阶段风险。"
+          action={<button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建迭代</button>}
+        />
+      )}
       <IterationDrawer
         title="新建迭代"
         open={creating}
@@ -128,7 +134,7 @@ export function IterationDrawer(props: { title: string; row?: Iteration; open: b
               <Field><FieldLabel>开始日期</FieldLabel><Input {...register('startDate')} type="date" /></Field>
               <Field><FieldLabel>结束日期</FieldLabel><Input {...register('endDate')} type="date" /></Field>
             </div>
-            <Field><FieldLabel>状态</FieldLabel><Select name="status" register={register} values={iterationStatuses} defaultValue={props.row?.status || 'planning'} /></Field>
+            <Field><FieldLabel>状态</FieldLabel><Select name="status" register={register} values={iterationStatuses} dictionaryType="iterationStatus" defaultValue={props.row?.status || 'planning'} /></Field>
             <FormActions>
               <Button type="button" onClick={props.onClose}>取消</Button>
               <Button variant="primary"><Save size={15} /> 保存</Button>
@@ -139,4 +145,3 @@ export function IterationDrawer(props: { title: string; row?: Iteration; open: b
     </Drawer>
   );
 }
-

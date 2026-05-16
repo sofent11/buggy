@@ -56,6 +56,10 @@ export class CreateBugDto {
   @IsOptional()
   @IsMongoId()
   assigneeId?: string;
+
+  @IsOptional()
+  @IsMongoId()
+  duplicateOfId?: string;
 }
 
 export class UpdateBugDto {
@@ -114,6 +118,10 @@ export class UpdateBugDto {
   @IsOptional()
   @IsMongoId()
   assigneeId?: string;
+
+  @IsOptional()
+  @IsMongoId()
+  duplicateOfId?: string;
 }
 
 export class CreateBugFromRunDto {
@@ -146,4 +154,20 @@ export class CreateBugFromRunDto {
   @IsOptional()
   @IsMongoId()
   assigneeId?: string;
+}
+
+export class AddBugCommentDto {
+  @IsString()
+  @MinLength(1)
+  body!: string;
+}
+
+export class AddBugAttachmentDto {
+  @IsString()
+  @MinLength(1)
+  name!: string;
+
+  @IsString()
+  @MinLength(1)
+  url!: string;
 }

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { ClipboardCheck, Pencil, Plus, Save } from 'lucide-react';
-import type { Requirement, TestCase } from '@buggy/shared-types';
+import type { Bug, Requirement, TestCase, TestPlan } from '@buggy/shared-types';
 import type { UseFormRegister } from 'react-hook-form';
 import { api } from '../../api.js';
 import { Button } from '../ui/button.js';
@@ -15,6 +15,8 @@ import { DataPage, DataTable, DangerButton, Drawer, EmptyState, HookForm, Metric
 export function CaseSection(props: {
   projectId: string;
   requirements: Requirement[];
+  plans?: TestPlan[];
+  bugs?: Bug[];
   rows: TestCase[];
   mutate: (action: () => Promise<unknown>, message: string) => Promise<void>;
 }) {
@@ -28,6 +30,20 @@ export function CaseSection(props: {
     [props.rows, requirementId, status, keyword]
   );
   const ready = props.rows.filter((row) => row.status === 'ready').length;
+  const runItemsByCase = useMemo(() => {
+    const map = new Map<string, { total: number; failed: number; passed: number; bugCount: number }>();
+    for (const plan of props.plans || []) {
+      for (const item of plan.runItems) {
+        const current = map.get(item.caseId) || { total: 0, failed: 0, passed: 0, bugCount: 0 };
+        current.total += 1;
+        if (item.status === 'failed') current.failed += 1;
+        if (item.status === 'passed') current.passed += 1;
+        current.bugCount += item.bugIds.length;
+        map.set(item.caseId, current);
+      }
+    }
+    return map;
+  }, [props.plans]);
 
   return (
     <DataPage
@@ -59,26 +75,36 @@ export function CaseSection(props: {
             <button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建用例</button>
           </Toolbar>
           <DataTable
-            headers={['用例', '需求', '步骤', '优先级', '状态', '更新时间', '操作']}
+            headers={['用例', '需求', '步骤', '执行覆盖', '关联 Bug', '优先级', '状态', '更新时间', '操作']}
             emptyText="暂无用例"
-            rows={rows.map((row) => [
-              <div className="cell-main"><strong>{row.title}</strong><span>{row.expectedResult || row.preconditions || '未填写预期结果'}</span></div>,
-              row.requirementId ? requirementTitle(props.requirements, row.requirementId) : '-',
-              row.steps.length,
-              <StatusBadge value={row.priority} />,
-              <select value={row.status} onChange={(event) => props.mutate(() => api.updateTestCase(row.id, { status: event.target.value as never }), '用例状态已更新')}>
-                {caseStatuses.map((item) => <option key={item} value={item}>{item}</option>)}
-              </select>,
-              shortDate(row.updatedAt),
-              <div className="row-actions">
-                <Button type="button" size="sm" onClick={() => setEditing(row)}><Pencil size={14} /> 详情</Button>
-                <DangerButton title={`删除用例「${row.title}」？`} onConfirm={() => props.mutate(() => api.deleteTestCase(row.id), '用例已删除')} />
-              </div>
-            ])}
+            rows={rows.map((row) => {
+              const runSummary = runItemsByCase.get(row.id);
+              const caseBugs = (props.bugs || []).filter((bug) => bug.testCaseId === row.id);
+              return [
+                <div className="cell-main"><strong>{row.title}</strong><span>{row.expectedResult || row.preconditions || '未填写预期结果'}</span></div>,
+                row.requirementId ? requirementTitle(props.requirements, row.requirementId) : '-',
+                row.steps.length,
+                runSummary ? `${runSummary.passed}/${runSummary.total} 通过 · ${runSummary.failed} 失败` : '未纳入计划',
+                caseBugs.length ? `${caseBugs.filter((bug) => !['verified', 'closed'].includes(bug.status)).length} 活跃 / ${caseBugs.length} 总数` : '-',
+                <StatusBadge value={row.priority} dictionaryType="priority" />,
+                <Select value={row.status} onChange={(value) => props.mutate(() => api.updateTestCase(row.id, { status: value as never }), '用例状态已更新')} values={caseStatuses} dictionaryType="testCaseStatus" />,
+                shortDate(row.updatedAt),
+                <div className="row-actions">
+                  <Button type="button" size="sm" onClick={() => setEditing(row)}><Pencil size={14} /> 详情</Button>
+                  <DangerButton title={`删除用例「${row.title}」？`} onConfirm={() => props.mutate(() => api.deleteTestCase(row.id), '用例已删除')} />
+                </div>
+              ];
+            })}
           />
         </div>
       </div>
-      {rows.length === 0 && <EmptyState text="暂无用例" />}
+      {rows.length === 0 && (
+        <EmptyState
+          text="暂无用例"
+          detail="先沉淀可执行用例，后续测试计划才能选择执行范围。"
+          action={<button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建用例</button>}
+        />
+      )}
       <TestCaseDrawer title="新建用例" open={creating} requirements={props.requirements} onClose={() => setCreating(false)} onSubmit={async (form) => {
         await props.mutate(() => api.createTestCase(testCasePayload(form, props.projectId)), '用例已创建');
         setCreating(false);
@@ -92,13 +118,13 @@ export function CaseSection(props: {
   );
 }
 
-export function TestCaseFields(props: { row?: TestCase; requirements: Requirement[]; register?: UseFormRegister<StringFormValues> }) {
+export function TestCaseFields(props: { row?: TestCase; requirements: Requirement[]; defaultRequirementId?: string; register?: UseFormRegister<StringFormValues> }) {
   return (
     <div className="field-grid">
       <Field className="span-two"><FieldLabel>用例标题</FieldLabel><Input {...registerField(props.register, 'title')} defaultValue={props.row?.title} required /></Field>
-      <Field><FieldLabel>绑定需求</FieldLabel><select {...registerField(props.register, 'requirementId')} defaultValue={props.row?.requirementId || ''}><option value="">不绑定需求</option>{props.requirements.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></Field>
-      <Field><FieldLabel>优先级</FieldLabel><Select name="priority" register={props.register} values={priorities} defaultValue={props.row?.priority || 'P2'} /></Field>
-      <Field><FieldLabel>状态</FieldLabel><Select name="status" register={props.register} values={caseStatuses} defaultValue={props.row?.status || 'ready'} /></Field>
+      <Field><FieldLabel>绑定需求</FieldLabel><select {...registerField(props.register, 'requirementId')} defaultValue={props.row?.requirementId || props.defaultRequirementId || ''}><option value="">不绑定需求</option>{props.requirements.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></Field>
+      <Field><FieldLabel>优先级</FieldLabel><Select name="priority" register={props.register} values={priorities} dictionaryType="priority" defaultValue={props.row?.priority || 'P2'} /></Field>
+      <Field><FieldLabel>状态</FieldLabel><Select name="status" register={props.register} values={caseStatuses} dictionaryType="testCaseStatus" defaultValue={props.row?.status || 'ready'} /></Field>
       <Field className="span-two"><FieldLabel>前置条件</FieldLabel><Input {...registerField(props.register, 'preconditions')} defaultValue={props.row?.preconditions} /></Field>
       <div className="span-four"><StepEditor initialSteps={props.row?.steps} /></div>
       <Field className="span-four"><FieldLabel>最终预期结果</FieldLabel><Textarea {...registerField(props.register, 'expectedResult')} defaultValue={props.row?.expectedResult} /></Field>
@@ -106,13 +132,13 @@ export function TestCaseFields(props: { row?: TestCase; requirements: Requiremen
   );
 }
 
-export function TestCaseDrawer(props: { title: string; row?: TestCase; open: boolean; requirements: Requirement[]; onClose: () => void; onSubmit: (form: FormData) => Promise<void> }) {
+export function TestCaseDrawer(props: { title: string; row?: TestCase; open: boolean; requirements: Requirement[]; defaultRequirementId?: string; onClose: () => void; onSubmit: (form: FormData) => Promise<void> }) {
   return (
     <Drawer title={props.title} subtitle={props.row?.title || '维护测试步骤、预期结果和优先级'} open={props.open} onClose={props.onClose}>
       <HookForm onSubmit={async (form) => props.onSubmit(form)}>
         {(register) => (
           <>
-            <TestCaseFields row={props.row} requirements={props.requirements} register={register} />
+            <TestCaseFields row={props.row} requirements={props.requirements} defaultRequirementId={props.defaultRequirementId} register={register} />
             <FormActions><Button type="button" onClick={props.onClose}>取消</Button><Button variant="primary"><Save size={15} /> 保存用例</Button></FormActions>
           </>
         )}
@@ -120,4 +146,3 @@ export function TestCaseDrawer(props: { title: string; row?: TestCase; open: boo
     </Drawer>
   );
 }
-

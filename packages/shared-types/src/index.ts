@@ -140,6 +140,31 @@ export interface TestPlan {
   updatedAt?: string;
 }
 
+export interface BugComment {
+  id: Id;
+  authorId?: Id;
+  authorName?: string;
+  body: string;
+  createdAt: string;
+}
+
+export interface BugAttachment {
+  id: Id;
+  name: string;
+  url: string;
+  createdAt: string;
+}
+
+export interface BugStatusHistory {
+  id: Id;
+  fromStatus?: BugStatus;
+  toStatus: BugStatus;
+  operatorId?: Id;
+  operatorName?: string;
+  note?: string;
+  createdAt: string;
+}
+
 export interface Bug {
   id: Id;
   projectId: Id;
@@ -157,6 +182,10 @@ export interface Bug {
   status: BugStatus;
   assigneeId?: Id;
   reporterId?: Id;
+  duplicateOfId?: Id;
+  comments?: BugComment[];
+  attachments?: BugAttachment[];
+  statusHistory?: BugStatusHistory[];
   createdAt?: string;
   updatedAt?: string;
 }
@@ -229,12 +258,29 @@ export interface PageResult<T> {
 }
 
 export const DEFAULT_DICTIONARIES: Record<string, DictionaryValue[]> = {
+  iterationStatus: [
+    { key: 'planning', label: '规划中', sort: 10, enabled: true, color: '#64748b' },
+    { key: 'active', label: '进行中', sort: 20, enabled: true, color: '#2563eb' },
+    { key: 'done', label: '已完成', sort: 30, enabled: true, color: '#16a34a' },
+    { key: 'archived', label: '已归档', sort: 40, enabled: true, color: '#475569' }
+  ],
   requirementStatus: [
     { key: 'draft', label: '草稿', sort: 10, enabled: true, color: '#64748b' },
     { key: 'ready', label: '待测试', sort: 20, enabled: true, color: '#2563eb' },
     { key: 'testing', label: '测试中', sort: 30, enabled: true, color: '#d97706' },
     { key: 'done', label: '已完成', sort: 40, enabled: true, color: '#16a34a' },
     { key: 'blocked', label: '阻塞', sort: 50, enabled: true, color: '#dc2626' }
+  ],
+  testCaseStatus: [
+    { key: 'draft', label: '草稿', sort: 10, enabled: true, color: '#64748b' },
+    { key: 'ready', label: '待测试', sort: 20, enabled: true, color: '#16a34a' },
+    { key: 'deprecated', label: '已废弃', sort: 30, enabled: true, color: '#dc2626' }
+  ],
+  testPlanStatus: [
+    { key: 'draft', label: '草稿', sort: 10, enabled: true, color: '#64748b' },
+    { key: 'active', label: '进行中', sort: 20, enabled: true, color: '#2563eb' },
+    { key: 'done', label: '已完成', sort: 30, enabled: true, color: '#16a34a' },
+    { key: 'archived', label: '已归档', sort: 40, enabled: true, color: '#475569' }
   ],
   testRunStatus: [
     { key: 'untested', label: '未测', sort: 10, enabled: true, color: '#64748b' },

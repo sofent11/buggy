@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { BarChart3, Save, Settings, Upload } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import type { Dictionary, ReportSummary, UserProfile } from '@buggy/shared-types';
-import { api, downloadUrl } from '../../api.js';
+import { api, downloadUrl, type ImportResult } from '../../api.js';
 import { Button } from '../ui/button.js';
 import { Input } from '../ui/input.js';
 import { Textarea } from '../ui/textarea.js';
@@ -69,6 +69,16 @@ export function ReportSection(props: { projectId: string; report: ReportSummary 
             </article>
           </div>
           <DataTable
+            headers={['需求', '状态', '用例覆盖', '关联 Bug']}
+            emptyText="暂无需求覆盖数据"
+            rows={(report.charts?.requirementCoverage || []).map((item) => [
+              item.title,
+              <StatusBadge value={item.status} dictionaryType="requirementStatus" />,
+              item.caseCount,
+              item.bugCount
+            ])}
+          />
+          <DataTable
             headers={['域', '核心指标', '明细']}
             rows={[
               ['需求', `${report.requirements.total} 个`, `完成 ${report.requirements.done}，测试中 ${report.requirements.testing}，阻塞 ${report.requirements.blocked}`],
@@ -91,6 +101,7 @@ export function SettingsSection(props: {
   mutate: (action: () => Promise<unknown>, message: string) => Promise<void>;
   mutateWithResult: <T>(action: () => Promise<T>, resolveMessage: (result: T) => string) => Promise<void>;
 }) {
+  const [lastImport, setLastImport] = useState<ImportResult | null>(null);
   return (
     <DataPage title="系统配置" icon={Settings}>
       <div className="cards two">
@@ -113,7 +124,10 @@ export function SettingsSection(props: {
               props.onNotice('请选择 Excel 文件');
               return;
             }
-            props.mutateWithResult(() => api.importXlsx(props.projectId, text(form, 'type'), file), (result) => importMessage(result));
+            await props.mutateWithResult(() => api.importXlsx(props.projectId, text(form, 'type'), file), (result) => {
+              setLastImport(result);
+              return importMessage(result);
+            });
           }}>
             <select name="type">
               <option value="requirements">需求</option>
@@ -124,6 +138,15 @@ export function SettingsSection(props: {
             <Input name="file" type="file" accept=".xlsx" />
             <Button variant="primary"><Upload size={15} /> 上传 Excel</Button>
           </form>
+          {lastImport && (
+            <div className="import-preview">
+              <strong>最近导入校验</strong>
+              <span>成功 {lastImport.imported} 行，失败 {lastImport.errors.length} 行</span>
+              {lastImport.errors.length > 0 && (
+                <DataTable headers={['行号', '问题']} rows={lastImport.errors.slice(0, 6).map((error) => [error.row, error.message])} />
+              )}
+            </div>
+          )}
         </article>
         <UserAdmin currentUser={props.currentUser} users={props.users} mutate={props.mutate} />
         <DictionaryEditor dictionaries={props.dictionaries} projectId={props.projectId} mutate={props.mutate} />
@@ -171,7 +194,10 @@ export function DictionaryEditor(props: { dictionaries: Dictionary[]; projectId:
         props.mutate(() => api.upsertDictionary({ type, projectId: props.projectId, values: parseDictionaryValues(text(form, 'values')) }), '字典已保存');
       }}>
         <select value={type} onChange={(event) => setType(event.target.value)}>
+          <option value="iterationStatus">迭代状态</option>
           <option value="requirementStatus">需求状态</option>
+          <option value="testCaseStatus">用例状态</option>
+          <option value="testPlanStatus">测试计划状态</option>
           <option value="testRunStatus">执行状态</option>
           <option value="bugStatus">Bug 状态</option>
           <option value="priority">优先级</option>
@@ -183,4 +209,3 @@ export function DictionaryEditor(props: { dictionaries: Dictionary[]; projectId:
     </article>
   );
 }
-

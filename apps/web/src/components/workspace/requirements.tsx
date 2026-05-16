@@ -9,8 +9,9 @@ import { Input } from '../ui/input.js';
 import { Textarea } from '../ui/textarea.js';
 import { priorities, requirementStatuses } from '../../app/constants.js';
 import type { StringFormValues } from '../../app/types.js';
-import { iterationName, matchKeyword, requirementPayload, shortDate, userName } from '../../app/workspace-utils.js';
+import { iterationName, matchKeyword, requirementPayload, shortDate, testCasePayload, userName } from '../../app/workspace-utils.js';
 import { DataPage, DataTable, DangerButton, Drawer, EmptyState, FilterChips, HookForm, MetricCard, registerField, SearchBox, Select, StatusBadge, Toolbar } from './common.js';
+import { TestCaseDrawer } from './cases.js';
 
 export function RequirementSection(props: {
   projectId: string;
@@ -26,6 +27,7 @@ export function RequirementSection(props: {
   const [ownerId, setOwnerId] = useState('');
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Requirement | null>(null);
+  const [caseRequirement, setCaseRequirement] = useState<Requirement | null>(null);
   const rows = useMemo(
     () => props.rows.filter((row) => (!status || row.status === status) && (!ownerId || row.ownerId === ownerId) && matchKeyword([row.title, row.description || '', row.priority], keyword)),
     [props.rows, keyword, status, ownerId]
@@ -47,7 +49,7 @@ export function RequirementSection(props: {
       <div className="status-tabs">
         <button className={!status ? 'active' : ''} type="button" onClick={() => setStatus('')}>全部</button>
         {requirementStatuses.map((item) => (
-          <button key={item} className={status === item ? 'active' : ''} type="button" onClick={() => setStatus(item)}>{item === 'ready' ? '待测试' : <StatusBadge value={item} />}</button>
+          <button key={item} className={status === item ? 'active' : ''} type="button" onClick={() => setStatus(item)}><StatusBadge value={item} dictionaryType="requirementStatus" /></button>
         ))}
       </div>
       <Toolbar>
@@ -70,21 +72,26 @@ export function RequirementSection(props: {
           <div className="cell-main"><strong>{row.title}</strong><span>{row.description || '未填写描述'}</span></div>,
           row.iterationId ? iterationName(props.iterations, row.iterationId) : '-',
           row.ownerId ? userName(props.users, row.ownerId) : '-',
-          <StatusBadge value={row.priority} />,
-          <select value={row.status} onChange={(event) => props.mutate(() => api.updateRequirement(row.id, { status: event.target.value as never }), '需求状态已更新')}>
-            {requirementStatuses.map((item) => <option key={item} value={item}>{item}</option>)}
-          </select>,
+          <StatusBadge value={row.priority} dictionaryType="priority" />,
+          <Select value={row.status} onChange={(value) => props.mutate(() => api.updateRequirement(row.id, { status: value as never }), '需求状态已更新')} values={requirementStatuses} dictionaryType="requirementStatus" />,
           (props.cases || []).filter((item) => item.requirementId === row.id).length,
           (props.bugs || []).filter((item) => item.requirementId === row.id).length,
           shortDate(row.updatedAt),
           <div className="row-actions">
             <Button type="button" size="sm" onClick={() => setEditing(row)}><Pencil size={14} /> 详情</Button>
+            <Button type="button" size="sm" onClick={() => setCaseRequirement(row)}><Plus size={14} /> 建用例</Button>
             <Button type="button" size="sm" onClick={() => props.mutate(() => api.sendLark(row.id), 'Lark 日报已发送')}><Send size={14} /> Lark</Button>
             <DangerButton title={`删除需求「${row.title}」？`} onConfirm={() => props.mutate(() => api.deleteRequirement(row.id), '需求已删除')} />
           </div>
         ])}
       />
-      {rows.length === 0 && <EmptyState text="暂无需求" />}
+      {rows.length === 0 && (
+        <EmptyState
+          text="暂无需求"
+          detail="先创建需求，再从需求行直接生成覆盖用例。"
+          action={<button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建需求</button>}
+        />
+      )}
       <RequirementDrawer title="新建需求" open={creating} iterations={props.iterations} users={props.users} onClose={() => setCreating(false)} onSubmit={async (form) => {
         await props.mutate(() => api.createRequirement(requirementPayload(form, props.projectId)), '需求已创建');
         setCreating(false);
@@ -94,6 +101,17 @@ export function RequirementSection(props: {
         await props.mutate(() => api.updateRequirement(editing.id, requirementPayload(form, props.projectId)), '需求已保存');
         setEditing(null);
       }} />
+      <TestCaseDrawer
+        title="从需求新建用例"
+        open={Boolean(caseRequirement)}
+        requirements={props.rows}
+        defaultRequirementId={caseRequirement?.id}
+        onClose={() => setCaseRequirement(null)}
+        onSubmit={async (form) => {
+          await props.mutate(() => api.createTestCase(testCasePayload(form, props.projectId)), '用例已从需求创建');
+          setCaseRequirement(null);
+        }}
+      />
     </DataPage>
   );
 }
@@ -104,8 +122,8 @@ export function RequirementFields(props: { row?: Requirement; iterations: Iterat
       <Field className="span-two"><FieldLabel>需求标题</FieldLabel><Input {...registerField(props.register, 'title')} defaultValue={props.row?.title} required /></Field>
       <Field><FieldLabel>绑定迭代</FieldLabel><select {...registerField(props.register, 'iterationId')} defaultValue={props.row?.iterationId || ''}><option value="">不绑定迭代</option>{props.iterations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
       <Field><FieldLabel>负责人</FieldLabel><select {...registerField(props.register, 'ownerId')} defaultValue={props.row?.ownerId || ''}><option value="">未指派负责人</option>{props.users.map((item) => <option key={item.id} value={item.id}>{item.username}</option>)}</select></Field>
-      <Field><FieldLabel>优先级</FieldLabel><Select name="priority" register={props.register} values={priorities} defaultValue={props.row?.priority || 'P2'} /></Field>
-      <Field><FieldLabel>状态</FieldLabel><Select name="status" register={props.register} values={requirementStatuses} defaultValue={props.row?.status || 'ready'} /></Field>
+      <Field><FieldLabel>优先级</FieldLabel><Select name="priority" register={props.register} values={priorities} dictionaryType="priority" defaultValue={props.row?.priority || 'P2'} /></Field>
+      <Field><FieldLabel>状态</FieldLabel><Select name="status" register={props.register} values={requirementStatuses} dictionaryType="requirementStatus" defaultValue={props.row?.status || 'ready'} /></Field>
       <Field className="span-two"><FieldLabel>Lark Webhook</FieldLabel><Input {...registerField(props.register, 'larkWebhook')} defaultValue={props.row?.larkWebhook} /></Field>
       <Field className="span-four"><FieldLabel>需求描述</FieldLabel><Textarea {...registerField(props.register, 'description')} defaultValue={props.row?.description} /></Field>
     </div>
@@ -126,4 +144,3 @@ export function RequirementDrawer(props: { title: string; row?: Requirement; ope
     </Drawer>
   );
 }
-

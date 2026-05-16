@@ -2536,3 +2536,157 @@ tbody tr:hover {
     display: grid;
   }
 }
+
+/* Product workflow upgrades. */
+.empty {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+}
+
+.empty strong {
+  color: var(--text);
+  font-size: 15px;
+}
+
+.empty span {
+  color: var(--muted);
+}
+
+.empty > div {
+  margin-top: 4px;
+}
+
+.step-result-editor,
+.bug-collab,
+.timeline-list,
+.attachment-list,
+.import-preview {
+  display: grid;
+  gap: 10px;
+}
+
+.step-result-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) 150px minmax(160px, 0.9fr);
+  gap: 8px;
+  align-items: start;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  padding: 10px;
+}
+
+.bug-collab {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.bug-collab section {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+  padding: 12px;
+}
+
+.timeline-list article {
+  display: grid;
+  gap: 3px;
+  border-left: 3px solid var(--primary);
+  background: white;
+  border-radius: 0 8px 8px 0;
+  padding: 9px 10px;
+}
+
+.timeline-list article span,
+.attachment-list span,
+.import-preview span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.timeline-list article p {
+  margin: 0;
+  color: var(--text);
+}
+
+.compact-timeline {
+  max-height: 180px;
+  overflow: auto;
+}
+
+.attachment-list a {
+  width: fit-content;
+  color: var(--primary);
+  font-weight: 750;
+}
+
+.import-preview {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+  padding: 10px;
+}
+
+@media (max-width: 720px) {
+  .app {
+    display: block;
+    padding-bottom: 78px;
+  }
+
+  .sidebar {
+    position: fixed;
+    top: auto;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 50;
+    height: auto;
+    display: block;
+    border-top: 1px solid var(--line);
+    border-right: 0;
+    padding: 7px 8px;
+    box-shadow: 0 -8px 26px rgba(16, 24, 40, 0.12);
+  }
+
+  .sidebar .brand,
+  .sidebar-footer {
+    display: none;
+  }
+
+  .sidebar nav {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+
+  .sidebar button {
+    min-width: 68px;
+    height: 52px;
+    min-height: 52px;
+    grid-template-columns: 1fr;
+    justify-items: center;
+    gap: 3px;
+    padding: 5px 8px;
+    font-size: 12px;
+  }
+
+  .sidebar button > span:last-child {
+    display: block;
+  }
+
+  .nav-index {
+    display: none;
+  }
+
+  .workspace {
+    padding-bottom: 20px;
+  }
+
+  .step-result-row {
+    grid-template-columns: 1fr;
+  }
+}

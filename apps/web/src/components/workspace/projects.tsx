@@ -71,7 +71,13 @@ export function ProjectSection(props: {
           </div>
         ])}
       />
-      {filtered.length === 0 && <EmptyState text="暂无项目" />}
+      {filtered.length === 0 && (
+        <EmptyState
+          text="暂无项目"
+          detail="创建第一个项目后即可维护成员、需求、用例与缺陷。"
+          action={<button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建项目</button>}
+        />
+      )}
       <ProjectDrawer
         title="新建项目"
         open={creating}

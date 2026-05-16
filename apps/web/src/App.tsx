@@ -25,12 +25,15 @@ import { Input } from './components/ui/input.js';
 import { Textarea } from './components/ui/textarea.js';
 import { emptyData, LOGGED_OUT_KEY } from './app/constants.js';
 import type { AuthFormValues, Tab, WorkspaceData } from './app/types.js';
-import { filterWorkspaceData } from './app/workspace-utils.js';
+import { filterWorkspaceData, pageInfo } from './app/workspace-utils.js';
 import { labelOf } from './labels.js';
 import { NavButton } from './components/workspace/common.js';
+import { DictionaryProvider } from './components/workspace/dictionary.js';
 import { HelpCenter } from './components/workspace/help.js';
-import { RecentWork, RiskBoard } from './components/workspace/overview.js';
+import { MyTodo, RecentWork, RiskBoard, TraceabilityMatrix } from './components/workspace/overview.js';
 import { BugSection, CaseSection, IterationSection, PlanSection, ProjectSection, ReportSection, RequirementSection, SettingsSection } from './components/workspace/sections.js';
+
+const LAST_PROJECT_KEY = 'buggy_last_project_id';
 
 export function App() {
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -55,8 +58,10 @@ export function App() {
 
   const loadProjects = useCallback(async () => {
     const rows = await api.projects();
+    const nextProjectId = await chooseDefaultProject(rows);
     setProjects(rows);
-    setCurrentProjectId((prev) => (prev && rows.some((item) => item.id === prev) ? prev : rows[0]?.id || ''));
+    setCurrentProjectId(nextProjectId);
+    if (nextProjectId) localStorage.setItem(LAST_PROJECT_KEY, nextProjectId);
   }, []);
 
   const loadWorkspace = useCallback(async (projectId = currentProjectId) => {
@@ -143,6 +148,11 @@ export function App() {
     }
   }, []);
 
+  const selectProject = useCallback((projectId: string) => {
+    setCurrentProjectId(projectId);
+    if (projectId) localStorage.setItem(LAST_PROJECT_KEY, projectId);
+  }, []);
+
   useEffect(() => {
     if (localStorage.getItem(LOGGED_OUT_KEY) === '1') {
       setLoading(false);
@@ -178,6 +188,7 @@ export function App() {
     ];
   }, [data.report]);
   const visibleData = useMemo(() => filterWorkspaceData(data, deferredGlobalKeyword), [data, deferredGlobalKeyword]);
+  const page = pageInfo(tab);
 
   if (loading) return <div className="boot">正在启动 Buggy...</div>;
 
@@ -254,6 +265,7 @@ export function App() {
         </div>
       </aside>
 
+      <DictionaryProvider dictionaries={data.dictionaries}>
       <section className="workspace">
         <header className="topbar">
           <label className="global-search" aria-label="全局搜索">
@@ -267,7 +279,7 @@ export function App() {
           <div className="top-actions">
             <label className="project-switcher">
               <span>当前项目</span>
-              <select value={currentProjectId} onChange={(event) => setCurrentProjectId(event.target.value)}>
+              <select value={currentProjectId} onChange={(event) => selectProject(event.target.value)}>
                 <option value="">选择项目</option>
                 {projects.map((project) => (
                   <option key={project.id} value={project.id}>
@@ -286,6 +298,14 @@ export function App() {
             <span className="user-pill">{user.username} · {labelOf(user.role)}</span>
           </div>
         </header>
+
+        <section className="page-title">
+          <div>
+            <p className="eyebrow">{currentProject?.code || 'Buggy'}</p>
+            <h1>{page.title}</h1>
+            <p>{page.description(currentProject?.name || '当前项目')}</p>
+          </div>
+        </section>
 
         <section className="workspace-context" aria-label="当前工作区">
           <div className="context-primary">
@@ -319,7 +339,7 @@ export function App() {
             searchKeyword={globalKeyword}
             currentProjectId={currentProjectId}
             users={data.users}
-            onSelect={setCurrentProjectId}
+            onSelect={selectProject}
             onNotice={setNotice}
             mutate={mutate}
           />
@@ -336,6 +356,8 @@ export function App() {
                   </article>
                 ))}
                 <RecentWork data={visibleData} />
+                <MyTodo data={data} user={user} />
+                <TraceabilityMatrix data={data} />
                 <section className="panel wide">
                   <h2>项目风险</h2>
                   <RiskBoard report={data.report} />
@@ -349,7 +371,7 @@ export function App() {
                 searchKeyword={globalKeyword}
                 currentProjectId={currentProjectId}
                 users={data.users}
-                onSelect={setCurrentProjectId}
+                onSelect={selectProject}
                 onNotice={setNotice}
                 mutate={mutate}
               />
@@ -380,6 +402,8 @@ export function App() {
               <CaseSection
                 projectId={currentProject.id}
                 requirements={data.requirements}
+                plans={data.plans}
+                bugs={data.bugs}
                 rows={visibleData.cases}
                 mutate={mutate}
               />
@@ -422,6 +446,7 @@ export function App() {
           </>
         )}
       </section>
+      </DictionaryProvider>
       <HelpCenter
         open={helpOpen}
         onClose={() => setHelpOpen(false)}
@@ -432,4 +457,29 @@ export function App() {
       />
     </main>
   );
+}
+
+async function chooseDefaultProject(rows: Project[]) {
+  const remembered = localStorage.getItem(LAST_PROJECT_KEY);
+  if (remembered && rows.some((item) => item.id === remembered)) return remembered;
+  if (rows.length <= 1) return rows[0]?.id || '';
+  const scored = await Promise.all(
+    rows.map(async (project) => {
+      try {
+        const report = await api.report(project.id);
+        return {
+          id: project.id,
+          score:
+            report.requirements.total +
+            report.cases.total +
+            report.bugs.total +
+            report.execution.total * 2 +
+            report.bugs.active * 3
+        };
+      } catch {
+        return { id: project.id, score: 0 };
+      }
+    })
+  );
+  return scored.reduce((best, item) => (item.score > best.score ? item : best), scored[0])?.id || rows[0]?.id || '';
 }

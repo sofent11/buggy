@@ -1,8 +1,8 @@
-import type { Project, ReportSummary } from '@buggy/shared-types';
+import type { Project, ReportSummary, UserProfile } from '@buggy/shared-types';
 import { labelOf } from '../../labels.js';
 import type { Tab, WorkspaceData } from '../../app/types.js';
 import { rate } from '../../app/workspace-utils.js';
-import { EmptyState, Table } from './common.js';
+import { DataTable, EmptyState, StatusBadge, Table } from './common.js';
 
 export function RecentWork(props: { data: WorkspaceData }) {
   return (
@@ -29,6 +29,48 @@ export function RiskBoard(props: { report: ReportSummary | null }) {
     report.requirements.blocked > 0 ? `有 ${report.requirements.blocked} 个阻塞需求` : '暂无阻塞需求'
   ];
   return <div className="risk-list">{items.map((item) => <span key={item}>{item}</span>)}</div>;
+}
+
+export function MyTodo(props: { data: WorkspaceData; user: UserProfile }) {
+  const failedItems = props.data.plans.flatMap((plan) => plan.runItems.filter((item) => item.status === 'failed').map((item) => ({ plan, item })));
+  const untestedItems = props.data.plans.flatMap((plan) => plan.runItems.filter((item) => item.status === 'untested').map((item) => ({ plan, item })));
+  const assignedBugs = props.data.bugs.filter((bug) => bug.assigneeId === props.user.id && !['verified', 'closed'].includes(bug.status));
+  const blockedRequirements = props.data.requirements.filter((requirement) => requirement.status === 'blocked');
+  const rows = [
+    ...failedItems.slice(0, 4).map(({ plan, item }) => ['执行失败', item.caseTitle, plan.name, <StatusBadge value={item.status} dictionaryType="testRunStatus" />]),
+    ...untestedItems.slice(0, 4).map(({ plan, item }) => ['待执行', item.caseTitle, plan.name, <StatusBadge value={item.status} dictionaryType="testRunStatus" />]),
+    ...assignedBugs.slice(0, 4).map((bug) => ['指派给我', bug.title, bug.actualResult || '待处理', <StatusBadge value={bug.status} dictionaryType="bugStatus" />]),
+    ...blockedRequirements.slice(0, 4).map((requirement) => ['阻塞需求', requirement.title, requirement.description || '需要解除阻塞', <StatusBadge value={requirement.status} dictionaryType="requirementStatus" />])
+  ];
+  return (
+    <section className="panel wide">
+      <h2>我的待办</h2>
+      {rows.length > 0 ? <DataTable headers={['类型', '对象', '上下文', '状态']} rows={rows} /> : <EmptyState text="暂无待办" detail="失败执行项、指派 Bug 和阻塞需求会聚合到这里。" />}
+    </section>
+  );
+}
+
+export function TraceabilityMatrix(props: { data: WorkspaceData }) {
+  const rows = props.data.requirements.map((requirement) => {
+    const cases = props.data.cases.filter((testCase) => testCase.requirementId === requirement.id);
+    const caseIds = new Set(cases.map((testCase) => testCase.id));
+    const runItems = props.data.plans.flatMap((plan) => plan.runItems.filter((item) => caseIds.has(item.caseId)));
+    const activeBugs = props.data.bugs.filter((bug) => bug.requirementId === requirement.id && !['verified', 'closed'].includes(bug.status));
+    const passed = runItems.filter((item) => item.status === 'passed').length;
+    return [
+      requirement.title,
+      <StatusBadge value={requirement.status} dictionaryType="requirementStatus" />,
+      `${cases.length} 条`,
+      runItems.length ? `${passed}/${runItems.length} 通过` : '未执行',
+      activeBugs.length ? `${activeBugs.length} 活跃` : '无活跃 Bug'
+    ];
+  });
+  return (
+    <section className="panel wide">
+      <h2>需求追踪矩阵</h2>
+      {rows.length > 0 ? <DataTable headers={['需求', '状态', '用例覆盖', '执行结果', '缺陷风险']} rows={rows} /> : <EmptyState text="暂无追踪数据" detail="创建需求和用例后，这里会显示覆盖与风险。" />}
+    </section>
+  );
 }
 
 export function PageInsights(props: {

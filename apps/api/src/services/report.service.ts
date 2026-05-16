@@ -126,6 +126,9 @@ export class ReportService {
 
   async html(query: ListQueryDto): Promise<string> {
     const summary = await this.summary(query);
+    const coverageRows = (summary.charts?.requirementCoverage || [])
+      .map((item) => `<tr><td>${escapeHtml(item.title)}</td><td>${this.labelOf(item.status)}</td><td>${item.caseCount}</td><td>${item.bugCount}</td></tr>`)
+      .join('');
     return `<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -155,6 +158,11 @@ export class ReportService {
     <tr><td>执行</td><td>通过 / 失败 / 阻塞 / 跳过 / 未测</td><td>${summary.execution.passed} / ${summary.execution.failed} / ${summary.execution.blocked} / ${summary.execution.skipped} / ${summary.execution.untested}</td></tr>
     <tr><td>Bug</td><td>新建 / 处理中 / 已解决 / 已验证 / 已关闭 / 重开</td><td>${summary.bugs.open} / ${summary.bugs.inProgress} / ${summary.bugs.resolved} / ${summary.bugs.verified} / ${summary.bugs.closed} / ${summary.bugs.reopened}</td></tr>
     <tr><td>需求</td><td>测试中 / 已完成 / 阻塞</td><td>${summary.requirements.testing} / ${summary.requirements.done} / ${summary.requirements.blocked}</td></tr>
+  </table>
+  <h2>需求覆盖与风险</h2>
+  <table>
+    <tr><th>需求</th><th>状态</th><th>用例覆盖</th><th>关联 Bug</th></tr>
+    ${coverageRows || '<tr><td colspan="4">暂无需求覆盖数据</td></tr>'}
   </table>
 </body>
 </html>`;
@@ -203,6 +211,11 @@ export class ReportService {
       verified: '已验证',
       closed: '已关闭',
       reopened: '重新打开',
+      draft: '草稿',
+      ready: '待测试',
+      testing: '测试中',
+      done: '已完成',
+      blocked: '阻塞',
       S0: 'S0 致命',
       S1: 'S1 严重',
       S2: 'S2 一般',
@@ -210,4 +223,17 @@ export class ReportService {
     };
     return labels[value] || value;
   }
+}
+
+function escapeHtml(value: string) {
+  return value.replace(/[&<>"']/g, (char) => {
+    const entities: Record<string, string> = {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;'
+    };
+    return entities[char] || char;
+  });
 }

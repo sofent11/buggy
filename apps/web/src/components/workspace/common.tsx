@@ -8,10 +8,10 @@ import { Card, CardContent, CardHeader as UiCardHeader, CardTitle } from '../ui/
 import { Sheet, SheetBody, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetX } from '../ui/sheet.js';
 import { Input } from '../ui/input.js';
 import { Textarea } from '../ui/textarea.js';
-import { labelOf } from '../../labels.js';
 import { downloadUrl } from '../../api.js';
 import { badgeTone, formDataFromValues } from '../../app/workspace-utils.js';
 import type { StringFormValues, Tab } from '../../app/types.js';
+import { dictionaryLabel, dictionaryStyle, useDictionaryOptions, useDictionaryValue } from './dictionary.js';
 
 export function NavButton(props: { tab: Tab; current: Tab; label: string; icon: typeof FolderKanban; index?: number; onClick: (tab: Tab) => void }) {
   return (
@@ -57,7 +57,11 @@ export function HookForm(props: {
   return (
     <form
       className={props.className || 'drawer-form'}
-      onSubmit={form.handleSubmit(async (values) => props.onSubmit(formDataFromValues(values), values))}
+      onSubmit={form.handleSubmit(async (values, event) => {
+        const domForm = event?.currentTarget instanceof HTMLFormElement ? new FormData(event.currentTarget) : formDataFromValues(values);
+        Object.entries(values).forEach(([key, value]) => domForm.set(key, value ?? ''));
+        await props.onSubmit(domForm, values);
+      })}
     >
       {props.children(form.register)}
     </form>
@@ -123,12 +127,14 @@ export function Select<T extends readonly string[]>(props: {
   name?: string;
   register?: UseFormRegister<StringFormValues>;
   values: T;
+  dictionaryType?: string;
   defaultValue?: T[number] | string;
   value?: string;
   onChange?: (value: string) => void;
   emptyLabel?: string;
 }) {
   const registered = props.name && props.register ? props.register(props.name) : undefined;
+  const options = useDictionaryOptions(props.dictionaryType, props.values);
   return (
     <select
       {...(registered || {})}
@@ -141,13 +147,18 @@ export function Select<T extends readonly string[]>(props: {
       }}
     >
       {props.emptyLabel && <option value="">{props.emptyLabel}</option>}
-      {props.values.map((value) => <option key={value} value={value}>{labelOf(value)}</option>)}
+      {options.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
     </select>
   );
 }
 
-export function StatusBadge(props: { value: string }) {
-  return <Badge className={`status-badge ${badgeTone(props.value)}`}>{labelOf(props.value)}</Badge>;
+export function StatusBadge(props: { value: string; dictionaryType?: string }) {
+  const value = useDictionaryValue(props.value, props.dictionaryType);
+  return (
+    <Badge className={`status-badge ${badgeTone(value?.label || props.value)}`} style={dictionaryStyle(value)}>
+      {dictionaryLabel(value, props.value)}
+    </Badge>
+  );
 }
 
 export function MetricCard(props: { label: string; value: string | number; detail?: string; tone?: 'good' | 'info' | 'risk' | 'neutral' }) {
@@ -272,8 +283,14 @@ export function DangerButton(props: { onConfirm?: () => void; title?: string; de
   );
 }
 
-export function EmptyState(props: { text: string }) {
-  return <Card className="empty">{props.text}</Card>;
+export function EmptyState(props: { text: string; action?: ReactNode; detail?: string }) {
+  return (
+    <Card className="empty">
+      <strong>{props.text}</strong>
+      {props.detail && <span>{props.detail}</span>}
+      {props.action && <div>{props.action}</div>}
+    </Card>
+  );
 }
 
 export function ExportLink(props: { projectId: string; type: string; label: string }) {

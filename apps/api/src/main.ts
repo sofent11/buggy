@@ -3,11 +3,11 @@ import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
 import multipart from '@fastify/multipart';
-import { AppModule } from './app.module.js';
 import { ApiExceptionFilter } from './shared/api-exception.filter.js';
 import { TransformInterceptor } from './shared/transform.interceptor.js';
 
 async function bootstrap() {
+  const { AppModule } = await import('./app.module.js');
   const app = await NestFactory.create<NestFastifyApplication>(AppModule, new FastifyAdapter());
   await app.register(multipart);
   app.setGlobalPrefix('api');

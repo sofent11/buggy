@@ -109,13 +109,16 @@ export const api = {
   createTestPlan: (body: Partial<TestPlan>) => request<TestPlan>('/test-plans', { method: 'POST', body: JSON.stringify(body) }),
   updateTestPlan: (id: string, body: Partial<TestPlan>) => request<TestPlan>(`/test-plans/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteTestPlan: (id: string) => request<{ deleted: true }>(`/test-plans/${id}`, { method: 'DELETE' }),
-  updateRunItem: (planId: string, runItemId: string, body: { status: string; actualResult?: string }) =>
+  updateRunItem: (planId: string, runItemId: string, body: { status: string; actualResult?: string; stepResults?: Array<{ stepId?: string; status: string; actualResult?: string }> }) =>
     request<TestPlan>(`/test-plans/${planId}/run-items/${runItemId}`, { method: 'PATCH', body: JSON.stringify(body) }),
 
   bugPage: (projectId: string, params?: ListParams) => request<PageResult<Bug>>(`/bugs${queryString({ projectId, ...params })}`),
   bugs: async (projectId: string, params?: ListParams) => itemsOf(await request<PageResult<Bug> | Bug[]>(`/bugs${queryString({ projectId, pageSize: 500, ...params })}`)),
   createBug: (body: Partial<Bug>) => request<Bug>('/bugs', { method: 'POST', body: JSON.stringify(body) }),
   updateBug: (id: string, body: Partial<Bug>) => request<Bug>(`/bugs/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  addBugComment: (id: string, body: string) => request<Bug>(`/bugs/${id}/comments`, { method: 'POST', body: JSON.stringify({ body }) }),
+  addBugAttachment: (id: string, attachment: { name: string; url: string }) =>
+    request<Bug>(`/bugs/${id}/attachments`, { method: 'POST', body: JSON.stringify(attachment) }),
   deleteBug: (id: string) => request<{ deleted: true }>(`/bugs/${id}`, { method: 'DELETE' }),
   createBugFromRun: (body: { testPlanId: string; runItemId: string; title: string; actualResult?: string }) =>
     request<Bug>('/bugs/from-run', { method: 'POST', body: JSON.stringify(body) }),

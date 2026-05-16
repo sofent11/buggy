@@ -50,6 +50,18 @@ export class BugEntity {
 
   @Prop({ type: SchemaTypes.ObjectId, ref: 'UserEntity' })
   reporterId?: Types.ObjectId;
+
+  @Prop({ type: SchemaTypes.ObjectId, ref: 'BugEntity' })
+  duplicateOfId?: Types.ObjectId;
+
+  @Prop({ type: [SchemaTypes.Mixed], default: [] })
+  comments!: Array<{ id: string; authorId?: string; authorName?: string; body: string; createdAt: string }>;
+
+  @Prop({ type: [SchemaTypes.Mixed], default: [] })
+  attachments!: Array<{ id: string; name: string; url: string; createdAt: string }>;
+
+  @Prop({ type: [SchemaTypes.Mixed], default: [] })
+  statusHistory!: Array<{ id: string; fromStatus?: BugStatus; toStatus: BugStatus; operatorId?: string; operatorName?: string; note?: string; createdAt: string }>;
 }
 
 export const BugSchema = SchemaFactory.createForClass(BugEntity);

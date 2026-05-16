@@ -1,10 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import type { Bug, PageResult } from '@buggy/shared-types';
+import type { Bug, BugAttachment, BugComment, BugStatusHistory, PageResult } from '@buggy/shared-types';
 import { BugEntity } from '../database/bug.schema.js';
 import { TestPlanEntity } from '../database/test-plan.schema.js';
-import type { CreateBugDto, CreateBugFromRunDto, UpdateBugDto } from '../dto/bug.dto.js';
+import type { AddBugAttachmentDto, AddBugCommentDto, CreateBugDto, CreateBugFromRunDto, UpdateBugDto } from '../dto/bug.dto.js';
 import type { ListQueryDto } from '../dto/common.dto.js';
 import { idOf, toObjectId } from '../shared/mongo.js';
 import type { SessionUser } from './auth.service.js';
@@ -46,6 +46,7 @@ export class BugService {
   }
 
   async create(dto: CreateBugDto, user: SessionUser): Promise<Bug> {
+    const status = dto.status || 'open';
     const row = await this.bugs.create({
       projectId: new Types.ObjectId(dto.projectId),
       iterationId: toObjectId(dto.iterationId),
@@ -59,9 +60,13 @@ export class BugService {
       actualResult: dto.actualResult || '',
       severity: dto.severity || 'S2',
       priority: dto.priority || 'P2',
-      status: dto.status || 'open',
+      status,
       assigneeId: toObjectId(dto.assigneeId),
-      reporterId: new Types.ObjectId(user.id)
+      reporterId: new Types.ObjectId(user.id),
+      duplicateOfId: toObjectId(dto.duplicateOfId),
+      comments: [],
+      attachments: [],
+      statusHistory: [this.statusHistoryEntry(undefined, status, user, '创建缺陷')]
     });
     if (dto.testPlanId && dto.runItemId) await this.testPlanService.appendBug(dto.testPlanId, dto.runItemId, idOf(row._id));
     return this.toDto(row);
@@ -93,27 +98,65 @@ export class BugService {
     return bug;
   }
 
-  async update(id: string, dto: UpdateBugDto): Promise<Bug> {
-    const row = await this.bugs.findByIdAndUpdate(
-      id,
-      {
-        $set: {
-          ...(dto.iterationId !== undefined ? { iterationId: toObjectId(dto.iterationId) } : {}),
-          ...(dto.requirementId !== undefined ? { requirementId: toObjectId(dto.requirementId) } : {}),
-          ...(dto.testCaseId !== undefined ? { testCaseId: toObjectId(dto.testCaseId) } : {}),
-          ...(dto.title !== undefined ? { title: dto.title } : {}),
-          ...(dto.reproduceSteps !== undefined ? { reproduceSteps: dto.reproduceSteps } : {}),
-          ...(dto.expectedResult !== undefined ? { expectedResult: dto.expectedResult } : {}),
-          ...(dto.actualResult !== undefined ? { actualResult: dto.actualResult } : {}),
-          ...(dto.severity !== undefined ? { severity: dto.severity } : {}),
-          ...(dto.priority !== undefined ? { priority: dto.priority } : {}),
-          ...(dto.status !== undefined ? { status: dto.status } : {}),
-          ...(dto.assigneeId !== undefined ? { assigneeId: toObjectId(dto.assigneeId) } : {})
-        }
-      },
-      { new: true }
-    );
+  async update(id: string, dto: UpdateBugDto, user?: SessionUser): Promise<Bug> {
+    const row = await this.bugs.findById(id);
     if (!row) throw new NotFoundException('Bug 不存在');
+    const previousStatus = row.status;
+    if (dto.iterationId !== undefined) row.iterationId = toObjectId(dto.iterationId);
+    if (dto.requirementId !== undefined) row.requirementId = toObjectId(dto.requirementId);
+    if (dto.testCaseId !== undefined) row.testCaseId = toObjectId(dto.testCaseId);
+    if (dto.testPlanId !== undefined) row.testPlanId = toObjectId(dto.testPlanId);
+    if (dto.runItemId !== undefined) row.runItemId = toObjectId(dto.runItemId);
+    if (dto.title !== undefined) row.title = dto.title;
+    if (dto.reproduceSteps !== undefined) row.reproduceSteps = dto.reproduceSteps;
+    if (dto.expectedResult !== undefined) row.expectedResult = dto.expectedResult;
+    if (dto.actualResult !== undefined) row.actualResult = dto.actualResult;
+    if (dto.severity !== undefined) row.severity = dto.severity;
+    if (dto.priority !== undefined) row.priority = dto.priority;
+    if (dto.status !== undefined) row.status = dto.status;
+    if (dto.assigneeId !== undefined) row.assigneeId = toObjectId(dto.assigneeId);
+    if (dto.duplicateOfId !== undefined) row.duplicateOfId = toObjectId(dto.duplicateOfId);
+    if (dto.status && dto.status !== previousStatus) {
+      row.statusHistory = [
+        ...(row.statusHistory || []),
+        this.statusHistoryEntry(previousStatus, dto.status, user, '状态更新')
+      ];
+    }
+    await row.save();
+    if (dto.testPlanId && dto.runItemId) await this.testPlanService.appendBug(dto.testPlanId, dto.runItemId, id);
+    return this.toDto(row);
+  }
+
+  async addComment(id: string, dto: AddBugCommentDto, user: SessionUser): Promise<Bug> {
+    const row = await this.bugs.findById(id);
+    if (!row) throw new NotFoundException('Bug 不存在');
+    row.comments = [
+      ...(row.comments || []),
+      {
+        id: new Types.ObjectId().toString(),
+        authorId: user.id,
+        authorName: user.username,
+        body: dto.body.trim(),
+        createdAt: new Date().toISOString()
+      }
+    ];
+    await row.save();
+    return this.toDto(row);
+  }
+
+  async addAttachment(id: string, dto: AddBugAttachmentDto): Promise<Bug> {
+    const row = await this.bugs.findById(id);
+    if (!row) throw new NotFoundException('Bug 不存在');
+    row.attachments = [
+      ...(row.attachments || []),
+      {
+        id: new Types.ObjectId().toString(),
+        name: dto.name.trim(),
+        url: dto.url.trim(),
+        createdAt: new Date().toISOString()
+      }
+    ];
+    await row.save();
     return this.toDto(row);
   }
 
@@ -146,9 +189,62 @@ export class BugService {
       status: row.status,
       assigneeId: row.assigneeId ? idOf(row.assigneeId) : undefined,
       reporterId: row.reporterId ? idOf(row.reporterId) : undefined,
+      duplicateOfId: row.duplicateOfId ? idOf(row.duplicateOfId) : undefined,
+      comments: this.normalizeComments(row.comments || []),
+      attachments: this.normalizeAttachments(row.attachments || []),
+      statusHistory: this.normalizeStatusHistory(row.statusHistory || []),
       createdAt: row.createdAt?.toISOString(),
       updatedAt: row.updatedAt?.toISOString()
     };
+  }
+
+  private statusHistoryEntry(fromStatus: Bug['status'] | undefined, toStatus: Bug['status'], user?: SessionUser, note?: string): BugStatusHistory {
+    return {
+      id: new Types.ObjectId().toString(),
+      fromStatus,
+      toStatus,
+      operatorId: user?.id,
+      operatorName: user?.username,
+      note,
+      createdAt: new Date().toISOString()
+    };
+  }
+
+  private normalizeComments(rows: Array<Partial<BugComment>>): BugComment[] {
+    return rows
+      .map((row) => ({
+        id: String(row.id || new Types.ObjectId()),
+        authorId: row.authorId,
+        authorName: row.authorName,
+        body: String(row.body || ''),
+        createdAt: String(row.createdAt || new Date().toISOString())
+      }))
+      .filter((row) => row.body);
+  }
+
+  private normalizeAttachments(rows: Array<Partial<BugAttachment>>): BugAttachment[] {
+    return rows
+      .map((row) => ({
+        id: String(row.id || new Types.ObjectId()),
+        name: String(row.name || ''),
+        url: String(row.url || ''),
+        createdAt: String(row.createdAt || new Date().toISOString())
+      }))
+      .filter((row) => row.name && row.url);
+  }
+
+  private normalizeStatusHistory(rows: Array<Partial<BugStatusHistory>>): BugStatusHistory[] {
+    return rows
+      .map((row) => ({
+        id: String(row.id || new Types.ObjectId()),
+        fromStatus: row.fromStatus,
+        toStatus: row.toStatus || 'open',
+        operatorId: row.operatorId,
+        operatorName: row.operatorName,
+        note: row.note,
+        createdAt: String(row.createdAt || new Date().toISOString())
+      }))
+      .filter((row) => row.toStatus);
   }
 
   private sortOf(sortBy?: string, sortOrder?: 'asc' | 'desc'): Record<string, 1 | -1> {
