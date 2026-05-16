@@ -9,7 +9,7 @@ import { Textarea } from '../ui/textarea.js';
 import { labelOf } from '../../labels.js';
 import { planStatuses, runStatuses } from '../../app/constants.js';
 import { executionProgress, iterationName, requirementTitle, text } from '../../app/workspace-utils.js';
-import { ConfirmDialog, DataPage, DataTable, DangerButton, Drawer, EmptyState, HookForm, MetricCard, SearchBox, Select, StatusBadge, Toolbar } from './common.js';
+import { ConfirmDialog, DataPage, DataTable, DangerButton, Drawer, EmptyState, HookForm, MetricCard, SearchBox, Select, StatusBadge, TextConfirmDialog, Toolbar } from './common.js';
 
 export function PlanSection(props: {
   projectId: string;
@@ -18,6 +18,7 @@ export function PlanSection(props: {
   cases: TestCase[];
   rows: TestPlan[];
   bugs: Bug[];
+  globalKeyword?: string;
   canWrite?: boolean;
   canManage?: boolean;
   mutate: (action: () => Promise<unknown>, message: string) => Promise<void>;
@@ -26,9 +27,25 @@ export function PlanSection(props: {
   const [creating, setCreating] = useState(false);
   const [keyword, setKeyword] = useState('');
   const [status, setStatus] = useState('');
-  const rows = useMemo(() => props.rows.filter((plan) => (!status || plan.status === status) && `${plan.name} ${plan.round}`.toLowerCase().includes(keyword.trim().toLowerCase())), [props.rows, keyword, status]);
+  const effectiveKeyword = keyword || props.globalKeyword || '';
+  const rows = useMemo(() => props.rows.filter((plan) => (!status || plan.status === status) && `${plan.name} ${plan.round}`.toLowerCase().includes(effectiveKeyword.trim().toLowerCase())), [props.rows, effectiveKeyword, status]);
   const runItems = props.rows.flatMap((plan) => plan.runItems);
   const passed = runItems.filter((item) => item.status === 'passed').length;
+
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('buggy:filters-change', { detail: { tab: 'plans', filters: { keyword, status } } }));
+  }, [keyword, status]);
+
+  useEffect(() => {
+    const apply = (event: Event) => {
+      const detail = (event as CustomEvent<{ tab: string; filters: Record<string, unknown> }>).detail;
+      if (detail?.tab !== 'plans') return;
+      setKeyword(typeof detail.filters.keyword === 'string' ? detail.filters.keyword : '');
+      setStatus(typeof detail.filters.status === 'string' ? detail.filters.status : '');
+    };
+    window.addEventListener('buggy:apply-view', apply);
+    return () => window.removeEventListener('buggy:apply-view', apply);
+  }, []);
 
   return (
     <DataPage
@@ -129,7 +146,9 @@ function PlanCreateDrawer(props: {
 export function PlanCard(props: { plan: TestPlan; iterations: Iteration[]; requirements: Requirement[]; cases: TestCase[]; bugs: Bug[]; canWrite?: boolean; canManage?: boolean; mutate: (action: () => Promise<unknown>, message: string) => Promise<void> }) {
   const [editing, setEditing] = useState(false);
   const [caseIds, setCaseIds] = useState(props.plan.caseIds);
+  const [batchStatus, setBatchStatus] = useState<TestRunStatus | null>(null);
   useEffect(() => setCaseIds(props.plan.caseIds), [props.plan.caseIds]);
+  const batchLabel = batchStatus === 'passed' ? '全部通过' : batchStatus === 'failed' ? '全部失败' : '批量更新';
   return (
     <article className="plan-card">
       <header>
@@ -141,8 +160,8 @@ export function PlanCard(props: { plan: TestPlan; iterations: Iteration[]; requi
         <span className="progress-pill">{executionProgress(props.plan.runItems)}</span>
         {props.canWrite && props.plan.runItems.length > 0 && (
           <>
-            <Button type="button" size="sm" onClick={() => props.mutate(() => Promise.all(props.plan.runItems.map((item) => api.updateRunItem(props.plan.id, item.id, { status: 'passed', actualResult: item.actualResult || '批量标记通过' }))), '执行项已批量通过')}>全部通过</Button>
-            <Button type="button" size="sm" onClick={() => props.mutate(() => Promise.all(props.plan.runItems.map((item) => api.updateRunItem(props.plan.id, item.id, { status: 'failed', actualResult: item.actualResult || '批量标记失败' }))), '执行项已批量失败')}>全部失败</Button>
+            <Button type="button" size="sm" onClick={() => setBatchStatus('passed')}>全部通过</Button>
+            <Button type="button" size="sm" onClick={() => setBatchStatus('failed')}>全部失败</Button>
           </>
         )}
         <Button type="button" size="sm" onClick={() => setEditing(true)}><Pencil size={14} /> 详情</Button>
@@ -183,6 +202,24 @@ export function PlanCard(props: { plan: TestPlan; iterations: Iteration[]; requi
           )}
         </HookForm>
       </Drawer>
+      <TextConfirmDialog
+        open={Boolean(batchStatus)}
+        title={`${batchLabel}？`}
+        description={`将影响「${props.plan.name}」中的 ${props.plan.runItems.length} 个执行项。`}
+        label={batchStatus === 'failed' ? '失败原因' : '执行备注'}
+        placeholder={batchStatus === 'failed' ? '说明失败范围、环境或主要现象' : '说明本次批量通过的验证依据'}
+        confirmText={batchLabel}
+        destructive={batchStatus === 'failed'}
+        onCancel={() => setBatchStatus(null)}
+        onConfirm={async (note) => {
+          if (!batchStatus) return;
+          await props.mutate(
+            () => api.batchUpdateRunItems(props.plan.id, { runItemIds: props.plan.runItems.map((item) => item.id), status: batchStatus, actualResult: note }),
+            batchStatus === 'passed' ? '执行项已批量通过' : '执行项已批量失败'
+          );
+          setBatchStatus(null);
+        }}
+      />
     </article>
   );
 }

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useForm, type UseFormRegister } from 'react-hook-form';
-import { Download, FolderKanban, Plus, Search, Trash2, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, Download, FolderKanban, Plus, Search, Trash2, X } from 'lucide-react';
 import type { TestCaseStep } from '@buggy/shared-types';
 import { Badge } from '../ui/badge.js';
 import { Button } from '../ui/button.js';
@@ -177,6 +177,8 @@ export function DataTable(props: {
   emptyText?: string;
   onSort?: (key: string) => void;
   sortKeys?: string[];
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
 }) {
   return (
     <div className="table-wrap data-table-wrap">
@@ -186,7 +188,10 @@ export function DataTable(props: {
             {props.headers.map((header, index) => (
               <th key={header}>
                 {props.onSort && props.sortKeys?.[index] ? (
-                  <button type="button" className="th-button" onClick={() => props.onSort?.(props.sortKeys?.[index] || '')}>{header}</button>
+                  <button type="button" className="th-button" onClick={() => props.onSort?.(props.sortKeys?.[index] || '')}>
+                    {header}
+                    {props.sortBy === props.sortKeys[index] && (props.sortOrder === 'asc' ? <ChevronUp size={13} /> : <ChevronDown size={13} />)}
+                  </button>
                 ) : (
                   header
                 )}
@@ -244,6 +249,35 @@ export function FilterChips(props: { filters: Array<{ label: string; value?: str
   );
 }
 
+export function ColumnChooser(props: {
+  columns: Array<{ key: string; label: string; locked?: boolean }>;
+  visible: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const visible = new Set(props.visible);
+  return (
+    <details className="column-chooser">
+      <summary>列配置</summary>
+      <div>
+        {props.columns.map((column) => (
+          <label key={column.key} className="check-row compact-check-row">
+            <input
+              type="checkbox"
+              checked={visible.has(column.key)}
+              disabled={column.locked}
+              onChange={(event) => {
+                if (event.target.checked) props.onChange([...props.visible, column.key]);
+                else props.onChange(props.visible.filter((key) => key !== column.key || props.columns.find((item) => item.key === key)?.locked));
+              }}
+            />
+            <span>{column.label}</span>
+          </label>
+        ))}
+      </div>
+    </details>
+  );
+}
+
 export function ConfirmDialog(props: { open: boolean; title: string; description?: string; confirmText?: string; onCancel: () => void; onConfirm: () => void }) {
   if (!props.open) return null;
   return (
@@ -254,6 +288,43 @@ export function ConfirmDialog(props: { open: boolean; title: string; description
         <div className="form-actions">
           <Button type="button" onClick={props.onCancel}>取消</Button>
           <Button type="button" variant="destructive" onClick={props.onConfirm}>{props.confirmText || '确认'}</Button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+export function TextConfirmDialog(props: {
+  open: boolean;
+  title: string;
+  description?: string;
+  label?: string;
+  placeholder?: string;
+  confirmText?: string;
+  destructive?: boolean;
+  onCancel: () => void;
+  onConfirm: (note: string) => void;
+}) {
+  const [note, setNote] = useState('');
+  useEffect(() => {
+    if (!props.open) setNote('');
+  }, [props.open]);
+  if (!props.open) return null;
+  const disabled = note.trim().length < 2;
+  return (
+    <div className="confirm-layer" role="presentation">
+      <section className="confirm-dialog" role="dialog" aria-modal="true" aria-label={props.title}>
+        <h3>{props.title}</h3>
+        {props.description && <p>{props.description}</p>}
+        <label className="dialog-field">
+          <span>{props.label || '操作说明'}</span>
+          <Textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder={props.placeholder || '请输入原因或备注'} />
+        </label>
+        <div className="form-actions">
+          <Button type="button" onClick={props.onCancel}>取消</Button>
+          <Button type="button" variant={props.destructive ? 'destructive' : 'primary'} disabled={disabled} onClick={() => props.onConfirm(note.trim())}>
+            {props.confirmText || '确认'}
+          </Button>
         </div>
       </section>
     </div>

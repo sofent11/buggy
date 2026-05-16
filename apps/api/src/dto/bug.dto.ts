@@ -130,6 +130,27 @@ export class UpdateBugDto {
   @IsOptional()
   @IsString()
   dueAt?: string;
+
+  @IsOptional()
+  @IsString()
+  statusReason?: string;
+}
+
+export class TransitionBugDto {
+  @IsIn(['open', 'in_progress', 'resolved', 'verified', 'closed', 'reopened'])
+  nextStatus!: BugStatus;
+
+  @IsString()
+  @MinLength(2)
+  reason!: string;
+
+  @IsOptional()
+  @IsMongoId()
+  assigneeId?: string;
+
+  @IsOptional()
+  @IsString()
+  dueAt?: string;
 }
 
 export class CreateBugFromRunDto {

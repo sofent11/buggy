@@ -18,7 +18,7 @@ export class SavedViewEntity {
   name!: string;
 
   @Prop({ type: SchemaTypes.Mixed, default: {} })
-  filters!: Record<string, string>;
+  filters!: Record<string, unknown>;
 }
 
 export const SavedViewSchema = SchemaFactory.createForClass(SavedViewEntity);

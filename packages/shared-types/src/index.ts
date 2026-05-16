@@ -172,6 +172,8 @@ export interface BugStatusHistory {
   createdAt: string;
 }
 
+export type SavedViewFilters = Record<string, string | number | boolean | string[] | undefined>;
+
 export interface Bug {
   id: Id;
   projectId: Id;
@@ -237,7 +239,7 @@ export interface SavedView {
   userId: Id;
   tab: string;
   name: string;
-  filters: Record<string, string>;
+  filters: SavedViewFilters;
   createdAt?: string;
   updatedAt?: string;
 }

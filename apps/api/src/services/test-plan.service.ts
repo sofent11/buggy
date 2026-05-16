@@ -5,7 +5,7 @@ import type { PageResult, TestCaseStep, TestPlan, TestRunItem } from '@buggy/sha
 import { TestCaseEntity } from '../database/test-case.schema.js';
 import { TestPlanEntity, TestRunItemEntity } from '../database/test-plan.schema.js';
 import type { ListQueryDto } from '../dto/common.dto.js';
-import type { CreateTestPlanDto, UpdateRunItemDto, UpdateTestPlanDto } from '../dto/test-plan.dto.js';
+import type { BatchUpdateRunItemsDto, CreateTestPlanDto, UpdateRunItemDto, UpdateTestPlanDto } from '../dto/test-plan.dto.js';
 import { idOf, toObjectId } from '../shared/mongo.js';
 import type { SessionUser } from './auth.service.js';
 import { ActivityService } from './activity.service.js';
@@ -141,6 +141,33 @@ export class TestPlanService {
       actor: user
     });
     return this.toDto(row);
+  }
+
+  async batchUpdateRunItems(planId: string, dto: BatchUpdateRunItemsDto, user: SessionUser): Promise<{ updated: number; plan: TestPlan }> {
+    const row = await this.plans.findById(planId);
+    if (!row) throw new NotFoundException('测试计划不存在');
+    const targetIds = new Set(dto.runItemIds);
+    let updated = 0;
+    for (const item of row.runItems) {
+      if (!targetIds.has(idOf(item._id))) continue;
+      item.status = dto.status;
+      item.actualResult = dto.actualResult;
+      item.executorId = new Types.ObjectId(user.id);
+      item.executedAt = new Date();
+      updated += 1;
+    }
+    if (updated > 0 && row.status === 'draft') row.status = 'active';
+    await row.save();
+    await this.activities.record({
+      projectId: idOf(row.projectId),
+      entityType: 'test_plan',
+      entityId: planId,
+      action: 'status_changed',
+      title: `批量记录执行结果：${row.name}`,
+      detail: `${updated} 个执行项 -> ${dto.status}：${dto.actualResult}`,
+      actor: user
+    });
+    return { updated, plan: this.toDto(row) };
   }
 
   async appendBug(planId: string, runItemId: string, bugId: string): Promise<void> {

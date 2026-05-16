@@ -49,7 +49,7 @@ export class SavedViewService {
       userId: idOf(row.userId),
       tab: row.tab,
       name: row.name,
-      filters: row.filters || {},
+      filters: (row.filters || {}) as SavedView['filters'],
       createdAt: row.createdAt?.toISOString(),
       updatedAt: row.updatedAt?.toISOString()
     };

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Flag, Pencil, Plus, Save, Send } from 'lucide-react';
 import type { Bug, Iteration, Requirement, TestCase, UserProfile } from '@buggy/shared-types';
 import type { UseFormRegister } from 'react-hook-form';
@@ -34,6 +34,22 @@ export function RequirementSection(props: {
     () => props.rows.filter((row) => (!status || row.status === status) && (!ownerId || row.ownerId === ownerId) && matchKeyword([row.title, row.description || '', row.priority], keyword)),
     [props.rows, keyword, status, ownerId]
   );
+
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('buggy:filters-change', { detail: { tab: 'requirements', filters: { keyword, status, ownerId } } }));
+  }, [keyword, status, ownerId]);
+
+  useEffect(() => {
+    const apply = (event: Event) => {
+      const detail = (event as CustomEvent<{ tab: string; filters: Record<string, unknown> }>).detail;
+      if (detail?.tab !== 'requirements') return;
+      setKeyword(typeof detail.filters.keyword === 'string' ? detail.filters.keyword : '');
+      setStatus(typeof detail.filters.status === 'string' ? detail.filters.status : '');
+      setOwnerId(typeof detail.filters.ownerId === 'string' ? detail.filters.ownerId : '');
+    };
+    window.addEventListener('buggy:apply-view', apply);
+    return () => window.removeEventListener('buggy:apply-view', apply);
+  }, []);
 
   return (
     <DataPage

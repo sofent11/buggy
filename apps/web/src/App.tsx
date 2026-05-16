@@ -18,23 +18,24 @@ import {
   Settings,
   ShieldCheck,
 } from 'lucide-react';
-import type { Project, UserProfile } from '@buggy/shared-types';
+import type { Notification, Project, SavedView, SavedViewFilters, UserProfile } from '@buggy/shared-types';
 import { api } from './api.js';
 import { Button } from './components/ui/button.js';
 import { Field, FieldLabel } from './components/ui/form.js';
 import { Input } from './components/ui/input.js';
 import { Textarea } from './components/ui/textarea.js';
 import { emptyData, LOGGED_OUT_KEY } from './app/constants.js';
-import type { AuthFormValues, Tab, WorkspaceData } from './app/types.js';
+import type { AuthFormValues, Tab, TabFilters, WorkspaceData } from './app/types.js';
 import { filterWorkspaceData, pageInfo } from './app/workspace-utils.js';
 import { labelOf } from './labels.js';
-import { NavButton } from './components/workspace/common.js';
+import { DataTable, Drawer, NavButton, StatusBadge } from './components/workspace/common.js';
 import { DictionaryProvider } from './components/workspace/dictionary.js';
 import { HelpCenter } from './components/workspace/help.js';
 import { MyTodo, RecentWork, RiskBoard, TraceabilityMatrix } from './components/workspace/overview.js';
 import { BugSection, CaseSection, IterationSection, PlanSection, ProjectSection, ReportSection, RequirementSection, SettingsSection } from './components/workspace/sections.js';
 
 const LAST_PROJECT_KEY = 'buggy_last_project_id';
+const RECENT_PROJECTS_KEY = 'buggy_recent_project_ids';
 
 export function App() {
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -51,6 +52,9 @@ export function App() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [notificationOpen, setNotificationOpen] = useState(false);
+  const [savedViewOpen, setSavedViewOpen] = useState(false);
+  const [tabFilters, setTabFilters] = useState<TabFilters>({});
   const currentProject = useMemo(
     () => projects.find((project) => project.id === currentProjectId),
     [currentProjectId, projects]
@@ -182,6 +186,34 @@ export function App() {
     return () => window.clearTimeout(timer);
   }, [notice]);
 
+  useEffect(() => {
+    const handleFiltersChange = (event: Event) => {
+      const detail = (event as CustomEvent<{ tab: Tab; filters: SavedViewFilters }>).detail;
+      if (!detail?.tab) return;
+      setTabFilters((current) => ({ ...current, [detail.tab]: detail.filters || {} }));
+    };
+    window.addEventListener('buggy:filters-change', handleFiltersChange);
+    return () => window.removeEventListener('buggy:filters-change', handleFiltersChange);
+  }, []);
+
+  const applySavedView = useCallback((view: SavedView) => {
+    const filters = view.filters || {};
+    if (typeof filters.globalKeyword === 'string') setGlobalKeyword(filters.globalKeyword);
+    setTab(view.tab as Tab);
+    setTabFilters((current) => ({ ...current, [view.tab as Tab]: filters }));
+    window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('buggy:apply-view', { detail: { tab: view.tab, filters } }));
+    }, 0);
+  }, []);
+
+  const handleDrilldown = useCallback((nextTab: Tab, filters: SavedViewFilters) => {
+    setTab(nextTab);
+    setTabFilters((current) => ({ ...current, [nextTab]: filters }));
+    window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('buggy:apply-view', { detail: { tab: nextTab, filters } }));
+    }, 0);
+  }, []);
+
   const dashboard = useMemo(() => {
     const report = data.report;
     return [
@@ -286,17 +318,7 @@ export function App() {
             />
           </label>
           <div className="top-actions">
-            <label className="project-switcher">
-              <span>当前项目</span>
-              <select value={currentProjectId} onChange={(event) => selectProject(event.target.value)}>
-                <option value="">选择项目</option>
-                {projects.map((project) => (
-                  <option key={project.id} value={project.id}>
-                    {project.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <ProjectSwitcher projects={projects} currentProjectId={currentProjectId} currentUserId={user.id} onSelect={selectProject} />
             <button className="refresh-button" title="刷新工作区数据" onClick={() => loadWorkspace()} disabled={busy || !currentProjectId}>
               <RefreshCw size={17} />
               <span>{busy ? '同步中' : '刷新'}</span>
@@ -308,7 +330,7 @@ export function App() {
               type="button"
               className={unreadCount ? 'notification-chip has-unread' : 'notification-chip'}
               title={unreadCount ? `有 ${unreadCount} 条未读通知` : '暂无未读通知'}
-              onClick={() => mutate(() => api.markAllNotificationsRead(), '通知已全部标记已读')}
+              onClick={() => setNotificationOpen(true)}
             >
               <Bell size={15} /> {unreadCount || '通知'}
             </button>
@@ -329,17 +351,13 @@ export function App() {
                 value=""
                 onChange={(event) => {
                   const view = data.savedViews.find((item) => item.id === event.target.value);
-                  if (view?.filters.globalKeyword !== undefined) setGlobalKeyword(view.filters.globalKeyword);
+                  if (view) applySavedView(view);
                 }}
               >
                 <option value="">应用保存视图</option>
                 {data.savedViews.filter((item) => item.tab === tab).map((view) => <option key={view.id} value={view.id}>{view.name}</option>)}
               </select>
-              <Button type="button" onClick={() => {
-                const name = window.prompt('保存当前视图名称', `${page.title}视图`);
-                if (!name) return;
-                void mutate(() => api.upsertSavedView({ projectId: currentProject.id, tab, name, filters: { globalKeyword } }), '视图已保存');
-              }}>
+              <Button type="button" onClick={() => setSavedViewOpen(true)}>
                 保存视图
               </Button>
             </div>
@@ -470,7 +488,8 @@ export function App() {
                 requirements={data.requirements}
                 plans={data.plans}
                 bugs={data.bugs}
-                rows={visibleData.cases}
+                rows={data.cases}
+                globalKeyword={deferredGlobalKeyword}
                 canWrite={canWriteProject}
                 canManage={canManageProject}
                 mutate={mutate}
@@ -484,6 +503,7 @@ export function App() {
                 cases={data.cases}
                 rows={visibleData.plans}
                 bugs={data.bugs}
+                globalKeyword={deferredGlobalKeyword}
                 canWrite={canExecute}
                 canManage={canManageProject}
                 mutate={mutate}
@@ -497,13 +517,14 @@ export function App() {
                 cases={data.cases}
                 plans={data.plans}
                 users={data.users}
-                rows={visibleData.bugs}
+                rows={data.bugs}
+                globalKeyword={deferredGlobalKeyword}
                 canWrite={canWriteProject}
                 canManage={canManageProject}
                 mutate={mutate}
               />
             )}
-            {tab === 'reports' && currentProject && <ReportSection projectId={currentProject.id} report={data.report} />}
+            {tab === 'reports' && currentProject && <ReportSection projectId={currentProject.id} report={data.report} onDrilldown={handleDrilldown} />}
             {tab === 'settings' && currentProject && (
               <SettingsSection
                 projectId={currentProject.id}
@@ -527,6 +548,39 @@ export function App() {
         projectCount={projects.length}
         data={data}
       />
+      <NotificationCenter
+        open={notificationOpen}
+        notifications={data.notifications}
+        onClose={() => setNotificationOpen(false)}
+        onMarkAllRead={() => mutate(() => api.markAllNotificationsRead(), '通知已全部标记已读')}
+        onOpenNotification={(notification) => {
+          if (notification.status === 'unread') void mutate(() => api.markNotificationRead(notification.id), '通知已标记已读');
+          const nextTab = tabOfNotification(notification);
+          if (nextTab) {
+            setTab(nextTab);
+            setNotificationOpen(false);
+          }
+        }}
+      />
+      {currentProject && (
+        <SavedViewDialog
+          open={savedViewOpen}
+          tab={tab}
+          defaultName={`${page.title}视图`}
+          views={data.savedViews.filter((item) => item.tab === tab)}
+          onClose={() => setSavedViewOpen(false)}
+          onDelete={(id) => mutate(() => api.deleteSavedView(id), '视图已删除')}
+          onSave={(name) => mutate(
+            () => api.upsertSavedView({
+              projectId: currentProject.id,
+              tab,
+              name,
+              filters: { ...(tabFilters[tab] || {}), globalKeyword }
+            }),
+            '视图已保存'
+          )}
+        />
+      )}
     </main>
   );
 }
@@ -554,4 +608,149 @@ async function chooseDefaultProject(rows: Project[]) {
     })
   );
   return scored.reduce((best, item) => (item.score > best.score ? item : best), scored[0])?.id || rows[0]?.id || '';
+}
+
+function ProjectSwitcher(props: { projects: Project[]; currentProjectId: string; currentUserId: string; onSelect: (id: string) => void }) {
+  const [query, setQuery] = useState('');
+  const [open, setOpen] = useState(false);
+  const recentIds = useMemo(() => {
+    try {
+      return JSON.parse(localStorage.getItem(RECENT_PROJECTS_KEY) || '[]') as string[];
+    } catch {
+      return [];
+    }
+  }, [props.currentProjectId]);
+  const current = props.projects.find((project) => project.id === props.currentProjectId);
+  const filtered = useMemo(() => {
+    const keyword = query.trim().toLowerCase();
+    const rows = keyword
+      ? props.projects.filter((project) => `${project.name} ${project.code || ''}`.toLowerCase().includes(keyword))
+      : props.projects;
+    const score = (project: Project) => {
+      if (recentIds.includes(project.id)) return 0;
+      if (project.members.some((member) => member.userId === props.currentUserId && member.role === 'owner')) return 1;
+      return 2;
+    };
+    return [...rows].sort((a, b) => score(a) - score(b) || a.name.localeCompare(b.name)).slice(0, 12);
+  }, [props.projects, props.currentUserId, query, recentIds]);
+  const pick = (id: string) => {
+    const nextRecent = [id, ...recentIds.filter((item) => item !== id)].slice(0, 6);
+    localStorage.setItem(RECENT_PROJECTS_KEY, JSON.stringify(nextRecent));
+    props.onSelect(id);
+    setQuery('');
+    setOpen(false);
+  };
+  return (
+    <div className="project-combobox">
+      <span>当前项目</span>
+      <button type="button" className="project-combobox-trigger" onClick={() => setOpen((value) => !value)}>
+        {current?.name || '选择项目'}
+      </button>
+      {open && (
+        <div className="project-combobox-popover">
+          <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索项目名称或代号" autoFocus />
+          <div className="project-group-label">最近 / 我负责 / 全部项目</div>
+          <div className="project-option-list">
+            {filtered.map((project) => (
+              <button key={project.id} type="button" className={project.id === props.currentProjectId ? 'active' : ''} onClick={() => pick(project.id)}>
+                <strong>{project.name}</strong>
+                <small>{project.code || '未设置代号'} · {project.members.find((member) => member.role === 'owner')?.username || '暂无负责人'}</small>
+              </button>
+            ))}
+            {filtered.length === 0 && <span className="muted">没有匹配项目</span>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SavedViewDialog(props: {
+  open: boolean;
+  tab: Tab;
+  defaultName: string;
+  views: SavedView[];
+  onClose: () => void;
+  onSave: (name: string) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
+}) {
+  const [name, setName] = useState(props.defaultName);
+  const [selectedId, setSelectedId] = useState('');
+  useEffect(() => {
+    if (!props.open) return;
+    const selected = props.views.find((view) => view.id === selectedId);
+    setName(selected?.name || props.defaultName);
+  }, [props.open, props.defaultName, props.views, selectedId]);
+  if (!props.open) return null;
+  return (
+    <div className="confirm-layer" role="presentation">
+      <section className="confirm-dialog saved-view-dialog" role="dialog" aria-modal="true" aria-label="保存视图">
+        <h3>保存当前视图</h3>
+        <p>会保存当前模块的搜索、筛选、排序、页大小和列配置。</p>
+        <label className="dialog-field">
+          <span>覆盖已有视图</span>
+          <select value={selectedId} onChange={(event) => setSelectedId(event.target.value)}>
+            <option value="">新建视图</option>
+            {props.views.map((view) => <option key={view.id} value={view.id}>{view.name}</option>)}
+          </select>
+        </label>
+        <label className="dialog-field">
+          <span>视图名称</span>
+          <Input value={name} onChange={(event) => setName(event.target.value)} />
+        </label>
+        <div className="form-actions">
+          {selectedId && <Button type="button" variant="destructive" onClick={async () => {
+            await props.onDelete(selectedId);
+            setSelectedId('');
+          }}>删除视图</Button>}
+          <Button type="button" onClick={props.onClose}>取消</Button>
+          <Button type="button" variant="primary" disabled={!name.trim()} onClick={async () => {
+            await props.onSave(name.trim());
+            props.onClose();
+          }}>保存</Button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function NotificationCenter(props: {
+  open: boolean;
+  notifications: Notification[];
+  onClose: () => void;
+  onMarkAllRead: () => Promise<void>;
+  onOpenNotification: (notification: Notification) => void;
+}) {
+  return (
+    <Drawer title="通知中心" subtitle="查看待处理消息并跳转到相关模块" open={props.open} onClose={props.onClose} size="wide">
+      <div className="notification-center">
+        <div className="notification-summary">
+          <strong>{props.notifications.filter((item) => item.status === 'unread').length}</strong>
+          <span>未读通知</span>
+          <Button type="button" onClick={() => props.onMarkAllRead()}>全部已读</Button>
+        </div>
+        <DataTable
+          headers={['状态', '通知', '来源', '时间', '操作']}
+          emptyText="暂无通知"
+          rows={props.notifications.map((notification) => [
+            <StatusBadge value={notification.status === 'unread' ? '未读' : '已读'} />,
+            <div className="cell-main"><strong>{notification.title}</strong><span>{notification.body || '系统提醒'}</span></div>,
+            notification.entityType || '-',
+            new Date(notification.createdAt).toLocaleString('zh-CN'),
+            <Button type="button" size="sm" onClick={() => props.onOpenNotification(notification)}>打开</Button>
+          ])}
+        />
+      </div>
+    </Drawer>
+  );
+}
+
+function tabOfNotification(notification: Notification): Tab | undefined {
+  if (notification.entityType === 'bug') return 'bugs';
+  if (notification.entityType === 'test_case') return 'cases';
+  if (notification.entityType === 'test_plan' || notification.entityType === 'run_item') return 'plans';
+  if (notification.entityType === 'requirement') return 'requirements';
+  if (notification.entityType === 'iteration') return 'iterations';
+  if (notification.entityType === 'project') return 'projects';
+  return undefined;
 }

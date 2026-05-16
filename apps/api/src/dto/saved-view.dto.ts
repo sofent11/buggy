@@ -13,5 +13,5 @@ export class UpsertSavedViewDto {
 
   @IsOptional()
   @IsObject()
-  filters?: Record<string, string>;
+  filters?: Record<string, unknown>;
 }

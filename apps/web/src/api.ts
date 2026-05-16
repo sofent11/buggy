@@ -13,6 +13,7 @@ import type {
   ReportSummary,
   Requirement,
   SavedView,
+  SavedViewFilters,
   TestCase,
   TestPlan,
   UploadAsset,
@@ -116,11 +117,15 @@ export const api = {
   deleteTestPlan: (id: string) => request<{ deleted: true }>(`/test-plans/${id}`, { method: 'DELETE' }),
   updateRunItem: (planId: string, runItemId: string, body: { status: string; actualResult?: string; stepResults?: Array<{ stepId?: string; status: string; actualResult?: string }> }) =>
     request<TestPlan>(`/test-plans/${planId}/run-items/${runItemId}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  batchUpdateRunItems: (planId: string, body: { runItemIds: string[]; status: string; actualResult: string }) =>
+    request<{ updated: number; plan: TestPlan }>(`/test-plans/${planId}/run-items`, { method: 'PATCH', body: JSON.stringify(body) }),
 
   bugPage: (projectId: string, params?: ListParams) => request<PageResult<Bug>>(`/bugs${queryString({ projectId, ...params })}`),
   bugs: async (projectId: string, params?: ListParams) => itemsOf(await request<PageResult<Bug> | Bug[]>(`/bugs${queryString({ projectId, pageSize: 500, ...params })}`)),
   createBug: (body: Partial<Bug>) => request<Bug>('/bugs', { method: 'POST', body: JSON.stringify(body) }),
   updateBug: (id: string, body: Partial<Bug>) => request<Bug>(`/bugs/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  transitionBug: (id: string, body: { nextStatus: string; reason: string; assigneeId?: string; dueAt?: string }) =>
+    request<Bug>(`/bugs/${id}/transition`, { method: 'POST', body: JSON.stringify(body) }),
   addBugComment: (id: string, body: string) => request<Bug>(`/bugs/${id}/comments`, { method: 'POST', body: JSON.stringify({ body }) }),
   addBugAttachment: (id: string, attachment: { name: string; url: string; size?: number; mimeType?: string }) =>
     request<Bug>(`/bugs/${id}/attachments`, { method: 'POST', body: JSON.stringify(attachment) }),
@@ -139,7 +144,7 @@ export const api = {
   markNotificationRead: (id: string) => request<Notification>(`/notifications/${id}/read`, { method: 'PATCH' }),
   markAllNotificationsRead: () => request<{ updated: number }>('/notifications/read-all', { method: 'POST' }),
   savedViews: (projectId: string, tab?: string) => request<SavedView[]>(`/saved-views${queryString({ projectId, tab })}`),
-  upsertSavedView: (body: { projectId: string; tab: string; name: string; filters: Record<string, string> }) =>
+  upsertSavedView: (body: { projectId: string; tab: string; name: string; filters: SavedViewFilters }) =>
     request<SavedView>('/saved-views', { method: 'POST', body: JSON.stringify(body) }),
   deleteSavedView: (id: string) => request<{ deleted: true }>(`/saved-views/${id}`, { method: 'DELETE' }),
   uploadFile: (projectId: string, file: File) => {

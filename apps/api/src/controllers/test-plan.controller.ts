@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ListQueryDto } from '../dto/common.dto.js';
-import { CreateTestPlanDto, UpdateRunItemDto, UpdateTestPlanDto } from '../dto/test-plan.dto.js';
+import { BatchUpdateRunItemsDto, CreateTestPlanDto, UpdateRunItemDto, UpdateTestPlanDto } from '../dto/test-plan.dto.js';
 import { TestPlanService } from '../services/test-plan.service.js';
 import { AuthGuard } from '../shared/auth.guard.js';
 import { CurrentUser } from '../shared/current-user.decorator.js';
@@ -48,6 +48,12 @@ export class TestPlanController {
   ) {
     await this.projects.assertRole(await this.plans.projectIdOf(id), user, ['owner', 'tester']);
     return this.plans.updateRunItem(id, runItemId, dto, user);
+  }
+
+  @Patch(':id/run-items')
+  async batchUpdateRunItems(@Param('id') id: string, @Body() dto: BatchUpdateRunItemsDto, @CurrentUser() user: SessionUser) {
+    await this.projects.assertRole(await this.plans.projectIdOf(id), user, ['owner', 'tester']);
+    return this.plans.batchUpdateRunItems(id, dto, user);
   }
 
   @Delete(':id')

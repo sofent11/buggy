@@ -60,3 +60,16 @@ export class UpdateRunItemDto {
   @IsOptional()
   stepResults?: Array<{ stepId?: string; status: TestRunStatus; actualResult?: string }>;
 }
+
+export class BatchUpdateRunItemsDto {
+  @IsArray()
+  @IsMongoId({ each: true })
+  runItemIds!: string[];
+
+  @IsIn(['untested', 'passed', 'failed', 'blocked', 'skipped'])
+  status!: TestRunStatus;
+
+  @IsString()
+  @MinLength(2)
+  actualResult!: string;
+}

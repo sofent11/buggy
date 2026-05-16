@@ -2582,6 +2582,7 @@ tbody tr:hover {
 
 .step-result-editor,
 .bug-collab,
+.case-evidence,
 .timeline-list,
 .attachment-list,
 .import-preview {
@@ -2612,6 +2613,16 @@ tbody tr:hover {
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.72);
   padding: 12px;
+}
+
+.case-evidence {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.case-evidence section {
+  display: grid;
+  gap: 10px;
 }
 
 .timeline-list article {
@@ -2727,6 +2738,279 @@ tbody tr:hover {
   }
 
   .step-result-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Workflow hardening and daily-use refinements. */
+.project-combobox {
+  position: relative;
+  display: grid;
+  gap: 4px;
+  min-width: 220px;
+}
+
+.project-combobox > span,
+.dialog-field span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 850;
+}
+
+.project-combobox-trigger {
+  width: 100%;
+  justify-content: space-between;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.project-combobox-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 70;
+  width: min(380px, calc(100vw - 32px));
+  display: grid;
+  gap: 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  padding: 10px;
+  box-shadow: var(--shadow-popover);
+}
+
+.project-group-label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.project-option-list {
+  display: grid;
+  gap: 5px;
+  max-height: 300px;
+  overflow: auto;
+}
+
+.project-option-list button {
+  width: 100%;
+  min-height: 52px;
+  display: grid;
+  justify-content: stretch;
+  gap: 2px;
+  text-align: left;
+  white-space: normal;
+}
+
+.project-option-list button.active {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  color: var(--primary-dark);
+}
+
+.project-option-list strong,
+.project-option-list small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-option-list small {
+  color: var(--muted);
+}
+
+.notification-center,
+.dialog-field,
+.saved-view-dialog,
+.column-chooser > div {
+  display: grid;
+  gap: 10px;
+}
+
+.notification-summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  padding: 12px;
+}
+
+.notification-summary strong {
+  color: var(--primary);
+  font-size: 28px;
+  line-height: 34px;
+}
+
+.column-chooser {
+  position: relative;
+  min-width: 112px;
+  padding: 0;
+}
+
+.column-chooser summary {
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+}
+
+.column-chooser > div {
+  position: absolute;
+  right: 0;
+  z-index: 15;
+  width: 180px;
+  margin-top: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  padding: 8px;
+  box-shadow: var(--shadow-popover);
+}
+
+.compact-check-row {
+  grid-template-columns: auto minmax(0, 1fr);
+  min-height: 30px;
+  padding: 4px 6px;
+}
+
+.dialog-field textarea {
+  min-height: 96px;
+}
+
+.readonly-status-field {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+}
+
+.metric-action {
+  min-height: 0;
+  display: block;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.metric-action:hover {
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+}
+
+.metric-action .insight-card {
+  height: 100%;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+.metric-action:hover .insight-card {
+  border-color: var(--primary);
+  box-shadow: var(--shadow-soft);
+  transform: translateY(-1px);
+}
+
+.linkish {
+  min-height: 0;
+  justify-content: flex-start;
+  border: 0;
+  background: transparent;
+  color: var(--primary);
+  padding: 0;
+  font-weight: 800;
+  white-space: normal;
+}
+
+.linkish:hover {
+  background: transparent;
+  box-shadow: none;
+  color: var(--primary-dark);
+}
+
+.account-admin-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.permission-note {
+  margin: 0;
+  border-left: 3px solid var(--warning);
+  background: var(--warning-soft);
+  padding: 8px 10px;
+}
+
+.th-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pagination {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+  color: var(--muted);
+  font-weight: 750;
+}
+
+.pagination .page {
+  width: 34px;
+  min-width: 34px;
+  padding: 0;
+}
+
+.pagination .page.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: white;
+}
+
+@media (max-width: 720px) {
+  .project-combobox {
+    min-width: 0;
+  }
+
+  .project-combobox-popover {
+    left: 0;
+    right: auto;
+    width: 100%;
+  }
+
+  .workspace-context {
+    display: none;
+  }
+
+  .saved-view-tools {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    width: 100%;
+  }
+
+  .column-chooser,
+  .column-chooser summary,
+  .pagination,
+  .account-admin-toolbar .search-box {
+    width: 100%;
+  }
+
+  .column-chooser > div {
+    left: 0;
+    right: auto;
+    width: 100%;
+  }
+
+  .notification-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .chart-grid {
     grid-template-columns: 1fr;
   }
 }

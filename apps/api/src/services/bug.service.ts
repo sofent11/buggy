@@ -4,7 +4,7 @@ import { Model, Types } from 'mongoose';
 import type { Bug, BugAttachment, BugComment, BugStatusHistory, PageResult } from '@buggy/shared-types';
 import { BugEntity } from '../database/bug.schema.js';
 import { TestPlanEntity } from '../database/test-plan.schema.js';
-import type { AddBugAttachmentDto, AddBugCommentDto, CreateBugDto, CreateBugFromRunDto, UpdateBugDto } from '../dto/bug.dto.js';
+import type { AddBugAttachmentDto, AddBugCommentDto, CreateBugDto, CreateBugFromRunDto, TransitionBugDto, UpdateBugDto } from '../dto/bug.dto.js';
 import type { ListQueryDto } from '../dto/common.dto.js';
 import { idOf, toObjectId } from '../shared/mongo.js';
 import { ActivityService } from './activity.service.js';
@@ -144,7 +144,7 @@ export class BugService {
     if (dto.status && dto.status !== previousStatus) {
       row.statusHistory = [
         ...(row.statusHistory || []),
-        this.statusHistoryEntry(previousStatus, dto.status, user, '状态更新')
+        this.statusHistoryEntry(previousStatus, dto.status, user, dto.statusReason || '状态更新')
       ];
     }
     await row.save();
@@ -161,6 +161,19 @@ export class BugService {
     if ((dto.assigneeId !== undefined && dto.assigneeId !== previousAssigneeId) || !previousAssigneeId) await this.notifyAssignment(row, user);
     if (dto.status && dto.status !== previousStatus) await this.notifyStatus(row, previousStatus, user);
     return this.toDto(row);
+  }
+
+  async transition(id: string, dto: TransitionBugDto, user: SessionUser): Promise<Bug> {
+    return this.update(
+      id,
+      {
+        status: dto.nextStatus,
+        statusReason: dto.reason.trim(),
+        ...(dto.assigneeId !== undefined ? { assigneeId: dto.assigneeId } : {}),
+        ...(dto.dueAt !== undefined ? { dueAt: dto.dueAt } : {})
+      },
+      user
+    );
   }
 
   async addComment(id: string, dto: AddBugCommentDto, user: SessionUser): Promise<Bug> {

@@ -1,6 +1,6 @@
 import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
-import { AddBugAttachmentDto, AddBugCommentDto, CreateBugDto, CreateBugFromRunDto, UpdateBugDto } from '../dto/bug.dto.js';
+import { AddBugAttachmentDto, AddBugCommentDto, CreateBugDto, CreateBugFromRunDto, TransitionBugDto, UpdateBugDto } from '../dto/bug.dto.js';
 import { ListQueryDto } from '../dto/common.dto.js';
 import { BugService } from '../services/bug.service.js';
 import { AuthGuard } from '../shared/auth.guard.js';
@@ -42,6 +42,12 @@ export class BugController {
   async update(@Param('id') id: string, @Body() dto: UpdateBugDto, @CurrentUser() user: SessionUser) {
     await this.projects.assertWrite(await this.bugs.projectIdOf(id), user);
     return this.bugs.update(id, dto, user);
+  }
+
+  @Post(':id/transition')
+  async transition(@Param('id') id: string, @Body() dto: TransitionBugDto, @CurrentUser() user: SessionUser) {
+    await this.projects.assertWrite(await this.bugs.projectIdOf(id), user);
+    return this.bugs.transition(id, dto, user);
   }
 
   @Post(':id/comments')

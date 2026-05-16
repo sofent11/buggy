@@ -7,6 +7,7 @@ import type {
   Project,
   ReportSummary,
   Requirement,
+  SavedViewFilters,
   SavedView,
   TestCase,
   TestPlan,
@@ -39,3 +40,5 @@ export type StringFormValues = Record<string, string>;
 
 export type Mutate = (action: () => Promise<unknown>, message: string, options?: { reloadProjects?: boolean }) => Promise<void>;
 export type MutateWithResult = <T>(action: () => Promise<T>, resolveMessage: (result: T) => string, options?: { reloadProjects?: boolean }) => Promise<void>;
+
+export type TabFilters = Partial<Record<Tab, SavedViewFilters>>;
