@@ -23,10 +23,13 @@ export function ProjectSection(props: {
   const [keyword, setKeyword] = useState('');
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Project | null>(null);
+  const [managingMembers, setManagingMembers] = useState<Project | null>(null);
   const filtered = useMemo(
     () => props.projects.filter((item) => matchKeyword([item.name, item.code || '', item.description || '', item.members.map((member) => member.username).join(' ')], keyword, props.searchKeyword)),
     [props.projects, keyword, props.searchKeyword]
   );
+  const editingProject = editing ? props.projects.find((project) => project.id === editing.id) || editing : null;
+  const memberProject = managingMembers ? props.projects.find((project) => project.id === managingMembers.id) || managingMembers : null;
 
   return (
     <DataPage
@@ -59,6 +62,7 @@ export function ProjectSection(props: {
           <div className="row-actions">
             <Button type="button" size="sm" onClick={() => props.onSelect(project.id)}><Check size={14} /> 选中</Button>
             <Button type="button" size="sm" onClick={() => setEditing(project)}><Pencil size={14} /> 详情</Button>
+            <Button type="button" size="sm" onClick={() => setManagingMembers(project)}><Users size={14} /> 成员</Button>
             <DangerButton
               title={`删除项目「${project.name}」？`}
               description="项目下的迭代、需求、用例、执行计划、Bug 和报告数据都会被删除。"
@@ -83,10 +87,8 @@ export function ProjectSection(props: {
       />
       <ProjectDrawer
         title="项目详情"
-        row={editing || undefined}
+        row={editingProject || undefined}
         open={Boolean(editing)}
-        users={props.users}
-        mutate={props.mutate}
         onClose={() => setEditing(null)}
         onSubmit={async (form) => {
           if (!editing) return;
@@ -98,6 +100,13 @@ export function ProjectSection(props: {
           setEditing(null);
         }}
       />
+      <MemberDrawer
+        project={memberProject || undefined}
+        users={props.users}
+        open={Boolean(managingMembers)}
+        onClose={() => setManagingMembers(null)}
+        mutate={props.mutate}
+      />
     </DataPage>
   );
 }
@@ -106,14 +115,12 @@ function ProjectDrawer(props: {
   title: string;
   row?: Project;
   open: boolean;
-  users?: UserProfile[];
-  mutate?: (action: () => Promise<unknown>, message: string, options?: { reloadProjects?: boolean }) => Promise<void>;
   onClose: () => void;
   onSubmit: (form: FormData) => Promise<void>;
 }) {
   return (
-    <Drawer title={props.title} subtitle={props.row?.name || '创建项目档案后即可维护成员与测试资产'} open={props.open} onClose={props.onClose}>
-      <div className="drawer-form">
+    <Drawer title={props.title} subtitle={props.row?.name || '创建项目档案，成员请在独立入口维护'} open={props.open} onClose={props.onClose} size="compact">
+      <div className="drawer-form project-info-form">
         <HookForm
           defaultValues={{ name: props.row?.name || '', code: props.row?.code || '', description: props.row?.description || '' }}
           onSubmit={async (form) => props.onSubmit(form)}
@@ -130,8 +137,28 @@ function ProjectDrawer(props: {
             </>
           )}
         </HookForm>
-        {props.row && props.users && props.mutate && <MemberManager project={props.row} users={props.users} mutate={props.mutate} />}
       </div>
+    </Drawer>
+  );
+}
+
+function MemberDrawer(props: {
+  project?: Project;
+  users: UserProfile[];
+  open: boolean;
+  onClose: () => void;
+  mutate: (action: () => Promise<unknown>, message: string, options?: { reloadProjects?: boolean }) => Promise<void>;
+}) {
+  if (!props.project) return null;
+  return (
+    <Drawer
+      title="项目成员"
+      subtitle={`${props.project.name} · ${props.project.members.length} 人`}
+      open={props.open}
+      onClose={props.onClose}
+      size="wide"
+    >
+      <MemberManager project={props.project} users={props.users} mutate={props.mutate} />
     </Drawer>
   );
 }
@@ -141,11 +168,29 @@ export function MemberManager(props: {
   users: UserProfile[];
   mutate: (action: () => Promise<unknown>, message: string, options?: { reloadProjects?: boolean }) => Promise<void>;
 }) {
+  const owner = props.project.members.find((member) => member.role === 'owner');
   return (
-    <div className="sub-panel">
-      <div className="sub-title"><Users size={16} /> 成员</div>
+    <div className="member-manager">
+      <section className="member-context" aria-label="项目成员概览">
+        <div>
+          <span>项目</span>
+          <strong>{props.project.name}</strong>
+          <small>{props.project.code || '未设置代号'}</small>
+        </div>
+        <div>
+          <span>负责人</span>
+          <strong>{owner?.username || '-'}</strong>
+          <small>{owner?.email || '暂无负责人邮箱'}</small>
+        </div>
+        <div>
+          <span>成员数</span>
+          <strong>{props.project.members.length}</strong>
+          <small>含负责人</small>
+        </div>
+      </section>
+      <div className="sub-title"><Users size={16} /> 添加或调整成员</div>
       <form
-        className="inline-form compact"
+        className="member-toolbar"
         onSubmit={(event) => {
           event.preventDefault();
           const form = new FormData(event.currentTarget);
@@ -157,13 +202,19 @@ export function MemberManager(props: {
           event.currentTarget.reset();
         }}
       >
-        <Input name="email" placeholder="用户邮箱" list="user-emails" required />
-        <select name="role" defaultValue="tester">
-          <option value="owner">负责人</option>
-          <option value="tester">测试</option>
-          <option value="developer">开发</option>
-          <option value="viewer">只读</option>
-        </select>
+        <Field>
+          <FieldLabel>用户邮箱</FieldLabel>
+          <Input name="email" placeholder="user@example.com" list="user-emails" required />
+        </Field>
+        <Field>
+          <FieldLabel>项目角色</FieldLabel>
+          <select name="role" defaultValue="tester">
+            <option value="owner">负责人</option>
+            <option value="tester">测试</option>
+            <option value="developer">开发</option>
+            <option value="viewer">只读</option>
+          </select>
+        </Field>
         <Button><Plus size={15} /> 添加</Button>
       </form>
       <datalist id="user-emails">
@@ -174,7 +225,25 @@ export function MemberManager(props: {
         rows={props.project.members.map((member) => [
           member.username,
           member.email,
-          labelOf(member.role),
+          member.role === 'owner' ? (
+            <StatusBadge value="owner" />
+          ) : (
+            <select
+              value={member.role}
+              aria-label={`${member.username} 项目角色`}
+              onChange={(event) =>
+                props.mutate(
+                  () => api.upsertProjectMember(props.project.id, { userId: member.userId, role: event.target.value as ProjectMember['role'] }),
+                  '成员角色已更新',
+                  { reloadProjects: true }
+                )
+              }
+            >
+              <option value="tester">{labelOf('tester')}</option>
+              <option value="developer">{labelOf('developer')}</option>
+              <option value="viewer">{labelOf('viewer')}</option>
+            </select>
+          ),
           member.role === 'owner' ? '负责人' : (
             <Button
               type="button"
@@ -190,4 +259,3 @@ export function MemberManager(props: {
     </div>
   );
 }
-

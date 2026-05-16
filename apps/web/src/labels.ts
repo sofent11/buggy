@@ -19,6 +19,7 @@ export const labels: Record<string, string> = {
   closed: '已关闭',
   reopened: '重新打开',
   admin: '管理员',
+  owner: '负责人',
   project_owner: '项目负责人',
   tester: '测试',
   developer: '开发',

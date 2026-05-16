@@ -16,8 +16,6 @@ import {
   Search,
   Settings,
   ShieldCheck,
-  Users,
-  Zap
 } from 'lucide-react';
 import type { Project, UserProfile } from '@buggy/shared-types';
 import { api } from './api.js';
@@ -30,6 +28,7 @@ import type { AuthFormValues, Tab, WorkspaceData } from './app/types.js';
 import { filterWorkspaceData } from './app/workspace-utils.js';
 import { labelOf } from './labels.js';
 import { NavButton } from './components/workspace/common.js';
+import { HelpCenter } from './components/workspace/help.js';
 import { RecentWork, RiskBoard } from './components/workspace/overview.js';
 import { BugSection, CaseSection, IterationSection, PlanSection, ProjectSection, ReportSection, RequirementSection, SettingsSection } from './components/workspace/sections.js';
 
@@ -47,6 +46,7 @@ export function App() {
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const currentProject = useMemo(
     () => projects.find((project) => project.id === currentProjectId),
     [currentProjectId, projects]
@@ -245,7 +245,7 @@ export function App() {
           <NavButton tab="settings" current={tab} icon={Settings} index={9} label="配置" onClick={setTab} />
         </nav>
         <div className="sidebar-footer">
-          <button type="button" className="ghost">
+          <button type="button" className="ghost" onClick={() => setHelpOpen(true)}>
             <HelpCircle size={16} /> 帮助中心
           </button>
           <button type="button" className="ghost" onClick={logout}>
@@ -255,22 +255,6 @@ export function App() {
       </aside>
 
       <section className="workspace">
-        <section className="capability-strip" aria-label="平台能力">
-          {[
-            { icon: BarChart3, title: '全流程管理', text: '覆盖测试全生命周期' },
-            { icon: ShieldCheck, title: '数据可视化', text: '多维度洞察与分析' },
-            { icon: Users, title: '团队协作', text: '高效协同与追溯' },
-            { icon: Zap, title: '持续改进', text: '质量趋势持续优化' }
-          ].map((item) => (
-            <article key={item.title}>
-              <item.icon size={26} />
-              <div>
-                <strong>{item.title}</strong>
-                <span>{item.text}</span>
-              </div>
-            </article>
-          ))}
-        </section>
         <header className="topbar">
           <label className="global-search" aria-label="全局搜索">
             <Search size={20} />
@@ -302,6 +286,29 @@ export function App() {
             <span className="user-pill">{user.username} · {labelOf(user.role)}</span>
           </div>
         </header>
+
+        <section className="workspace-context" aria-label="当前工作区">
+          <div className="context-primary">
+            <span>当前项目</span>
+            <strong>{currentProject?.name || '尚未选择项目'}</strong>
+            <small>{currentProject?.code || '在项目页选择或新建项目'}</small>
+          </div>
+          <div>
+            <span>项目成员</span>
+            <strong>{currentProject?.members.length || '-'}</strong>
+            <small>{currentProject?.members.find((member) => member.role === 'owner')?.username || '暂无负责人'}</small>
+          </div>
+          <div>
+            <span>质量资产</span>
+            <strong>{data.requirements.length + data.cases.length + data.bugs.length}</strong>
+            <small>需求 / 用例 / Bug</small>
+          </div>
+          <div>
+            <span>执行通过率</span>
+            <strong>{data.report?.execution.passRate || 0}%</strong>
+            <small>{data.report ? `${data.report.execution.passed}/${data.report.execution.total}` : '暂无执行数据'}</small>
+          </div>
+        </section>
 
         {notice && <div className="notice">{notice}</div>}
 
@@ -415,6 +422,14 @@ export function App() {
           </>
         )}
       </section>
+      <HelpCenter
+        open={helpOpen}
+        onClose={() => setHelpOpen(false)}
+        user={user}
+        currentProject={currentProject}
+        projectCount={projects.length}
+        data={data}
+      />
     </main>
   );
 }

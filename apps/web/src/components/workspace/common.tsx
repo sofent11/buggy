@@ -23,10 +23,10 @@ export function NavButton(props: { tab: Tab; current: Tab; label: string; icon: 
   );
 }
 
-export function Drawer(props: { title: string; subtitle?: string; open: boolean; onClose: () => void; children: ReactNode }) {
+export function Drawer(props: { title: string; subtitle?: string; open: boolean; onClose: () => void; children: ReactNode; size?: 'compact' | 'wide' | 'full' }) {
   return (
     <Sheet open={props.open} onOpenChange={(open) => (!open ? props.onClose() : undefined)}>
-      <SheetContent>
+      <SheetContent className={props.size ? `ui-sheet-${props.size}` : undefined}>
         <SheetHeader>
           <div>
             <SheetTitle>{props.title}</SheetTitle>
@@ -187,7 +187,11 @@ export function DataTable(props: {
           {props.rows.length === 0 ? (
             <tr><td colSpan={props.headers.length}>{props.emptyText || '暂无数据'}</td></tr>
           ) : (
-            props.rows.map((row, index) => <tr key={index}>{row.map((cell, cellIndex) => <td key={cellIndex}>{cell}</td>)}</tr>)
+            props.rows.map((row, index) => (
+              <tr key={index}>
+                {row.map((cell, cellIndex) => <td key={cellIndex} data-label={props.headers[cellIndex] || ''}>{cell}</td>)}
+              </tr>
+            ))
           )}
         </tbody>
       </table>
