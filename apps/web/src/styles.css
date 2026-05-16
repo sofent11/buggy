@@ -356,6 +356,46 @@ th {
   gap: 12px;
 }
 
+.scoped-report {
+  display: grid;
+  gap: 16px;
+}
+
+.scoped-report .chart-grid {
+  grid-template-columns: minmax(0, 1.2fr) minmax(220px, 0.8fr);
+}
+
+.scoped-report .chart-panel:last-child {
+  grid-column: 1 / -1;
+}
+
+.acceptance-callout {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  padding: 14px 16px;
+  background: var(--surface);
+}
+
+.acceptance-callout strong {
+  color: var(--text);
+}
+
+.acceptance-callout span {
+  color: var(--muted);
+}
+
+.acceptance-callout.tone-good {
+  border-color: #b9dcc5;
+  background: var(--success-soft);
+}
+
+.acceptance-callout.tone-risk {
+  border-color: #f2bab2;
+  background: var(--danger-soft);
+}
+
 .chart-panel h3 {
   margin: 0 0 10px;
   font-size: 15px;

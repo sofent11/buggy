@@ -8,7 +8,6 @@ import {
   CalendarRange,
   ClipboardCheck,
   Clock3,
-  FileSpreadsheet,
   Flag,
   FolderKanban,
   HelpCircle,
@@ -32,7 +31,7 @@ import { DataTable, Drawer, NavButton, StatusBadge } from './components/workspac
 import { DictionaryProvider } from './components/workspace/dictionary.js';
 import { HelpCenter } from './components/workspace/help.js';
 import { MyTodo, RecentWork, RiskBoard, TraceabilityMatrix } from './components/workspace/overview.js';
-import { BugSection, CaseSection, IterationSection, PlanSection, ProjectSection, ReportSection, RequirementSection, SettingsSection } from './components/workspace/sections.js';
+import { BugSection, CaseSection, IterationSection, PlanSection, ProjectSection, RequirementSection, SettingsSection } from './components/workspace/sections.js';
 
 const LAST_PROJECT_KEY = 'buggy_last_project_id';
 const RECENT_PROJECTS_KEY = 'buggy_recent_project_ids';
@@ -82,7 +81,7 @@ export function App() {
         api.testCases(projectId),
         api.testPlans(projectId),
         api.bugs(projectId),
-        api.report(projectId),
+        api.reportSummary({ projectId }),
         api.dictionaries(projectId),
         api.users(),
         api.activities(projectId),
@@ -206,14 +205,6 @@ export function App() {
     }, 0);
   }, []);
 
-  const handleDrilldown = useCallback((nextTab: Tab, filters: SavedViewFilters) => {
-    setTab(nextTab);
-    setTabFilters((current) => ({ ...current, [nextTab]: filters }));
-    window.setTimeout(() => {
-      window.dispatchEvent(new CustomEvent('buggy:apply-view', { detail: { tab: nextTab, filters } }));
-    }, 0);
-  }, []);
-
   const dashboard = useMemo(() => {
     const report = data.report;
     return [
@@ -240,7 +231,7 @@ export function App() {
           <div>
             <p className="eyebrow">Buggy</p>
             <h1>测试管理平台</h1>
-            <p className="muted">项目、迭代、需求、用例、执行、缺陷、报告与 Lark 日报闭环。</p>
+            <p className="muted">项目、迭代、需求、用例、执行、缺陷与验收交付闭环。</p>
           </div>
           <form onSubmit={authForm.handleSubmit(submitAuth)} className="stack">
             <div className="segmented">
@@ -293,8 +284,7 @@ export function App() {
           <NavButton tab="cases" current={tab} icon={ClipboardCheck} index={5} label="用例" onClick={setTab} />
           <NavButton tab="plans" current={tab} icon={Activity} index={6} label="执行" onClick={setTab} />
           <NavButton tab="bugs" current={tab} icon={BugIcon} index={7} label="Bug" onClick={setTab} />
-          <NavButton tab="reports" current={tab} icon={FileSpreadsheet} index={8} label="报告" onClick={setTab} />
-          <NavButton tab="settings" current={tab} icon={Settings} index={9} label="配置" onClick={setTab} />
+          <NavButton tab="settings" current={tab} icon={Settings} index={8} label="配置" onClick={setTab} />
         </nav>
         <div className="sidebar-footer">
           <button type="button" className="ghost" onClick={() => setHelpOpen(true)}>
@@ -524,7 +514,6 @@ export function App() {
                 mutate={mutate}
               />
             )}
-            {tab === 'reports' && currentProject && <ReportSection projectId={currentProject.id} report={data.report} onDrilldown={handleDrilldown} />}
             {tab === 'settings' && currentProject && (
               <SettingsSection
                 projectId={currentProject.id}
@@ -592,7 +581,7 @@ async function chooseDefaultProject(rows: Project[]) {
   const scored = await Promise.all(
     rows.map(async (project) => {
       try {
-        const report = await api.report(project.id);
+        const report = await api.reportSummary({ projectId: project.id });
         return {
           id: project.id,
           score:

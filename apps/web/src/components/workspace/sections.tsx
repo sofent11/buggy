@@ -4,4 +4,4 @@ export { RequirementSection } from './requirements.js';
 export { CaseSection } from './cases.js';
 export { PlanSection } from './plans.js';
 export { BugSection } from './bugs.js';
-export { ReportSection, SettingsSection } from './reportsSettings.js';
+export { ScopedReportDrawer, SettingsSection } from './reportsSettings.js';

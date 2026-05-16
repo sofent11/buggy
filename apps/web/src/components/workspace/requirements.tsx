@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Flag, Pencil, Plus, Save, Send } from 'lucide-react';
+import { FileText, Flag, Pencil, Plus, Save, Send } from 'lucide-react';
 import type { Bug, Iteration, Requirement, TestCase, UserProfile } from '@buggy/shared-types';
 import type { UseFormRegister } from 'react-hook-form';
 import { api } from '../../api.js';
@@ -12,6 +12,7 @@ import type { StringFormValues } from '../../app/types.js';
 import { iterationName, matchKeyword, requirementPayload, shortDate, testCasePayload, userName } from '../../app/workspace-utils.js';
 import { DataPage, DataTable, DangerButton, Drawer, EmptyState, FilterChips, HookForm, MetricCard, registerField, SearchBox, Select, StatusBadge, Toolbar } from './common.js';
 import { TestCaseDrawer } from './cases.js';
+import { ScopedReportDrawer } from './reportsSettings.js';
 
 export function RequirementSection(props: {
   projectId: string;
@@ -30,6 +31,7 @@ export function RequirementSection(props: {
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Requirement | null>(null);
   const [caseRequirement, setCaseRequirement] = useState<Requirement | null>(null);
+  const [reporting, setReporting] = useState<Requirement | null>(null);
   const rows = useMemo(
     () => props.rows.filter((row) => (!status || row.status === status) && (!ownerId || row.ownerId === ownerId) && matchKeyword([row.title, row.description || '', row.priority], keyword)),
     [props.rows, keyword, status, ownerId]
@@ -98,6 +100,7 @@ export function RequirementSection(props: {
           shortDate(row.updatedAt),
           <div className="row-actions">
             <Button type="button" size="sm" onClick={() => setEditing(row)}><Pencil size={14} /> 详情</Button>
+            <Button type="button" size="sm" onClick={() => setReporting(row)}><FileText size={14} /> 验收报告</Button>
             {props.canWrite && <Button type="button" size="sm" onClick={() => setCaseRequirement(row)}><Plus size={14} /> 建用例</Button>}
             {props.canWrite && <Button type="button" size="sm" onClick={() => props.mutate(() => api.sendLark(row.id), 'Lark 日报已发送')}><Send size={14} /> Lark</Button>}
             {props.canManage && <DangerButton title={`删除需求「${row.title}」？`} onConfirm={() => props.mutate(() => api.deleteRequirement(row.id), '需求已删除')} />}
@@ -132,6 +135,16 @@ export function RequirementSection(props: {
           setCaseRequirement(null);
         }}
       />
+      {reporting && (
+        <ScopedReportDrawer
+          open={Boolean(reporting)}
+          title="需求验收报告"
+          subtitle={reporting.title}
+          projectId={props.projectId}
+          requirementId={reporting.id}
+          onClose={() => setReporting(null)}
+        />
+      )}
     </DataPage>
   );
 }

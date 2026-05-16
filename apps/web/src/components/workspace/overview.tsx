@@ -1,7 +1,6 @@
 import type { Project, ReportSummary, UserProfile } from '@buggy/shared-types';
 import { labelOf } from '../../labels.js';
 import type { Tab, WorkspaceData } from '../../app/types.js';
-import { rate } from '../../app/workspace-utils.js';
 import { DataTable, EmptyState, StatusBadge, Table } from './common.js';
 
 export function RecentWork(props: { data: WorkspaceData }) {
@@ -136,11 +135,6 @@ export function PageInsights(props: {
       { label: 'Bug', value: props.data.bugs.length },
       { label: '活跃', value: report?.bugs.active || 0, tone: 'risk' },
       { label: '已解决', value: report?.bugs.resolved || 0, tone: 'good' }
-    ],
-    reports: [
-      { label: '需求完成率', value: report ? rate(report.requirements.done, report.requirements.total) : '0%' },
-      { label: '执行通过率', value: `${report?.execution.passRate || 0}%`, tone: 'good' },
-      { label: '报告范围', value: props.currentProject?.code || '未选择' }
     ],
     settings: [
       { label: '字典', value: props.data.dictionaries.length },

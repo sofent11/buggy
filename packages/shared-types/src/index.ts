@@ -274,6 +274,11 @@ export interface ReportSummary {
   iterationId?: Id;
   requirementId?: Id;
   testPlanId?: Id;
+  scope: {
+    type: 'project' | 'iteration' | 'requirement';
+    id?: Id;
+    name: string;
+  };
   requirements: {
     total: number;
     done: number;
@@ -313,6 +318,24 @@ export interface ReportSummary {
     iterationRank: Array<{ id: Id; name: string; requirements: number; cases: number; executionTotal: number; passRate: number; activeBugs: number }>;
     requirementCoverage: Array<{ id: Id; title: string; caseCount: number; bugCount: number; status: RequirementStatus; riskOwnerId?: Id; dueDate?: string; riskNote?: string }>;
     riskList: Array<{ id: Id; type: 'requirement' | 'bug' | 'execution'; title: string; ownerId?: Id; dueDate?: string; reason: string; severity: 'high' | 'medium' | 'low' }>;
+  };
+  details?: {
+    cases: Array<{ id: Id; title: string; requirementId?: Id; priority: Priority; status: TestCaseStatus }>;
+    executionItems: Array<{
+      id: Id;
+      planId: Id;
+      planName: string;
+      round: string;
+      caseId: Id;
+      caseTitle: string;
+      requirementId?: Id;
+      status: TestRunStatus;
+      actualResult?: string;
+      executorId?: Id;
+      executedAt?: string;
+      bugIds: Id[];
+    }>;
+    bugs: Array<{ id: Id; title: string; requirementId?: Id; testPlanId?: Id; runItemId?: Id; severity: Severity; priority: Priority; status: BugStatus; assigneeId?: Id; dueAt?: string }>;
   };
 }
 

@@ -8,6 +8,7 @@ import { RequirementEntity } from '../database/requirement.schema.js';
 import { TestCaseEntity } from '../database/test-case.schema.js';
 import { TestPlanEntity } from '../database/test-plan.schema.js';
 import type { ListQueryDto } from '../dto/common.dto.js';
+import { idOf } from '../shared/mongo.js';
 
 @Injectable()
 export class ReportService {
@@ -20,19 +21,55 @@ export class ReportService {
   ) {}
 
   async summary(query: ListQueryDto): Promise<ReportSummary> {
-    const base = this.baseFilter(query);
-    const [requirements, iterations, cases, plans, bugs] = await Promise.all([
-      this.requirements.find(base.requirements),
-      this.iterations.find(base.iterations),
-      this.cases.find(base.cases),
-      this.plans.find(base.plans),
-      this.bugs.find(base.bugs)
+    const projectId = query.projectId ? new Types.ObjectId(query.projectId) : undefined;
+    const projectFilter = projectId ? { projectId } : {};
+    const [allRequirements, allIterations, allCases, allPlans, allBugs] = await Promise.all([
+      this.requirements.find(projectFilter),
+      this.iterations.find(projectFilter),
+      this.cases.find(projectFilter),
+      this.plans.find(projectFilter),
+      this.bugs.find(projectFilter)
     ]);
-    const runItems = plans.flatMap((plan) => plan.runItems);
+
+    const requirements = allRequirements.filter((requirement) => {
+      if (query.requirementId) return idOf(requirement._id) === query.requirementId;
+      if (query.iterationId) return idOf(requirement.iterationId) === query.iterationId;
+      return true;
+    });
+    const scopedRequirementIds = new Set(requirements.map((requirement) => idOf(requirement._id)));
+    const cases = allCases.filter((testCase) => {
+      if (!query.iterationId && !query.requirementId) return true;
+      return testCase.requirementId ? scopedRequirementIds.has(idOf(testCase.requirementId)) : false;
+    });
+    const runEntries = allPlans.flatMap((plan) => plan.runItems.map((item) => ({ plan, item })));
+    const scopedRunEntries = runEntries.filter(({ plan, item }) => {
+      const itemRequirementId = item.requirementId ? idOf(item.requirementId) : undefined;
+      if (query.requirementId) return itemRequirementId === query.requirementId || idOf(plan.requirementId) === query.requirementId;
+      if (query.iterationId) return idOf(plan.iterationId) === query.iterationId || Boolean(itemRequirementId && scopedRequirementIds.has(itemRequirementId));
+      return true;
+    });
+    const runItems = scopedRunEntries.map(({ item }) => item);
     const executionTotal = runItems.length;
     const passed = this.countBy(runItems, 'status', 'passed');
     const now = Date.now();
+    const scopedRunBugIds = new Set(runItems.flatMap((item) => item.bugIds.map(idOf)));
+    const bugs = allBugs.filter((bug) => {
+      if (query.requirementId) return idOf(bug.requirementId) === query.requirementId || scopedRunBugIds.has(idOf(bug._id));
+      if (query.iterationId) {
+        return (
+          idOf(bug.iterationId) === query.iterationId ||
+          Boolean(bug.requirementId && scopedRequirementIds.has(idOf(bug.requirementId))) ||
+          scopedRunBugIds.has(idOf(bug._id))
+        );
+      }
+      return true;
+    });
     const overdueBugs = bugs.filter((bug) => bug.dueAt && bug.dueAt.getTime() < now && !['verified', 'closed'].includes(bug.status));
+    const scope = query.requirementId
+      ? { type: 'requirement' as const, id: query.requirementId, name: requirements[0]?.title || '未知需求' }
+      : query.iterationId
+        ? { type: 'iteration' as const, id: query.iterationId, name: allIterations.find((iteration) => idOf(iteration._id) === query.iterationId)?.name || '未知迭代' }
+        : { type: 'project' as const, id: query.projectId, name: query.projectId ? '当前项目' : '全部项目' };
     const riskList = [
       ...requirements
         .filter((requirement) => requirement.status === 'blocked' || (requirement.dueDate && requirement.dueDate.getTime() < now && requirement.status !== 'done'))
@@ -66,11 +103,31 @@ export class ReportService {
           severity: item.status === 'blocked' ? ('high' as const) : ('medium' as const)
         }))
     ];
+    const trendPlans = allPlans
+      .map((plan) => {
+        const planId = idOf(plan._id);
+        const items = scopedRunEntries.filter((entry) => idOf(entry.plan._id) === planId).map((entry) => entry.item);
+        if (items.length === 0 && (query.iterationId || query.requirementId)) return null;
+        const total = items.length;
+        const passedCount = this.countBy(items, 'status', 'passed');
+        return {
+          label: `${plan.round || ''}${plan.name ? ` ${plan.name}` : ''}`.trim(),
+          total,
+          passed: passedCount,
+          failed: this.countBy(items, 'status', 'failed'),
+          blocked: this.countBy(items, 'status', 'blocked'),
+          skipped: this.countBy(items, 'status', 'skipped'),
+          passRate: total > 0 ? Math.round((passedCount / total) * 10000) / 100 : 0
+        };
+      })
+      .filter((item): item is NonNullable<typeof item> => Boolean(item));
+    const visibleIterations = query.iterationId ? allIterations.filter((iteration) => idOf(iteration._id) === query.iterationId) : allIterations;
     return {
       projectId: query.projectId,
       iterationId: query.iterationId,
       requirementId: query.requirementId,
       testPlanId: undefined,
+      scope,
       requirements: {
         total: requirements.length,
         done: this.countBy(requirements, 'status', 'done'),
@@ -103,19 +160,7 @@ export class ReportService {
         overdue: overdueBugs.length
       },
       charts: {
-        executionTrend: plans.map((plan) => {
-          const total = plan.runItems.length;
-          const passedCount = this.countBy(plan.runItems, 'status', 'passed');
-          return {
-            label: `${plan.round || ''}${plan.name ? ` ${plan.name}` : ''}`.trim(),
-            total,
-            passed: passedCount,
-            failed: this.countBy(plan.runItems, 'status', 'failed'),
-            blocked: this.countBy(plan.runItems, 'status', 'blocked'),
-            skipped: this.countBy(plan.runItems, 'status', 'skipped'),
-            passRate: total > 0 ? Math.round((passedCount / total) * 10000) / 100 : 0
-          };
-        }),
+        executionTrend: trendPlans,
         bugStatus: (['open', 'in_progress', 'resolved', 'verified', 'closed', 'reopened'] as BugStatus[]).map((status) => ({
           key: status,
           label: this.labelOf(status),
@@ -131,19 +176,21 @@ export class ReportService {
           label: priority,
           value: requirements.filter((item) => item.priority === priority).length + cases.filter((item) => item.priority === priority).length + bugs.filter((item) => item.priority === priority).length
         })),
-        iterationRank: iterations.map((iteration) => {
+        iterationRank: visibleIterations.map((iteration) => {
           const id = String(iteration._id);
-          const iterationPlans = plans.filter((plan) => String(plan.iterationId || '') === id);
-          const iterationRunItems = iterationPlans.flatMap((plan) => plan.runItems);
+          const iterationRequirementIds = new Set(allRequirements.filter((item) => idOf(item.iterationId) === id).map((item) => idOf(item._id)));
+          const iterationRunItems = runEntries
+            .filter(({ plan, item }) => idOf(plan.iterationId) === id || Boolean(item.requirementId && iterationRequirementIds.has(idOf(item.requirementId))))
+            .map(({ item }) => item);
           const iterationPassed = this.countBy(iterationRunItems, 'status', 'passed');
           return {
             id,
             name: iteration.name,
-            requirements: requirements.filter((item) => String(item.iterationId || '') === id).length,
-            cases: cases.filter((item) => requirements.some((requirement) => String(requirement._id) === String(item.requirementId || '') && String(requirement.iterationId || '') === id)).length,
+            requirements: allRequirements.filter((item) => String(item.iterationId || '') === id).length,
+            cases: allCases.filter((item) => item.requirementId && iterationRequirementIds.has(idOf(item.requirementId))).length,
             executionTotal: iterationRunItems.length,
             passRate: iterationRunItems.length > 0 ? Math.round((iterationPassed / iterationRunItems.length) * 10000) / 100 : 0,
-            activeBugs: bugs.filter((bug) => String(bug.iterationId || '') === id && !['verified', 'closed'].includes(bug.status)).length
+            activeBugs: allBugs.filter((bug) => (idOf(bug.iterationId) === id || (bug.requirementId && iterationRequirementIds.has(idOf(bug.requirementId)))) && !['verified', 'closed'].includes(bug.status)).length
           };
         }),
         requirementCoverage: requirements.map((requirement) => {
@@ -160,20 +207,62 @@ export class ReportService {
           };
         }),
         riskList
+      },
+      details: {
+        cases: cases.map((testCase) => ({
+          id: idOf(testCase._id),
+          title: testCase.title,
+          requirementId: testCase.requirementId ? idOf(testCase.requirementId) : undefined,
+          priority: testCase.priority,
+          status: testCase.status
+        })),
+        executionItems: scopedRunEntries.map(({ plan, item }) => ({
+          id: idOf(item._id),
+          planId: idOf(plan._id),
+          planName: plan.name,
+          round: plan.round,
+          caseId: idOf(item.caseId),
+          caseTitle: item.caseTitle,
+          requirementId: item.requirementId ? idOf(item.requirementId) : undefined,
+          status: item.status,
+          actualResult: item.actualResult,
+          executorId: item.executorId ? idOf(item.executorId) : undefined,
+          executedAt: item.executedAt?.toISOString(),
+          bugIds: item.bugIds.map(idOf)
+        })),
+        bugs: bugs.map((bug) => ({
+          id: idOf(bug._id),
+          title: bug.title,
+          requirementId: bug.requirementId ? idOf(bug.requirementId) : undefined,
+          testPlanId: bug.testPlanId ? idOf(bug.testPlanId) : undefined,
+          runItemId: bug.runItemId ? idOf(bug.runItemId) : undefined,
+          severity: bug.severity,
+          priority: bug.priority,
+          status: bug.status,
+          assigneeId: bug.assigneeId ? idOf(bug.assigneeId) : undefined,
+          dueAt: bug.dueAt?.toISOString()
+        }))
       }
     };
   }
 
   async html(query: ListQueryDto): Promise<string> {
     const summary = await this.summary(query);
+    const title = this.reportTitle(summary);
     const coverageRows = (summary.charts?.requirementCoverage || [])
       .map((item) => `<tr><td>${escapeHtml(item.title)}</td><td>${this.labelOf(item.status)}</td><td>${item.caseCount}</td><td>${item.bugCount}</td></tr>`)
+      .join('');
+    const executionRows = (summary.details?.executionItems || [])
+      .map((item) => `<tr><td>${escapeHtml(item.round)} ${escapeHtml(item.planName)}</td><td>${escapeHtml(item.caseTitle)}</td><td>${this.labelOf(item.status)}</td><td>${escapeHtml(item.actualResult || '-')}</td></tr>`)
+      .join('');
+    const bugRows = (summary.details?.bugs || [])
+      .map((item) => `<tr><td>${escapeHtml(item.title)}</td><td>${this.labelOf(item.severity)}</td><td>${this.labelOf(item.status)}</td><td>${item.dueAt ? item.dueAt.slice(0, 10) : '-'}</td></tr>`)
       .join('');
     return `<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
-  <title>测试报告</title>
+  <title>${escapeHtml(title)}</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px; color: #172033; }
     h1 { margin-bottom: 8px; }
@@ -185,7 +274,8 @@ export class ReportService {
   </style>
 </head>
 <body>
-  <h1>测试报告</h1>
+  <h1>${escapeHtml(title)}</h1>
+  <p>范围：${escapeHtml(summary.scope.name)}</p>
   <p>生成时间：${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}</p>
   <div class="grid">
     <div class="card">需求总数<div class="num">${summary.requirements.total}</div></div>
@@ -209,14 +299,26 @@ export class ReportService {
     <tr><th>类型</th><th>事项</th><th>原因</th><th>截止时间</th></tr>
     ${(summary.charts?.riskList || []).map((item) => `<tr><td>${item.type}</td><td>${escapeHtml(item.title)}</td><td>${escapeHtml(item.reason)}</td><td>${item.dueDate ? item.dueDate.slice(0, 10) : '-'}</td></tr>`).join('') || '<tr><td colspan="4">暂无风险</td></tr>'}
   </table>
+  <h2>执行明细</h2>
+  <table>
+    <tr><th>计划</th><th>用例</th><th>状态</th><th>实际结果</th></tr>
+    ${executionRows || '<tr><td colspan="4">暂无执行明细</td></tr>'}
+  </table>
+  <h2>关联 Bug</h2>
+  <table>
+    <tr><th>Bug</th><th>严重级别</th><th>状态</th><th>截止时间</th></tr>
+    ${bugRows || '<tr><td colspan="4">暂无关联 Bug</td></tr>'}
+  </table>
 </body>
 </html>`;
   }
 
   async pdf(query: ListQueryDto): Promise<Buffer> {
     const summary = await this.summary(query);
+    const title = this.reportTitle(summary);
     const lines = [
-      'Buggy 测试报告',
+      `Buggy ${title}`,
+      `范围：${summary.scope.name}`,
       `生成时间：${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}`,
       `需求：${summary.requirements.total}，完成：${summary.requirements.done}，阻塞：${summary.requirements.blocked}`,
       `用例：${summary.cases.total}，可执行：${summary.cases.ready}`,
@@ -229,35 +331,10 @@ export class ReportService {
     return createSimplePdf(lines);
   }
 
-  private baseFilter(query: ListQueryDto) {
-    const projectId = query.projectId ? new Types.ObjectId(query.projectId) : undefined;
-    const iterationId = query.iterationId ? new Types.ObjectId(query.iterationId) : undefined;
-    const requirementId = query.requirementId ? new Types.ObjectId(query.requirementId) : undefined;
-    return {
-      requirements: {
-        ...(projectId ? { projectId } : {}),
-        ...(iterationId ? { iterationId } : {}),
-        ...(requirementId ? { _id: requirementId } : {})
-      },
-      iterations: {
-        ...(projectId ? { projectId } : {}),
-        ...(iterationId ? { _id: iterationId } : {})
-      },
-      cases: {
-        ...(projectId ? { projectId } : {}),
-        ...(requirementId ? { requirementId } : {})
-      },
-      plans: {
-        ...(projectId ? { projectId } : {}),
-        ...(iterationId ? { iterationId } : {}),
-        ...(requirementId ? { requirementId } : {})
-      },
-      bugs: {
-        ...(projectId ? { projectId } : {}),
-        ...(iterationId ? { iterationId } : {}),
-        ...(requirementId ? { requirementId } : {})
-      }
-    };
+  private reportTitle(summary: ReportSummary) {
+    if (summary.scope.type === 'requirement') return '需求验收报告';
+    if (summary.scope.type === 'iteration') return '迭代质量报告';
+    return '项目质量概览';
   }
 
   private countBy<T>(rows: T[], key: string, value: RequirementStatus | TestCaseStatus | TestRunStatus | BugStatus | Severity | Priority): number {
@@ -277,6 +354,10 @@ export class ReportService {
       testing: '测试中',
       done: '已完成',
       blocked: '阻塞',
+      untested: '未测',
+      passed: '通过',
+      failed: '失败',
+      skipped: '跳过',
       S0: 'S0 致命',
       S1: 'S1 严重',
       S2: 'S2 一般',

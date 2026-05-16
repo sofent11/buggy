@@ -138,7 +138,8 @@ export const api = {
   createBugFromRun: (body: { testPlanId: string; runItemId: string; title: string; actualResult?: string }) =>
     request<Bug>('/bugs/from-run', { method: 'POST', body: JSON.stringify(body) }),
 
-  report: (projectId: string) => request<ReportSummary>(`/reports/summary?projectId=${projectId}`),
+  reportSummary: (params: { projectId: string; iterationId?: string; requirementId?: string }) =>
+    request<ReportSummary>(`/reports/summary${queryString(params)}`),
   activities: async (projectId: string, params?: ListParams) => itemsOf(await request<PageResult<ActivityLog> | ActivityLog[]>(`/activities${queryString({ projectId, pageSize: 20, ...params })}`)),
   notifications: async (projectId?: string) => itemsOf(await request<PageResult<Notification> | Notification[]>(`/notifications${queryString({ projectId, pageSize: 20 })}`)),
   markNotificationRead: (id: string) => request<Notification>(`/notifications/${id}/read`, { method: 'PATCH' }),

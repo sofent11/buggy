@@ -14,7 +14,7 @@ import type {
   UserProfile
 } from '@buggy/shared-types';
 
-export type Tab = 'overview' | 'projects' | 'iterations' | 'requirements' | 'cases' | 'plans' | 'bugs' | 'reports' | 'settings';
+export type Tab = 'overview' | 'projects' | 'iterations' | 'requirements' | 'cases' | 'plans' | 'bugs' | 'settings';
 
 export type WorkspaceData = {
   iterations: Iteration[];

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { CalendarRange, Pencil, Plus, Save } from 'lucide-react';
+import { CalendarRange, FileText, Pencil, Plus, Save } from 'lucide-react';
 import type { Bug, Iteration, Requirement, TestCase, TestPlan } from '@buggy/shared-types';
 import { api } from '../../api.js';
 import { Button } from '../ui/button.js';
@@ -9,6 +9,7 @@ import { labelOf } from '../../labels.js';
 import { iterationStatuses } from '../../app/constants.js';
 import { dateInput, dateRange, matchKeyword, shortDate, text } from '../../app/workspace-utils.js';
 import { DataPage, DataTable, DangerButton, Drawer, EmptyState, HookForm, MetricCard, SearchBox, Select, StatusBadge, Toolbar } from './common.js';
+import { ScopedReportDrawer } from './reportsSettings.js';
 
 export function IterationSection(props: {
   projectId: string;
@@ -25,6 +26,7 @@ export function IterationSection(props: {
   const [status, setStatus] = useState('');
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Iteration | null>(null);
+  const [reporting, setReporting] = useState<Iteration | null>(null);
   const rows = useMemo(() => props.rows.filter((row) => (!status || row.status === status) && matchKeyword([row.name, row.goal || '', row.status], keyword)), [props.rows, keyword, status]);
   const active = props.rows.filter((row) => row.status === 'active').length;
 
@@ -69,6 +71,7 @@ export function IterationSection(props: {
               shortDate(row.updatedAt),
               <div className="row-actions">
                 <Button type="button" size="sm" onClick={() => setEditing(row)}><Pencil size={14} /> 详情</Button>
+                <Button type="button" size="sm" onClick={() => setReporting(row)}><FileText size={14} /> 报告</Button>
                 {props.canManage && <DangerButton title={`删除迭代「${row.name}」？`} onConfirm={() => props.mutate(() => api.deleteIteration(row.id), '迭代已删除')} />}
               </div>
             ];
@@ -119,6 +122,16 @@ export function IterationSection(props: {
           setEditing(null);
         }}
       />
+      {reporting && (
+        <ScopedReportDrawer
+          open={Boolean(reporting)}
+          title="迭代质量报告"
+          subtitle={reporting.name}
+          projectId={props.projectId}
+          iterationId={reporting.id}
+          onClose={() => setReporting(null)}
+        />
+      )}
     </DataPage>
   );
 }

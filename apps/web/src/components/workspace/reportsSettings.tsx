@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { BarChart3, Save, Settings, Upload } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Download, FileText, Save, Settings, Upload } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import type { Dictionary, ImportPreview, ReportSummary, UserProfile } from '@buggy/shared-types';
 import { api, downloadUrl, type ImportResult } from '../../api.js';
@@ -9,36 +9,68 @@ import { Textarea } from '../ui/textarea.js';
 import { labelOf } from '../../labels.js';
 import { systemRoles, userStatuses } from '../../app/constants.js';
 import { formatDictionaryValues, importMessage, parseDictionaryValues, rate, text, userStatusLabel } from '../../app/workspace-utils.js';
-import { ConfirmDialog, DataPage, DataTable, EmptyState, ExportLink, MetricCard, Pagination, SearchBox, StatusBadge, TemplateLink } from './common.js';
-import type { Tab } from '../../app/types.js';
+import { ConfirmDialog, DataPage, DataTable, Drawer, EmptyState, MetricCard, Pagination, SearchBox, StatusBadge, TemplateLink } from './common.js';
 
 const chartColors = ['#2563eb', '#16a34a', '#f97316', '#dc2626', '#7c3aed', '#64748b'];
 
-export function ReportSection(props: { projectId: string; report: ReportSummary | null; onDrilldown?: (tab: Tab, filters: Record<string, string | number | boolean | string[] | undefined>) => void }) {
-  const report = props.report;
+export function ScopedReportDrawer(props: {
+  open: boolean;
+  title: string;
+  subtitle?: string;
+  projectId: string;
+  iterationId?: string;
+  requirementId?: string;
+  onClose: () => void;
+}) {
+  const [report, setReport] = useState<ReportSummary | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    if (!props.open) return;
+    setLoading(true);
+    setError('');
+    api.reportSummary({ projectId: props.projectId, iterationId: props.iterationId, requirementId: props.requirementId })
+      .then(setReport)
+      .catch((reason: Error) => setError(reason.message))
+      .finally(() => setLoading(false));
+  }, [props.open, props.projectId, props.iterationId, props.requirementId]);
+
   return (
-    <DataPage title="统计报告" icon={BarChart3}>
+    <Drawer title={props.title} subtitle={props.subtitle} open={props.open} onClose={props.onClose} size="wide">
+      {loading && <EmptyState text="正在生成报告" detail="正在汇总需求、用例、执行和 Bug 数据。" />}
+      {error && <EmptyState text="报告生成失败" detail={error} />}
+      {!loading && !error && report && <ScopedReportContent report={report} query={reportQuery(props)} />}
+      {!loading && !error && !report && <EmptyState text="暂无报告数据" />}
+    </Drawer>
+  );
+}
+
+function ScopedReportContent(props: { report: ReportSummary; query: string }) {
+  const report = props.report;
+  const isRequirement = report.scope.type === 'requirement';
+  const activeRisk = report.execution.failed + report.execution.blocked + report.bugs.active + report.requirements.blocked;
+  const acceptance = isRequirement
+    ? activeRisk === 0 && report.execution.total > 0
+      ? { title: '建议通过验收', detail: '当前需求暂无失败/阻塞执行项和活跃 Bug。', tone: 'good' }
+      : { title: '建议暂缓验收', detail: '请先处理失败/阻塞执行项、活跃 Bug 或阻塞风险。', tone: 'risk' }
+    : null;
+  return (
+    <div className="scoped-report">
       <div className="report-actions">
-        <a className="primary link-button" href={downloadUrl(`/reports/html?projectId=${props.projectId}`)} target="_blank" rel="noreferrer">打开 HTML 报告</a>
-        <a className="link-button" href={downloadUrl(`/reports/pdf?projectId=${props.projectId}`)}>导出 PDF 报告</a>
-        <ExportLink projectId={props.projectId} type="requirements" label="导出需求" />
-        <ExportLink projectId={props.projectId} type="test-cases" label="导出用例" />
-        <ExportLink projectId={props.projectId} type="bugs" label="导出 Bug" />
-        <ExportLink projectId={props.projectId} type="run-results" label="导出执行结果" />
+        <a className="primary link-button" href={downloadUrl(`/reports/html?${props.query}`)} target="_blank" rel="noreferrer"><FileText size={15} /> 打开 HTML</a>
+        <a className="link-button" href={downloadUrl(`/reports/pdf?${props.query}`)}><Download size={15} /> 导出 PDF</a>
       </div>
-      {report ? (
-        <>
+      {acceptance && (
+        <div className={`acceptance-callout tone-${acceptance.tone}`}>
+          <strong>{acceptance.title}</strong>
+          <span>{acceptance.detail}</span>
+        </div>
+      )}
           <section className="insight-strip">
-            <button type="button" className="metric-action" onClick={() => props.onDrilldown?.('requirements', { status: 'done' })}>
-              <MetricCard label="需求完成率" value={rate(report.requirements.done, report.requirements.total)} detail={`${report.requirements.done}/${report.requirements.total}`} tone="good" />
-            </button>
+            <MetricCard label="需求完成率" value={rate(report.requirements.done, report.requirements.total)} detail={`${report.requirements.done}/${report.requirements.total}`} tone="good" />
             <MetricCard label="用例准备率" value={rate(report.cases.ready, report.cases.total)} detail={`${report.cases.ready}/${report.cases.total}`} />
-            <button type="button" className="metric-action" onClick={() => props.onDrilldown?.('plans', { status: 'active' })}>
-              <MetricCard label="执行通过率" value={`${report.execution.passRate}%`} detail={`${report.execution.passed}/${report.execution.total}`} tone="info" />
-            </button>
-            <button type="button" className="metric-action" onClick={() => props.onDrilldown?.('bugs', { status: 'open' })}>
-              <MetricCard label="活跃 Bug" value={report.bugs.active} detail={`${report.bugs.overdue || 0} 个逾期`} tone={report.bugs.active ? 'risk' : 'good'} />
-            </button>
+            <MetricCard label="执行通过率" value={`${report.execution.passRate}%`} detail={`${report.execution.passed}/${report.execution.total}`} tone="info" />
+            <MetricCard label="活跃 Bug" value={report.bugs.active} detail={`${report.bugs.overdue || 0} 个逾期`} tone={report.bugs.active ? 'risk' : 'good'} />
           </section>
           <div className="chart-grid">
             <article className="chart-panel">
@@ -81,7 +113,7 @@ export function ReportSection(props: { projectId: string; report: ReportSummary 
             headers={['需求', '状态', '用例覆盖', '关联 Bug', '风险截止']}
             emptyText="暂无需求覆盖数据"
             rows={(report.charts?.requirementCoverage || []).map((item) => [
-              <button type="button" className="linkish" onClick={() => props.onDrilldown?.('requirements', { keyword: item.title })}>{item.title}</button>,
+              item.title,
               <StatusBadge value={item.status} dictionaryType="requirementStatus" />,
               item.caseCount,
               item.bugCount,
@@ -93,23 +125,52 @@ export function ReportSection(props: { projectId: string; report: ReportSummary 
             emptyText="暂无风险"
             rows={(report.charts?.riskList || []).map((item) => [
               item.type,
-              <button type="button" className="linkish" onClick={() => props.onDrilldown?.(item.type === 'bug' ? 'bugs' : item.type === 'execution' ? 'plans' : 'requirements', { keyword: item.title })}>{item.title}</button>,
+              item.title,
               item.reason,
               item.dueDate ? item.dueDate.slice(0, 10) : '-'
             ])}
           />
           <DataTable
-            headers={['域', '核心指标', '明细']}
-            rows={[
-              ['需求', `${report.requirements.total} 个`, `完成 ${report.requirements.done}，测试中 ${report.requirements.testing}，阻塞 ${report.requirements.blocked}`],
-              ['执行', `${report.execution.passRate}% 通过率`, `通过 ${report.execution.passed}，失败 ${report.execution.failed}，阻塞 ${report.execution.blocked}，未测 ${report.execution.untested}`],
-              ['Bug', `${report.bugs.active} 个活跃`, `新建 ${report.bugs.open}，处理中 ${report.bugs.inProgress}，已解决 ${report.bugs.resolved}，重开 ${report.bugs.reopened}`]
-            ]}
+            headers={['覆盖用例', '优先级', '状态']}
+            emptyText="暂无覆盖用例"
+            rows={(report.details?.cases || []).map((item) => [
+              item.title,
+              <StatusBadge value={item.priority} dictionaryType="priority" />,
+              <StatusBadge value={item.status} dictionaryType="testCaseStatus" />
+            ])}
           />
-        </>
-      ) : <EmptyState text="暂无报告数据" />}
-    </DataPage>
+          <DataTable
+            headers={['执行计划', '执行项', '状态', '实际结果', '执行时间']}
+            emptyText="暂无执行明细"
+            rows={(report.details?.executionItems || []).map((item) => [
+              `${item.round} · ${item.planName}`,
+              item.caseTitle,
+              <StatusBadge value={item.status} dictionaryType="testRunStatus" />,
+              item.actualResult || '-',
+              item.executedAt ? new Date(item.executedAt).toLocaleString('zh-CN') : '-'
+            ])}
+          />
+          <DataTable
+            headers={['关联 Bug', '严重级别', '优先级', '状态', '截止时间']}
+            emptyText="暂无关联 Bug"
+            rows={(report.details?.bugs || []).map((item) => [
+              item.title,
+              <StatusBadge value={item.severity} dictionaryType="severity" />,
+              <StatusBadge value={item.priority} dictionaryType="priority" />,
+              <StatusBadge value={item.status} dictionaryType="bugStatus" />,
+              item.dueAt ? item.dueAt.slice(0, 10) : '-'
+            ])}
+          />
+    </div>
   );
+}
+
+function reportQuery(params: { projectId: string; iterationId?: string; requirementId?: string }) {
+  const search = new URLSearchParams();
+  search.set('projectId', params.projectId);
+  if (params.iterationId) search.set('iterationId', params.iterationId);
+  if (params.requirementId) search.set('requirementId', params.requirementId);
+  return search.toString();
 }
 
 export function SettingsSection(props: {

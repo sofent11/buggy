@@ -12,7 +12,6 @@ export function pageInfo(tab: Tab) {
     cases: { title: '用例库', description: (project) => `管理「${project}」的测试用例、优先级和执行前置条件。` },
     plans: { title: '测试执行', description: (project) => `组织「${project}」的测试轮次、用例范围和执行结果。` },
     bugs: { title: '缺陷追踪', description: (project) => `筛选、指派和追踪「${project}」中的缺陷。` },
-    reports: { title: '统计报告', description: (project) => `导出「${project}」的需求、用例、Bug 和质量统计。` },
     settings: { title: '系统配置', description: (project) => `配置「${project}」的数据字典、Excel 模板和账号权限。` }
   };
   return descriptions[tab];
