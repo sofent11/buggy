@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { BarChart3, Save, Settings, Upload } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import type { Dictionary, ReportSummary, UserProfile } from '@buggy/shared-types';
+import type { Dictionary, ImportPreview, ReportSummary, UserProfile } from '@buggy/shared-types';
 import { api, downloadUrl, type ImportResult } from '../../api.js';
 import { Button } from '../ui/button.js';
 import { Input } from '../ui/input.js';
@@ -19,9 +19,11 @@ export function ReportSection(props: { projectId: string; report: ReportSummary 
     <DataPage title="统计报告" icon={BarChart3}>
       <div className="report-actions">
         <a className="primary link-button" href={downloadUrl(`/reports/html?projectId=${props.projectId}`)} target="_blank" rel="noreferrer">打开 HTML 报告</a>
+        <a className="link-button" href={downloadUrl(`/reports/pdf?projectId=${props.projectId}`)}>导出 PDF 报告</a>
         <ExportLink projectId={props.projectId} type="requirements" label="导出需求" />
         <ExportLink projectId={props.projectId} type="test-cases" label="导出用例" />
         <ExportLink projectId={props.projectId} type="bugs" label="导出 Bug" />
+        <ExportLink projectId={props.projectId} type="run-results" label="导出执行结果" />
       </div>
       {report ? (
         <>
@@ -29,7 +31,7 @@ export function ReportSection(props: { projectId: string; report: ReportSummary 
             <MetricCard label="需求完成率" value={rate(report.requirements.done, report.requirements.total)} detail={`${report.requirements.done}/${report.requirements.total}`} tone="good" />
             <MetricCard label="用例准备率" value={rate(report.cases.ready, report.cases.total)} detail={`${report.cases.ready}/${report.cases.total}`} />
             <MetricCard label="执行通过率" value={`${report.execution.passRate}%`} detail={`${report.execution.passed}/${report.execution.total}`} tone="info" />
-            <MetricCard label="活跃 Bug" value={report.bugs.active} detail={`${report.bugs.total} 总数`} tone={report.bugs.active ? 'risk' : 'good'} />
+            <MetricCard label="活跃 Bug" value={report.bugs.active} detail={`${report.bugs.overdue || 0} 个逾期`} tone={report.bugs.active ? 'risk' : 'good'} />
           </section>
           <div className="chart-grid">
             <article className="chart-panel">
@@ -69,13 +71,24 @@ export function ReportSection(props: { projectId: string; report: ReportSummary 
             </article>
           </div>
           <DataTable
-            headers={['需求', '状态', '用例覆盖', '关联 Bug']}
+            headers={['需求', '状态', '用例覆盖', '关联 Bug', '风险截止']}
             emptyText="暂无需求覆盖数据"
             rows={(report.charts?.requirementCoverage || []).map((item) => [
               item.title,
               <StatusBadge value={item.status} dictionaryType="requirementStatus" />,
               item.caseCount,
-              item.bugCount
+              item.bugCount,
+              item.dueDate ? item.dueDate.slice(0, 10) : item.riskNote || '-'
+            ])}
+          />
+          <DataTable
+            headers={['风险类型', '对象', '原因', '截止时间']}
+            emptyText="暂无风险"
+            rows={(report.charts?.riskList || []).map((item) => [
+              item.type,
+              item.title,
+              item.reason,
+              item.dueDate ? item.dueDate.slice(0, 10) : '-'
             ])}
           />
           <DataTable
@@ -102,6 +115,9 @@ export function SettingsSection(props: {
   mutateWithResult: <T>(action: () => Promise<T>, resolveMessage: (result: T) => string) => Promise<void>;
 }) {
   const [lastImport, setLastImport] = useState<ImportResult | null>(null);
+  const [importType, setImportType] = useState('requirements');
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<ImportPreview | null>(null);
   return (
     <DataPage title="系统配置" icon={Settings}>
       <div className="cards two">
@@ -118,26 +134,52 @@ export function SettingsSection(props: {
           <strong>Excel 导入</strong>
           <form className="stack" onSubmit={async (event) => {
             event.preventDefault();
-            const form = new FormData(event.currentTarget);
-            const file = form.get('file');
-            if (!(file instanceof File) || !file.name) {
+            if (!importFile) {
               props.onNotice('请选择 Excel 文件');
               return;
             }
-            await props.mutateWithResult(() => api.importXlsx(props.projectId, text(form, 'type'), file), (result) => {
+            await props.mutateWithResult(() => api.importXlsx(props.projectId, importType, importFile), (result) => {
               setLastImport(result);
+              setPreview(null);
               return importMessage(result);
             });
           }}>
-            <select name="type">
+            <select name="type" value={importType} onChange={(event) => setImportType(event.target.value)}>
               <option value="requirements">需求</option>
               <option value="test-cases">用例</option>
               <option value="bugs">Bug</option>
               <option value="run-results">执行结果</option>
             </select>
-            <Input name="file" type="file" accept=".xlsx" />
-            <Button variant="primary"><Upload size={15} /> 上传 Excel</Button>
+            <Input name="file" type="file" accept=".xlsx" onChange={(event) => setImportFile(event.target.files?.[0] || null)} />
+            <div className="report-actions">
+              <Button type="button" onClick={async () => {
+                if (!importFile) {
+                  props.onNotice('请选择 Excel 文件');
+                  return;
+                }
+                const result = await api.previewImportXlsx(props.projectId, importType, importFile);
+                setPreview(result);
+                props.onNotice(`预检完成：${result.validRows}/${result.totalRows} 行可导入`);
+              }}><Upload size={15} /> 预检 Excel</Button>
+              <Button variant="primary"><Upload size={15} /> 确认导入</Button>
+            </div>
           </form>
+          {preview && (
+            <div className="import-preview">
+              <strong>字段映射预览</strong>
+              <span>{preview.validRows}/{preview.totalRows} 行可导入，{preview.errors.length} 个错误，{preview.duplicateRows.length} 个重复提示</span>
+              <DataTable headers={['字段', '模板列', '匹配表头']} rows={preview.mappings.map((item) => [item.field, item.label, item.sourceHeader || '未匹配'])} />
+              {(preview.errors.length > 0 || preview.duplicateRows.length > 0) && (
+                <DataTable
+                  headers={['行号', '问题']}
+                  rows={[
+                    ...preview.errors.slice(0, 6).map((error) => [error.row, `${error.field ? `${error.field}: ` : ''}${error.message}`]),
+                    ...preview.duplicateRows.slice(0, 4).map((item) => [item.row, item.message])
+                  ]}
+                />
+              )}
+            </div>
+          )}
           {lastImport && (
             <div className="import-preview">
               <strong>最近导入校验</strong>

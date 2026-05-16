@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import type { Bug, BugAttachment, BugComment, BugStatusHistory, PageResult } from '@buggy/shared-types';
@@ -7,7 +7,9 @@ import { TestPlanEntity } from '../database/test-plan.schema.js';
 import type { AddBugAttachmentDto, AddBugCommentDto, CreateBugDto, CreateBugFromRunDto, UpdateBugDto } from '../dto/bug.dto.js';
 import type { ListQueryDto } from '../dto/common.dto.js';
 import { idOf, toObjectId } from '../shared/mongo.js';
+import { ActivityService } from './activity.service.js';
 import type { SessionUser } from './auth.service.js';
+import { NotificationService } from './notification.service.js';
 import { TestPlanService } from './test-plan.service.js';
 
 @Injectable()
@@ -15,7 +17,9 @@ export class BugService {
   constructor(
     @InjectModel(BugEntity.name) private readonly bugs: Model<BugEntity>,
     @InjectModel(TestPlanEntity.name) private readonly plans: Model<TestPlanEntity>,
-    private readonly testPlanService: TestPlanService
+    private readonly testPlanService: TestPlanService,
+    private readonly activities: ActivityService,
+    private readonly notifications: NotificationService
   ) {}
 
   async list(query: ListQueryDto): Promise<PageResult<Bug>> {
@@ -64,11 +68,21 @@ export class BugService {
       assigneeId: toObjectId(dto.assigneeId),
       reporterId: new Types.ObjectId(user.id),
       duplicateOfId: toObjectId(dto.duplicateOfId),
+      dueAt: dto.dueAt ? new Date(dto.dueAt) : defaultDueAt(dto.severity || 'S2'),
       comments: [],
       attachments: [],
       statusHistory: [this.statusHistoryEntry(undefined, status, user, '创建缺陷')]
     });
     if (dto.testPlanId && dto.runItemId) await this.testPlanService.appendBug(dto.testPlanId, dto.runItemId, idOf(row._id));
+    await this.activities.record({
+      projectId: idOf(row.projectId),
+      entityType: 'bug',
+      entityId: idOf(row._id),
+      action: 'created',
+      title: `创建 Bug：${row.title}`,
+      actor: user
+    });
+    await this.notifyAssignment(row, user);
     return this.toDto(row);
   }
 
@@ -102,6 +116,7 @@ export class BugService {
     const row = await this.bugs.findById(id);
     if (!row) throw new NotFoundException('Bug 不存在');
     const previousStatus = row.status;
+    const previousAssigneeId = row.assigneeId ? idOf(row.assigneeId) : undefined;
     if (dto.iterationId !== undefined) row.iterationId = toObjectId(dto.iterationId);
     if (dto.requirementId !== undefined) row.requirementId = toObjectId(dto.requirementId);
     if (dto.testCaseId !== undefined) row.testCaseId = toObjectId(dto.testCaseId);
@@ -113,9 +128,19 @@ export class BugService {
     if (dto.actualResult !== undefined) row.actualResult = dto.actualResult;
     if (dto.severity !== undefined) row.severity = dto.severity;
     if (dto.priority !== undefined) row.priority = dto.priority;
-    if (dto.status !== undefined) row.status = dto.status;
+    if (dto.status !== undefined) {
+      this.assertTransition(previousStatus, dto.status);
+      row.status = dto.status;
+      if (dto.status === 'resolved' && previousStatus !== 'resolved') row.resolvedAt = new Date();
+      if (dto.status === 'verified' && previousStatus !== 'verified') row.verifiedAt = new Date();
+      if (dto.status === 'reopened') {
+        row.resolvedAt = undefined;
+        row.verifiedAt = undefined;
+      }
+    }
     if (dto.assigneeId !== undefined) row.assigneeId = toObjectId(dto.assigneeId);
     if (dto.duplicateOfId !== undefined) row.duplicateOfId = toObjectId(dto.duplicateOfId);
+    if (dto.dueAt !== undefined) row.dueAt = dto.dueAt ? new Date(dto.dueAt) : undefined;
     if (dto.status && dto.status !== previousStatus) {
       row.statusHistory = [
         ...(row.statusHistory || []),
@@ -124,6 +149,17 @@ export class BugService {
     }
     await row.save();
     if (dto.testPlanId && dto.runItemId) await this.testPlanService.appendBug(dto.testPlanId, dto.runItemId, id);
+    await this.activities.record({
+      projectId: idOf(row.projectId),
+      entityType: 'bug',
+      entityId: id,
+      action: dto.status && dto.status !== previousStatus ? 'status_changed' : 'updated',
+      title: `更新 Bug：${row.title}`,
+      detail: dto.status && dto.status !== previousStatus ? `${previousStatus} -> ${dto.status}` : '',
+      actor: user
+    });
+    if ((dto.assigneeId !== undefined && dto.assigneeId !== previousAssigneeId) || !previousAssigneeId) await this.notifyAssignment(row, user);
+    if (dto.status && dto.status !== previousStatus) await this.notifyStatus(row, previousStatus, user);
     return this.toDto(row);
   }
 
@@ -141,10 +177,19 @@ export class BugService {
       }
     ];
     await row.save();
+    await this.activities.record({
+      projectId: idOf(row.projectId),
+      entityType: 'bug',
+      entityId: id,
+      action: 'commented',
+      title: `评论 Bug：${row.title}`,
+      detail: dto.body.trim(),
+      actor: user
+    });
     return this.toDto(row);
   }
 
-  async addAttachment(id: string, dto: AddBugAttachmentDto): Promise<Bug> {
+  async addAttachment(id: string, dto: AddBugAttachmentDto, user?: SessionUser): Promise<Bug> {
     const row = await this.bugs.findById(id);
     if (!row) throw new NotFoundException('Bug 不存在');
     row.attachments = [
@@ -153,10 +198,23 @@ export class BugService {
         id: new Types.ObjectId().toString(),
         name: dto.name.trim(),
         url: dto.url.trim(),
+        size: dto.size,
+        mimeType: dto.mimeType,
+        uploaderId: user?.id,
+        uploaderName: user?.username,
         createdAt: new Date().toISOString()
       }
     ];
     await row.save();
+    await this.activities.record({
+      projectId: idOf(row.projectId),
+      entityType: 'bug',
+      entityId: id,
+      action: 'attached',
+      title: `上传附件：${row.title}`,
+      detail: dto.name.trim(),
+      actor: user
+    });
     return this.toDto(row);
   }
 
@@ -190,6 +248,9 @@ export class BugService {
       assigneeId: row.assigneeId ? idOf(row.assigneeId) : undefined,
       reporterId: row.reporterId ? idOf(row.reporterId) : undefined,
       duplicateOfId: row.duplicateOfId ? idOf(row.duplicateOfId) : undefined,
+      dueAt: row.dueAt?.toISOString(),
+      resolvedAt: row.resolvedAt?.toISOString(),
+      verifiedAt: row.verifiedAt?.toISOString(),
       comments: this.normalizeComments(row.comments || []),
       attachments: this.normalizeAttachments(row.attachments || []),
       statusHistory: this.normalizeStatusHistory(row.statusHistory || []),
@@ -228,6 +289,10 @@ export class BugService {
         id: String(row.id || new Types.ObjectId()),
         name: String(row.name || ''),
         url: String(row.url || ''),
+        size: typeof row.size === 'number' ? row.size : undefined,
+        mimeType: row.mimeType,
+        uploaderId: row.uploaderId,
+        uploaderName: row.uploaderName,
         createdAt: String(row.createdAt || new Date().toISOString())
       }))
       .filter((row) => row.name && row.url);
@@ -252,4 +317,54 @@ export class BugService {
     if (!sortBy || !allowed.has(sortBy)) return { updatedAt: -1 };
     return { [sortBy]: sortOrder === 'asc' ? 1 : -1 };
   }
+
+  private assertTransition(from: Bug['status'], to: Bug['status']) {
+    if (from === to) return;
+    const allowed: Record<Bug['status'], Bug['status'][]> = {
+      open: ['in_progress', 'reopened'],
+      in_progress: ['resolved', 'reopened'],
+      resolved: ['verified', 'reopened', 'in_progress'],
+      verified: ['closed', 'reopened'],
+      closed: ['reopened'],
+      reopened: ['in_progress', 'resolved']
+    };
+    if (!allowed[from]?.includes(to)) throw new BadRequestException(`不允许从 ${from} 流转到 ${to}`);
+  }
+
+  private async notifyAssignment(row: BugEntity & { _id: unknown }, user?: SessionUser) {
+    if (!row.assigneeId) return;
+    await this.notifications.create({
+      userId: idOf(row.assigneeId),
+      projectId: idOf(row.projectId),
+      title: `Bug 指派给你：${row.title}`,
+      body: row.actualResult || row.reproduceSteps || '请跟进该缺陷。',
+      entityType: 'bug',
+      entityId: idOf(row._id),
+      actorId: user?.id
+    });
+  }
+
+  private async notifyStatus(row: BugEntity & { _id: unknown }, previousStatus: Bug['status'], user?: SessionUser) {
+    const targets = [row.assigneeId ? idOf(row.assigneeId) : undefined, row.reporterId ? idOf(row.reporterId) : undefined];
+    await Promise.all(
+      [...new Set(targets.filter(Boolean))].map((userId) =>
+        this.notifications.create({
+          userId,
+          projectId: idOf(row.projectId),
+          title: `Bug 状态变更：${row.title}`,
+          body: `${previousStatus} -> ${row.status}`,
+          entityType: 'bug',
+          entityId: idOf(row._id),
+          actorId: user?.id
+        })
+      )
+    );
+  }
+}
+
+function defaultDueAt(severity: Bug['severity']) {
+  const days: Record<Bug['severity'], number> = { S0: 1, S1: 2, S2: 5, S3: 10 };
+  const date = new Date();
+  date.setDate(date.getDate() + days[severity]);
+  return date;
 }

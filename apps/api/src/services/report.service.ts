@@ -31,6 +31,41 @@ export class ReportService {
     const runItems = plans.flatMap((plan) => plan.runItems);
     const executionTotal = runItems.length;
     const passed = this.countBy(runItems, 'status', 'passed');
+    const now = Date.now();
+    const overdueBugs = bugs.filter((bug) => bug.dueAt && bug.dueAt.getTime() < now && !['verified', 'closed'].includes(bug.status));
+    const riskList = [
+      ...requirements
+        .filter((requirement) => requirement.status === 'blocked' || (requirement.dueDate && requirement.dueDate.getTime() < now && requirement.status !== 'done'))
+        .map((requirement) => ({
+          id: String(requirement._id),
+          type: 'requirement' as const,
+          title: requirement.title,
+          ownerId: requirement.riskOwnerId ? String(requirement.riskOwnerId) : requirement.ownerId ? String(requirement.ownerId) : undefined,
+          dueDate: requirement.dueDate?.toISOString(),
+          reason: requirement.status === 'blocked' ? '需求阻塞' : '需求已逾期',
+          severity: requirement.status === 'blocked' ? ('high' as const) : ('medium' as const)
+        })),
+      ...overdueBugs.map((bug) => ({
+        id: String(bug._id),
+        type: 'bug' as const,
+        title: bug.title,
+        ownerId: bug.assigneeId ? String(bug.assigneeId) : undefined,
+        dueDate: bug.dueAt?.toISOString(),
+        reason: 'Bug SLA 已逾期',
+        severity: ['S0', 'S1'].includes(bug.severity) ? ('high' as const) : ('medium' as const)
+      })),
+      ...runItems
+        .filter((item) => item.status === 'failed' || item.status === 'blocked')
+        .slice(0, 10)
+        .map((item) => ({
+          id: String(item._id),
+          type: 'execution' as const,
+          title: item.caseTitle,
+          ownerId: item.executorId ? String(item.executorId) : undefined,
+          reason: item.status === 'blocked' ? '执行阻塞' : '执行失败',
+          severity: item.status === 'blocked' ? ('high' as const) : ('medium' as const)
+        }))
+    ];
     return {
       projectId: query.projectId,
       iterationId: query.iterationId,
@@ -64,7 +99,8 @@ export class ReportService {
         verified: this.countBy(bugs, 'status', 'verified'),
         closed: this.countBy(bugs, 'status', 'closed'),
         reopened: this.countBy(bugs, 'status', 'reopened'),
-        active: bugs.filter((bug) => !['verified', 'closed'].includes(bug.status)).length
+        active: bugs.filter((bug) => !['verified', 'closed'].includes(bug.status)).length,
+        overdue: overdueBugs.length
       },
       charts: {
         executionTrend: plans.map((plan) => {
@@ -117,9 +153,13 @@ export class ReportService {
             title: requirement.title,
             caseCount: cases.filter((item) => String(item.requirementId || '') === id).length,
             bugCount: bugs.filter((item) => String(item.requirementId || '') === id).length,
-            status: requirement.status
+            status: requirement.status,
+            riskOwnerId: requirement.riskOwnerId ? String(requirement.riskOwnerId) : undefined,
+            dueDate: requirement.dueDate?.toISOString(),
+            riskNote: requirement.riskNote
           };
-        })
+        }),
+        riskList
       }
     };
   }
@@ -164,8 +204,29 @@ export class ReportService {
     <tr><th>需求</th><th>状态</th><th>用例覆盖</th><th>关联 Bug</th></tr>
     ${coverageRows || '<tr><td colspan="4">暂无需求覆盖数据</td></tr>'}
   </table>
+  <h2>风险清单</h2>
+  <table>
+    <tr><th>类型</th><th>事项</th><th>原因</th><th>截止时间</th></tr>
+    ${(summary.charts?.riskList || []).map((item) => `<tr><td>${item.type}</td><td>${escapeHtml(item.title)}</td><td>${escapeHtml(item.reason)}</td><td>${item.dueDate ? item.dueDate.slice(0, 10) : '-'}</td></tr>`).join('') || '<tr><td colspan="4">暂无风险</td></tr>'}
+  </table>
 </body>
 </html>`;
+  }
+
+  async pdf(query: ListQueryDto): Promise<Buffer> {
+    const summary = await this.summary(query);
+    const lines = [
+      'Buggy 测试报告',
+      `生成时间：${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}`,
+      `需求：${summary.requirements.total}，完成：${summary.requirements.done}，阻塞：${summary.requirements.blocked}`,
+      `用例：${summary.cases.total}，可执行：${summary.cases.ready}`,
+      `执行通过率：${summary.execution.passRate}% (${summary.execution.passed}/${summary.execution.total})`,
+      `活跃 Bug：${summary.bugs.active}，逾期 Bug：${summary.bugs.overdue}`,
+      '',
+      '风险清单：',
+      ...(summary.charts?.riskList || []).map((item) => `${item.type} | ${item.title} | ${item.reason}`)
+    ];
+    return createSimplePdf(lines);
   }
 
   private baseFilter(query: ListQueryDto) {
@@ -223,6 +284,29 @@ export class ReportService {
     };
     return labels[value] || value;
   }
+}
+
+function createSimplePdf(lines: string[]) {
+  const escaped = lines.map((line) => line.replace(/[\\()]/g, '\\$&'));
+  const content = ['BT', '/F1 14 Tf', '56 780 Td', '18 TL', ...escaped.map((line, index) => `${index === 0 ? '' : 'T*'} (${line}) Tj`), 'ET'].join('\n');
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+    `<< /Length ${Buffer.byteLength(content)} >>\nstream\n${content}\nendstream`
+  ];
+  const chunks = ['%PDF-1.4\n'];
+  const offsets = [0];
+  for (const [index, object] of objects.entries()) {
+    offsets.push(Buffer.byteLength(chunks.join('')));
+    chunks.push(`${index + 1} 0 obj\n${object}\nendobj\n`);
+  }
+  const xrefOffset = Buffer.byteLength(chunks.join(''));
+  chunks.push(`xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`);
+  offsets.slice(1).forEach((offset) => chunks.push(`${String(offset).padStart(10, '0')} 00000 n \n`));
+  chunks.push(`trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`);
+  return Buffer.from(chunks.join(''));
 }
 
 function escapeHtml(value: string) {

@@ -36,16 +36,25 @@ export class ImportExportController {
 
   @Post('import')
   async importRows(@Body() dto: ImportRowsDto, @CurrentUser() user: SessionUser) {
-    await this.projects.assertManage(dto.projectId, user);
+    await this.projects.assertWrite(dto.projectId, user);
     return this.importExport.importRows(dto, user);
   }
 
   @Post('import-xlsx')
   async importXlsx(@Query('projectId') projectId: string, @Query('type') type: ImportRowsDto['type'], @Req() request: FastifyRequest, @CurrentUser() user: SessionUser) {
-    await this.projects.assertManage(projectId, user);
+    await this.projects.assertWrite(projectId, user);
     const file = await request.file();
     if (!file) return { imported: 0, errors: [{ row: 0, message: '请选择 Excel 文件' }] };
     const buffer = await file.toBuffer();
     return this.importExport.importWorkbook(projectId, type, buffer, user);
+  }
+
+  @Post('preview-xlsx')
+  async previewXlsx(@Query('projectId') projectId: string, @Query('type') type: ImportRowsDto['type'], @Req() request: FastifyRequest, @CurrentUser() user: SessionUser) {
+    await this.projects.assertWrite(projectId, user);
+    const file = await request.file();
+    if (!file) return { headers: [], mappings: [], totalRows: 0, validRows: 0, duplicateRows: [], errors: [{ row: 0, message: '请选择 Excel 文件' }] };
+    const buffer = await file.toBuffer();
+    return this.importExport.previewWorkbook(projectId, type, buffer);
   }
 }

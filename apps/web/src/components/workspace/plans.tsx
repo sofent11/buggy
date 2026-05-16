@@ -18,6 +18,8 @@ export function PlanSection(props: {
   cases: TestCase[];
   rows: TestPlan[];
   bugs: Bug[];
+  canWrite?: boolean;
+  canManage?: boolean;
   mutate: (action: () => Promise<unknown>, message: string) => Promise<void>;
   onNotice?: (message: string) => void;
 }) {
@@ -45,16 +47,16 @@ export function PlanSection(props: {
         <SearchBox value={keyword} onChange={setKeyword} placeholder="搜索计划、轮次" />
         <Select value={status} onChange={setStatus} values={planStatuses} dictionaryType="testPlanStatus" emptyLabel="全部状态" />
         <span className="toolbar-summary">{rows.length} 个测试计划 · {props.cases.length} 条可选用例</span>
-        <button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建计划</button>
+        {props.canWrite && <button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建计划</button>}
       </Toolbar>
       <div className="plan-stack">
-        {rows.map((plan) => <PlanCard key={plan.id} plan={plan} iterations={props.iterations} requirements={props.requirements} cases={props.cases} bugs={props.bugs} mutate={props.mutate} />)}
+        {rows.map((plan) => <PlanCard key={plan.id} plan={plan} iterations={props.iterations} requirements={props.requirements} cases={props.cases} bugs={props.bugs} canWrite={props.canWrite} canManage={props.canManage} mutate={props.mutate} />)}
       </div>
       {rows.length === 0 && (
         <EmptyState
           text="暂无测试计划"
           detail="选择本轮要执行的用例后，执行页会形成可追踪的结果快照。"
-          action={<button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建计划</button>}
+          action={props.canWrite ? <button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建计划</button> : undefined}
         />
       )}
       <PlanCreateDrawer
@@ -124,7 +126,7 @@ function PlanCreateDrawer(props: {
   );
 }
 
-export function PlanCard(props: { plan: TestPlan; iterations: Iteration[]; requirements: Requirement[]; cases: TestCase[]; bugs: Bug[]; mutate: (action: () => Promise<unknown>, message: string) => Promise<void> }) {
+export function PlanCard(props: { plan: TestPlan; iterations: Iteration[]; requirements: Requirement[]; cases: TestCase[]; bugs: Bug[]; canWrite?: boolean; canManage?: boolean; mutate: (action: () => Promise<unknown>, message: string) => Promise<void> }) {
   const [editing, setEditing] = useState(false);
   const [caseIds, setCaseIds] = useState(props.plan.caseIds);
   useEffect(() => setCaseIds(props.plan.caseIds), [props.plan.caseIds]);
@@ -137,14 +139,14 @@ export function PlanCard(props: { plan: TestPlan; iterations: Iteration[]; requi
         </div>
         <StatusBadge value={props.plan.status} dictionaryType="testPlanStatus" />
         <span className="progress-pill">{executionProgress(props.plan.runItems)}</span>
-        {props.plan.runItems.length > 0 && (
+        {props.canWrite && props.plan.runItems.length > 0 && (
           <>
             <Button type="button" size="sm" onClick={() => props.mutate(() => Promise.all(props.plan.runItems.map((item) => api.updateRunItem(props.plan.id, item.id, { status: 'passed', actualResult: item.actualResult || '批量标记通过' }))), '执行项已批量通过')}>全部通过</Button>
             <Button type="button" size="sm" onClick={() => props.mutate(() => Promise.all(props.plan.runItems.map((item) => api.updateRunItem(props.plan.id, item.id, { status: 'failed', actualResult: item.actualResult || '批量标记失败' }))), '执行项已批量失败')}>全部失败</Button>
           </>
         )}
-        <Button type="button" size="sm" onClick={() => setEditing(true)}><Pencil size={14} /> 编辑计划</Button>
-        <DangerButton title={`删除测试计划「${props.plan.name}」？`} onConfirm={() => props.mutate(() => api.deleteTestPlan(props.plan.id), '测试计划已删除')} />
+        <Button type="button" size="sm" onClick={() => setEditing(true)}><Pencil size={14} /> 详情</Button>
+        {props.canManage && <DangerButton title={`删除测试计划「${props.plan.name}」？`} onConfirm={() => props.mutate(() => api.deleteTestPlan(props.plan.id), '测试计划已删除')} />}
       </header>
       <DataTable
         headers={['执行项', '状态', '实际结果', '执行人/时间', '关联 Bug', '快捷操作']}
@@ -154,7 +156,7 @@ export function PlanCard(props: { plan: TestPlan; iterations: Iteration[]; requi
           item.actualResult || '-',
           item.executedAt ? new Date(item.executedAt).toLocaleString('zh-CN') : '-',
           props.bugs.filter((bug) => item.bugIds.includes(bug.id)).map((bug) => bug.title).join('、') || '-',
-          <RunItemActions planId={props.plan.id} item={item} mutate={props.mutate} />
+          <RunItemActions planId={props.plan.id} item={item} canWrite={props.canWrite} mutate={props.mutate} />
         ])}
       />
       <Drawer title="编辑测试计划" subtitle={props.plan.name} open={editing} onClose={() => setEditing(false)}>
@@ -176,7 +178,7 @@ export function PlanCard(props: { plan: TestPlan; iterations: Iteration[]; requi
                   </label>
                 ))}
               </div>
-              <FormActions><Button type="button" onClick={() => setEditing(false)}>取消</Button><Button variant="primary"><Save size={15} /> 保存计划</Button></FormActions>
+              <FormActions><Button type="button" onClick={() => setEditing(false)}>取消</Button>{props.canWrite && <Button variant="primary"><Save size={15} /> 保存计划</Button>}</FormActions>
             </>
           )}
         </HookForm>
@@ -185,18 +187,18 @@ export function PlanCard(props: { plan: TestPlan; iterations: Iteration[]; requi
   );
 }
 
-function RunItemActions(props: { planId: string; item: TestRunItem; mutate: (action: () => Promise<unknown>, message: string) => Promise<void> }) {
+function RunItemActions(props: { planId: string; item: TestRunItem; canWrite?: boolean; mutate: (action: () => Promise<unknown>, message: string) => Promise<void> }) {
   const [editing, setEditing] = useState(false);
   const [bugConfirm, setBugConfirm] = useState(false);
   const [stepResults, setStepResults] = useState(() => initialStepResults(props.item));
   useEffect(() => setStepResults(initialStepResults(props.item)), [props.item]);
   return (
     <div className="row-actions">
-      {(['passed', 'failed', 'blocked'] as const).map((status) => (
+      {props.canWrite && (['passed', 'failed', 'blocked'] as const).map((status) => (
         <Button key={status} type="button" size="sm" onClick={() => props.mutate(() => api.updateRunItem(props.planId, props.item.id, { status, actualResult: props.item.actualResult }), '执行结果已更新')}>{labelOf(status)}</Button>
       ))}
-      <Button type="button" size="sm" onClick={() => setEditing(true)}><Pencil size={14} /> 记录</Button>
-      <Button type="button" size="sm" onClick={() => setBugConfirm(true)}><BugIcon size={14} /> 建 Bug</Button>
+      {props.canWrite && <Button type="button" size="sm" onClick={() => setEditing(true)}><Pencil size={14} /> 记录</Button>}
+      {props.canWrite && <Button type="button" size="sm" onClick={() => setBugConfirm(true)}><BugIcon size={14} /> 建 Bug</Button>}
       <ConfirmDialog open={bugConfirm} title="从执行项创建 Bug？" description={props.item.caseTitle} confirmText="创建 Bug" onCancel={() => setBugConfirm(false)} onConfirm={() => {
         setBugConfirm(false);
         props.mutate(() => api.createBugFromRun({ testPlanId: props.planId, runItemId: props.item.id, title: `${props.item.caseTitle} 执行失败`, actualResult: props.item.actualResult }), 'Bug 已从执行项创建');

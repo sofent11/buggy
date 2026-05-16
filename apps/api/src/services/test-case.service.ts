@@ -6,10 +6,15 @@ import { TestCaseEntity } from '../database/test-case.schema.js';
 import type { ListQueryDto } from '../dto/common.dto.js';
 import type { CreateTestCaseDto, UpdateTestCaseDto } from '../dto/test-case.dto.js';
 import { idOf, toObjectId } from '../shared/mongo.js';
+import { ActivityService } from './activity.service.js';
+import type { SessionUser } from './auth.service.js';
 
 @Injectable()
 export class TestCaseService {
-  constructor(@InjectModel(TestCaseEntity.name) private readonly cases: Model<TestCaseEntity>) {}
+  constructor(
+    @InjectModel(TestCaseEntity.name) private readonly cases: Model<TestCaseEntity>,
+    private readonly activities: ActivityService
+  ) {}
 
   async list(query: ListQueryDto): Promise<PageResult<TestCase>> {
     const filter: Record<string, unknown> = {};
@@ -35,7 +40,7 @@ export class TestCaseService {
     return { total, page, pageSize, items: rows.map((row) => this.toDto(row)) };
   }
 
-  async create(dto: CreateTestCaseDto): Promise<TestCase> {
+  async create(dto: CreateTestCaseDto, user?: SessionUser): Promise<TestCase> {
     const row = await this.cases.create({
       projectId: new Types.ObjectId(dto.projectId),
       requirementId: toObjectId(dto.requirementId),
@@ -47,6 +52,14 @@ export class TestCaseService {
       status: dto.status || 'ready',
       tags: dto.tags || []
     });
+    await this.activities.record({
+      projectId: idOf(row.projectId),
+      entityType: 'test_case',
+      entityId: idOf(row._id),
+      action: 'created',
+      title: `创建用例：${row.title}`,
+      actor: user
+    });
     return this.toDto(row);
   }
 
@@ -56,7 +69,7 @@ export class TestCaseService {
     return this.toDto(row);
   }
 
-  async update(id: string, dto: UpdateTestCaseDto): Promise<TestCase> {
+  async update(id: string, dto: UpdateTestCaseDto, user?: SessionUser): Promise<TestCase> {
     const row = await this.cases.findByIdAndUpdate(
       id,
       {
@@ -74,6 +87,14 @@ export class TestCaseService {
       { new: true }
     );
     if (!row) throw new NotFoundException('用例不存在');
+    await this.activities.record({
+      projectId: idOf(row.projectId),
+      entityType: 'test_case',
+      entityId: id,
+      action: dto.status ? 'status_changed' : 'updated',
+      title: `更新用例：${row.title}`,
+      actor: user
+    });
     return this.toDto(row);
   }
 

@@ -23,8 +23,8 @@ export class TestCaseController {
 
   @Post()
   async create(@Body() dto: CreateTestCaseDto, @CurrentUser() user: SessionUser) {
-    await this.projects.assertManage(dto.projectId, user);
-    return this.cases.create(dto);
+    await this.projects.assertWrite(dto.projectId, user);
+    return this.cases.create(dto, user);
   }
 
   @Get(':id')
@@ -35,8 +35,8 @@ export class TestCaseController {
 
   @Patch(':id')
   async update(@Param('id') id: string, @Body() dto: UpdateTestCaseDto, @CurrentUser() user: SessionUser) {
-    await this.projects.assertManage(await this.cases.projectIdOf(id), user);
-    return this.cases.update(id, dto);
+    await this.projects.assertWrite(await this.cases.projectIdOf(id), user);
+    return this.cases.update(id, dto, user);
   }
 
   @Delete(':id')

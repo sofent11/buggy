@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form';
 import {
   Activity,
   BarChart3,
+  Bell,
   Bug as BugIcon,
   CalendarRange,
   ClipboardCheck,
@@ -71,7 +72,7 @@ export function App() {
     }
     setBusy(true);
     try {
-      const [iterations, requirements, cases, plans, bugs, report, dictionaries, users] = await Promise.all([
+      const [iterations, requirements, cases, plans, bugs, report, dictionaries, users, activities, notifications, savedViews] = await Promise.all([
         api.iterations(projectId),
         api.requirements(projectId),
         api.testCases(projectId),
@@ -79,9 +80,12 @@ export function App() {
         api.bugs(projectId),
         api.report(projectId),
         api.dictionaries(projectId),
-        api.users()
+        api.users(),
+        api.activities(projectId),
+        api.notifications(projectId),
+        api.savedViews(projectId)
       ]);
-      setData({ iterations, requirements, cases, plans, bugs, report, dictionaries, users });
+      setData({ iterations, requirements, cases, plans, bugs, report, dictionaries, users, activities, notifications, savedViews });
     } catch (error) {
       setNotice((error as Error).message);
     } finally {
@@ -189,6 +193,11 @@ export function App() {
   }, [data.report]);
   const visibleData = useMemo(() => filterWorkspaceData(data, deferredGlobalKeyword), [data, deferredGlobalKeyword]);
   const page = pageInfo(tab);
+  const projectRole = currentProject?.members.find((member) => member.userId === user?.id)?.role;
+  const canManageProject = user?.role === 'admin' || projectRole === 'owner' || currentProject?.ownerId === user?.id;
+  const canWriteProject = canManageProject || projectRole === 'tester' || projectRole === 'developer';
+  const canExecute = canManageProject || projectRole === 'tester';
+  const unreadCount = data.notifications.filter((item) => item.status === 'unread').length;
 
   if (loading) return <div className="boot">正在启动 Buggy...</div>;
 
@@ -295,6 +304,14 @@ export function App() {
             <span className={busy ? 'sync-status is-busy' : 'sync-status'}>
               <Clock3 size={15} /> {busy ? '正在更新数据' : '数据已就绪'}
             </span>
+            <button
+              type="button"
+              className={unreadCount ? 'notification-chip has-unread' : 'notification-chip'}
+              title={unreadCount ? `有 ${unreadCount} 条未读通知` : '暂无未读通知'}
+              onClick={() => mutate(() => api.markAllNotificationsRead(), '通知已全部标记已读')}
+            >
+              <Bell size={15} /> {unreadCount || '通知'}
+            </button>
             <span className="user-pill">{user.username} · {labelOf(user.role)}</span>
           </div>
         </header>
@@ -305,6 +322,28 @@ export function App() {
             <h1>{page.title}</h1>
             <p>{page.description(currentProject?.name || '当前项目')}</p>
           </div>
+          {currentProject && (
+            <div className="saved-view-tools">
+              <select
+                aria-label="保存视图"
+                value=""
+                onChange={(event) => {
+                  const view = data.savedViews.find((item) => item.id === event.target.value);
+                  if (view?.filters.globalKeyword !== undefined) setGlobalKeyword(view.filters.globalKeyword);
+                }}
+              >
+                <option value="">应用保存视图</option>
+                {data.savedViews.filter((item) => item.tab === tab).map((view) => <option key={view.id} value={view.id}>{view.name}</option>)}
+              </select>
+              <Button type="button" onClick={() => {
+                const name = window.prompt('保存当前视图名称', `${page.title}视图`);
+                if (!name) return;
+                void mutate(() => api.upsertSavedView({ projectId: currentProject.id, tab, name, filters: { globalKeyword } }), '视图已保存');
+              }}>
+                保存视图
+              </Button>
+            </div>
+          )}
         </section>
 
         <section className="workspace-context" aria-label="当前工作区">
@@ -356,8 +395,31 @@ export function App() {
                   </article>
                 ))}
                 <RecentWork data={visibleData} />
+                <section className="panel">
+                  <h2>消息通知</h2>
+                  <div className="timeline-list compact-timeline">
+                    {data.notifications.length === 0 ? <span className="muted">暂无通知</span> : data.notifications.slice(0, 6).map((item) => (
+                      <article key={item.id} className={item.status === 'unread' ? 'is-unread' : ''}>
+                        <strong>{item.title}</strong>
+                        <span>{item.body || '系统提醒'} · {new Date(item.createdAt).toLocaleString('zh-CN')}</span>
+                      </article>
+                    ))}
+                  </div>
+                </section>
                 <MyTodo data={data} user={user} />
                 <TraceabilityMatrix data={data} />
+                <section className="panel wide">
+                  <h2>项目动态</h2>
+                  <div className="timeline-list compact-timeline">
+                    {data.activities.length === 0 ? <span className="muted">暂无动态</span> : data.activities.map((item) => (
+                      <article key={item.id}>
+                        <strong>{item.title}</strong>
+                        <span>{item.actorName || '系统'} · {new Date(item.createdAt).toLocaleString('zh-CN')}</span>
+                        {item.detail && <p>{item.detail}</p>}
+                      </article>
+                    ))}
+                  </div>
+                </section>
                 <section className="panel wide">
                   <h2>项目风险</h2>
                   <RiskBoard report={data.report} />
@@ -384,6 +446,8 @@ export function App() {
                 cases={data.cases}
                 plans={data.plans}
                 bugs={data.bugs}
+                canWrite={canWriteProject}
+                canManage={canManageProject}
                 mutate={mutate}
               />
             )}
@@ -395,6 +459,8 @@ export function App() {
                 rows={visibleData.requirements}
                 cases={data.cases}
                 bugs={data.bugs}
+                canWrite={canWriteProject}
+                canManage={canManageProject}
                 mutate={mutate}
               />
             )}
@@ -405,6 +471,8 @@ export function App() {
                 plans={data.plans}
                 bugs={data.bugs}
                 rows={visibleData.cases}
+                canWrite={canWriteProject}
+                canManage={canManageProject}
                 mutate={mutate}
               />
             )}
@@ -416,6 +484,8 @@ export function App() {
                 cases={data.cases}
                 rows={visibleData.plans}
                 bugs={data.bugs}
+                canWrite={canExecute}
+                canManage={canManageProject}
                 mutate={mutate}
                 onNotice={setNotice}
               />
@@ -428,6 +498,8 @@ export function App() {
                 plans={data.plans}
                 users={data.users}
                 rows={visibleData.bugs}
+                canWrite={canWriteProject}
+                canManage={canManageProject}
                 mutate={mutate}
               />
             )}

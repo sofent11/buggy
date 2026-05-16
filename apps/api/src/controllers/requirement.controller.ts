@@ -25,8 +25,8 @@ export class RequirementController {
 
   @Post()
   async create(@Body() dto: CreateRequirementDto, @CurrentUser() user: SessionUser) {
-    await this.projects.assertManage(dto.projectId, user);
-    return this.requirements.create(dto);
+    await this.projects.assertWrite(dto.projectId, user);
+    return this.requirements.create(dto, user);
   }
 
   @Get(':id')
@@ -37,14 +37,14 @@ export class RequirementController {
 
   @Patch(':id')
   async update(@Param('id') id: string, @Body() dto: UpdateRequirementDto, @CurrentUser() user: SessionUser) {
-    await this.projects.assertManage(await this.requirements.projectIdOf(id), user);
-    return this.requirements.update(id, dto);
+    await this.projects.assertWrite(await this.requirements.projectIdOf(id), user);
+    return this.requirements.update(id, dto, user);
   }
 
   @Patch(':id/lark')
   async bindLark(@Param('id') id: string, @Body() dto: BindLarkDto, @CurrentUser() user: SessionUser) {
-    await this.projects.assertManage(await this.requirements.projectIdOf(id), user);
-    return this.requirements.bindLark(id, dto);
+    await this.projects.assertWrite(await this.requirements.projectIdOf(id), user);
+    return this.requirements.bindLark(id, dto, user);
   }
 
   @Post(':id/lark/send')

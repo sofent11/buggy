@@ -74,6 +74,9 @@ export interface Requirement {
   title: string;
   description?: string;
   ownerId?: Id;
+  riskOwnerId?: Id;
+  dueDate?: string;
+  riskNote?: string;
   status: RequirementStatus;
   priority: Priority;
   larkWebhook?: string;
@@ -152,6 +155,10 @@ export interface BugAttachment {
   id: Id;
   name: string;
   url: string;
+  size?: number;
+  mimeType?: string;
+  uploaderId?: Id;
+  uploaderName?: string;
   createdAt: string;
 }
 
@@ -183,11 +190,66 @@ export interface Bug {
   assigneeId?: Id;
   reporterId?: Id;
   duplicateOfId?: Id;
+  dueAt?: string;
+  resolvedAt?: string;
+  verifiedAt?: string;
   comments?: BugComment[];
   attachments?: BugAttachment[];
   statusHistory?: BugStatusHistory[];
   createdAt?: string;
   updatedAt?: string;
+}
+
+export type ActivityEntityType = 'project' | 'iteration' | 'requirement' | 'test_case' | 'test_plan' | 'run_item' | 'bug' | 'dictionary' | 'import';
+export type ActivityAction = 'created' | 'updated' | 'deleted' | 'status_changed' | 'commented' | 'attached' | 'imported';
+
+export interface ActivityLog {
+  id: Id;
+  projectId: Id;
+  entityType: ActivityEntityType;
+  entityId?: Id;
+  action: ActivityAction;
+  title: string;
+  detail?: string;
+  actorId?: Id;
+  actorName?: string;
+  createdAt: string;
+}
+
+export type NotificationStatus = 'unread' | 'read';
+
+export interface Notification {
+  id: Id;
+  projectId?: Id;
+  userId: Id;
+  title: string;
+  body?: string;
+  entityType?: ActivityEntityType;
+  entityId?: Id;
+  status: NotificationStatus;
+  createdAt: string;
+  readAt?: string;
+}
+
+export interface SavedView {
+  id: Id;
+  projectId: Id;
+  userId: Id;
+  tab: string;
+  name: string;
+  filters: Record<string, string>;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface UploadAsset {
+  id: Id;
+  projectId?: Id;
+  name: string;
+  url: string;
+  size: number;
+  mimeType: string;
+  createdAt: string;
 }
 
 export interface DictionaryValue {
@@ -239,6 +301,7 @@ export interface ReportSummary {
     closed: number;
     reopened: number;
     active: number;
+    overdue: number;
   };
   charts?: {
     executionTrend: Array<{ label: string; total: number; passed: number; failed: number; blocked: number; skipped: number; passRate: number }>;
@@ -246,8 +309,18 @@ export interface ReportSummary {
     bugSeverity: Array<{ key: Severity; label: string; value: number }>;
     priority: Array<{ key: Priority; label: string; value: number }>;
     iterationRank: Array<{ id: Id; name: string; requirements: number; cases: number; executionTotal: number; passRate: number; activeBugs: number }>;
-    requirementCoverage: Array<{ id: Id; title: string; caseCount: number; bugCount: number; status: RequirementStatus }>;
+    requirementCoverage: Array<{ id: Id; title: string; caseCount: number; bugCount: number; status: RequirementStatus; riskOwnerId?: Id; dueDate?: string; riskNote?: string }>;
+    riskList: Array<{ id: Id; type: 'requirement' | 'bug' | 'execution'; title: string; ownerId?: Id; dueDate?: string; reason: string; severity: 'high' | 'medium' | 'low' }>;
   };
+}
+
+export interface ImportPreview {
+  headers: string[];
+  mappings: Array<{ field: string; label: string; sourceHeader?: string; required?: boolean }>;
+  totalRows: number;
+  validRows: number;
+  duplicateRows: Array<{ row: number; key: string; message: string }>;
+  errors: Array<{ row: number; field?: string; message: string }>;
 }
 
 export interface PageResult<T> {

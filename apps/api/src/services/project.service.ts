@@ -153,6 +153,27 @@ export class ProjectService {
     throw new ForbiddenException('需要项目负责人权限');
   }
 
+  async assertWrite(projectId: string, user: SessionUser): Promise<void> {
+    if (user.role === 'admin') return;
+    const role = await this.roleOf(projectId, user);
+    if (role && role !== 'viewer') return;
+    throw new ForbiddenException('需要项目编辑权限');
+  }
+
+  async assertRole(projectId: string, user: SessionUser, roles: ProjectRole[]): Promise<void> {
+    if (user.role === 'admin') return;
+    const role = await this.roleOf(projectId, user);
+    if (role && roles.includes(role)) return;
+    throw new ForbiddenException('当前角色无权执行该操作');
+  }
+
+  async roleOf(projectId: string, user: SessionUser): Promise<ProjectRole | undefined> {
+    const project = await this.projects.findById(projectId);
+    if (!project) throw new NotFoundException('项目不存在');
+    if (idOf(project.ownerId) === user.id) return 'owner';
+    return project.members.find((item) => idOf(item.userId) === user.id)?.role as ProjectRole | undefined;
+  }
+
   toDto(project: ProjectEntity & { _id: unknown; createdAt?: Date; updatedAt?: Date }): Project {
     return {
       id: idOf(project._id),

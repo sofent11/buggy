@@ -1105,6 +1105,27 @@ summary {
   color: var(--primary-dark);
 }
 
+.notification-chip {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: white;
+  color: var(--text);
+  padding: 0 11px;
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.notification-chip.has-unread {
+  border-color: rgba(220, 38, 38, 0.28);
+  background: #fff5f5;
+  color: var(--danger);
+}
+
 .user-pill {
   border-left: 1px solid var(--line-strong);
   padding-left: 14px;
@@ -2463,12 +2484,14 @@ tbody tr:hover {
   .project-switcher select,
   .refresh-button,
   .sync-status,
+  .notification-chip,
   .user-pill {
     width: 100%;
     max-width: none;
   }
 
   .sync-status,
+  .notification-chip,
   .user-pill {
     min-height: 38px;
     justify-content: center;
@@ -2628,6 +2651,23 @@ tbody tr:hover {
   border-radius: 8px;
   background: var(--surface-soft);
   padding: 10px;
+}
+
+.saved-view-tools {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.saved-view-tools select {
+  min-width: 160px;
+}
+
+.timeline-list article.is-unread {
+  border-left-color: var(--danger);
+  background: #fff7f7;
 }
 
 @media (max-width: 720px) {

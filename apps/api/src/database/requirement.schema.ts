@@ -21,6 +21,15 @@ export class RequirementEntity {
   @Prop({ type: SchemaTypes.ObjectId, ref: 'UserEntity' })
   ownerId?: Types.ObjectId;
 
+  @Prop({ type: SchemaTypes.ObjectId, ref: 'UserEntity' })
+  riskOwnerId?: Types.ObjectId;
+
+  @Prop({ type: Date })
+  dueDate?: Date;
+
+  @Prop({ type: String, trim: true, default: '' })
+  riskNote!: string;
+
   @Prop({ type: String, required: true, default: 'ready' })
   status!: RequirementStatus;
 

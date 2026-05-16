@@ -60,6 +60,10 @@ export class CreateBugDto {
   @IsOptional()
   @IsMongoId()
   duplicateOfId?: string;
+
+  @IsOptional()
+  @IsString()
+  dueAt?: string;
 }
 
 export class UpdateBugDto {
@@ -122,6 +126,10 @@ export class UpdateBugDto {
   @IsOptional()
   @IsMongoId()
   duplicateOfId?: string;
+
+  @IsOptional()
+  @IsString()
+  dueAt?: string;
 }
 
 export class CreateBugFromRunDto {
@@ -170,4 +178,11 @@ export class AddBugAttachmentDto {
   @IsString()
   @MinLength(1)
   url!: string;
+
+  @IsOptional()
+  size?: number;
+
+  @IsOptional()
+  @IsString()
+  mimeType?: string;
 }

@@ -17,6 +17,8 @@ export function IterationSection(props: {
   cases?: TestCase[];
   plans?: TestPlan[];
   bugs?: Bug[];
+  canWrite?: boolean;
+  canManage?: boolean;
   mutate: (action: () => Promise<unknown>, message: string) => Promise<void>;
 }) {
   const [keyword, setKeyword] = useState('');
@@ -43,7 +45,7 @@ export function IterationSection(props: {
         <SearchBox value={keyword} onChange={setKeyword} placeholder="搜索迭代目标" />
         <Select value={status} onChange={setStatus} values={iterationStatuses} dictionaryType="iterationStatus" emptyLabel="全部状态" />
         <span className="toolbar-summary">{rows.length} / {props.rows.length} 个迭代</span>
-        <button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建迭代</button>
+        {props.canManage && <button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建迭代</button>}
       </Toolbar>
       <div className="split-layout">
         <DataTable
@@ -66,8 +68,8 @@ export function IterationSection(props: {
               activeBugs,
               shortDate(row.updatedAt),
               <div className="row-actions">
-                <Button type="button" size="sm" onClick={() => setEditing(row)}><Pencil size={14} /> 编辑</Button>
-                <DangerButton title={`删除迭代「${row.name}」？`} onConfirm={() => props.mutate(() => api.deleteIteration(row.id), '迭代已删除')} />
+                <Button type="button" size="sm" onClick={() => setEditing(row)}><Pencil size={14} /> 详情</Button>
+                {props.canManage && <DangerButton title={`删除迭代「${row.name}」？`} onConfirm={() => props.mutate(() => api.deleteIteration(row.id), '迭代已删除')} />}
               </div>
             ];
           })}
@@ -86,12 +88,13 @@ export function IterationSection(props: {
         <EmptyState
           text="暂无迭代"
           detail="迭代用于汇总需求、执行计划和阶段风险。"
-          action={<button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建迭代</button>}
+          action={props.canManage ? <button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建迭代</button> : undefined}
         />
       )}
       <IterationDrawer
         title="新建迭代"
         open={creating}
+        canWrite={props.canManage}
         onClose={() => setCreating(false)}
         onSubmit={async (form) => {
           await props.mutate(
@@ -105,6 +108,7 @@ export function IterationSection(props: {
         title="编辑迭代"
         row={editing || undefined}
         open={Boolean(editing)}
+        canWrite={props.canManage}
         onClose={() => setEditing(null)}
         onSubmit={async (form) => {
           if (!editing) return;
@@ -119,7 +123,7 @@ export function IterationSection(props: {
   );
 }
 
-export function IterationDrawer(props: { title: string; row?: Iteration; open: boolean; onClose: () => void; onSubmit: (form: FormData) => Promise<void> }) {
+export function IterationDrawer(props: { title: string; row?: Iteration; open: boolean; canWrite?: boolean; onClose: () => void; onSubmit: (form: FormData) => Promise<void> }) {
   return (
     <Drawer title={props.title} subtitle={props.row?.name || '规划迭代目标和时间范围'} open={props.open} onClose={props.onClose}>
       <HookForm
@@ -137,7 +141,7 @@ export function IterationDrawer(props: { title: string; row?: Iteration; open: b
             <Field><FieldLabel>状态</FieldLabel><Select name="status" register={register} values={iterationStatuses} dictionaryType="iterationStatus" defaultValue={props.row?.status || 'planning'} /></Field>
             <FormActions>
               <Button type="button" onClick={props.onClose}>取消</Button>
-              <Button variant="primary"><Save size={15} /> 保存</Button>
+              {props.canWrite && <Button variant="primary"><Save size={15} /> 保存</Button>}
             </FormActions>
           </>
         )}

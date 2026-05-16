@@ -8,7 +8,10 @@ export const emptyData: WorkspaceData = {
   bugs: [],
   report: null,
   dictionaries: [],
-  users: []
+  users: [],
+  activities: [],
+  notifications: [],
+  savedViews: []
 };
 
 export const LOGGED_OUT_KEY = 'buggy_logged_out';

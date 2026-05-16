@@ -22,6 +22,18 @@ export class CreateRequirementDto {
   ownerId?: string;
 
   @IsOptional()
+  @IsMongoId()
+  riskOwnerId?: string;
+
+  @IsOptional()
+  @IsString()
+  dueDate?: string;
+
+  @IsOptional()
+  @IsString()
+  riskNote?: string;
+
+  @IsOptional()
   @IsIn(['draft', 'ready', 'testing', 'done', 'blocked'])
   status?: RequirementStatus;
 
@@ -58,6 +70,18 @@ export class UpdateRequirementDto {
   @IsOptional()
   @IsMongoId()
   ownerId?: string;
+
+  @IsOptional()
+  @IsMongoId()
+  riskOwnerId?: string;
+
+  @IsOptional()
+  @IsString()
+  dueDate?: string;
+
+  @IsOptional()
+  @IsString()
+  riskNote?: string;
 
   @IsOptional()
   @IsIn(['draft', 'ready', 'testing', 'done', 'blocked'])

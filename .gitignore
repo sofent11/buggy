@@ -7,3 +7,4 @@ mongo_data
 coverage
 *.tsbuildinfo
 *.log
+apps/api/uploads

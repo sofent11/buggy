@@ -18,6 +18,8 @@ export function CaseSection(props: {
   plans?: TestPlan[];
   bugs?: Bug[];
   rows: TestCase[];
+  canWrite?: boolean;
+  canManage?: boolean;
   mutate: (action: () => Promise<unknown>, message: string) => Promise<void>;
 }) {
   const [keyword, setKeyword] = useState('');
@@ -72,7 +74,7 @@ export function CaseSection(props: {
             <SearchBox value={keyword} onChange={setKeyword} placeholder="搜索用例、步骤、预期" />
             <Select value={status} onChange={setStatus} values={caseStatuses} emptyLabel="全部状态" />
             <span className="toolbar-summary">{rows.length} / {props.rows.length} 条用例</span>
-            <button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建用例</button>
+            {props.canWrite && <button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建用例</button>}
           </Toolbar>
           <DataTable
             headers={['用例', '需求', '步骤', '执行覆盖', '关联 Bug', '优先级', '状态', '更新时间', '操作']}
@@ -87,11 +89,11 @@ export function CaseSection(props: {
                 runSummary ? `${runSummary.passed}/${runSummary.total} 通过 · ${runSummary.failed} 失败` : '未纳入计划',
                 caseBugs.length ? `${caseBugs.filter((bug) => !['verified', 'closed'].includes(bug.status)).length} 活跃 / ${caseBugs.length} 总数` : '-',
                 <StatusBadge value={row.priority} dictionaryType="priority" />,
-                <Select value={row.status} onChange={(value) => props.mutate(() => api.updateTestCase(row.id, { status: value as never }), '用例状态已更新')} values={caseStatuses} dictionaryType="testCaseStatus" />,
+                props.canWrite ? <Select value={row.status} onChange={(value) => props.mutate(() => api.updateTestCase(row.id, { status: value as never }), '用例状态已更新')} values={caseStatuses} dictionaryType="testCaseStatus" /> : <StatusBadge value={row.status} dictionaryType="testCaseStatus" />,
                 shortDate(row.updatedAt),
                 <div className="row-actions">
                   <Button type="button" size="sm" onClick={() => setEditing(row)}><Pencil size={14} /> 详情</Button>
-                  <DangerButton title={`删除用例「${row.title}」？`} onConfirm={() => props.mutate(() => api.deleteTestCase(row.id), '用例已删除')} />
+                  {props.canManage && <DangerButton title={`删除用例「${row.title}」？`} onConfirm={() => props.mutate(() => api.deleteTestCase(row.id), '用例已删除')} />}
                 </div>
               ];
             })}
@@ -102,14 +104,14 @@ export function CaseSection(props: {
         <EmptyState
           text="暂无用例"
           detail="先沉淀可执行用例，后续测试计划才能选择执行范围。"
-          action={<button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建用例</button>}
+          action={props.canWrite ? <button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建用例</button> : undefined}
         />
       )}
-      <TestCaseDrawer title="新建用例" open={creating} requirements={props.requirements} onClose={() => setCreating(false)} onSubmit={async (form) => {
+      <TestCaseDrawer title="新建用例" open={creating} requirements={props.requirements} canWrite={props.canWrite} onClose={() => setCreating(false)} onSubmit={async (form) => {
         await props.mutate(() => api.createTestCase(testCasePayload(form, props.projectId)), '用例已创建');
         setCreating(false);
       }} />
-      <TestCaseDrawer title="编辑用例" row={editing || undefined} open={Boolean(editing)} requirements={props.requirements} onClose={() => setEditing(null)} onSubmit={async (form) => {
+      <TestCaseDrawer title="编辑用例" row={editing || undefined} open={Boolean(editing)} requirements={props.requirements} canWrite={props.canWrite} onClose={() => setEditing(null)} onSubmit={async (form) => {
         if (!editing) return;
         await props.mutate(() => api.updateTestCase(editing.id, testCasePayload(form, props.projectId)), '用例已保存');
         setEditing(null);
@@ -132,14 +134,14 @@ export function TestCaseFields(props: { row?: TestCase; requirements: Requiremen
   );
 }
 
-export function TestCaseDrawer(props: { title: string; row?: TestCase; open: boolean; requirements: Requirement[]; defaultRequirementId?: string; onClose: () => void; onSubmit: (form: FormData) => Promise<void> }) {
+export function TestCaseDrawer(props: { title: string; row?: TestCase; open: boolean; requirements: Requirement[]; defaultRequirementId?: string; canWrite?: boolean; onClose: () => void; onSubmit: (form: FormData) => Promise<void> }) {
   return (
     <Drawer title={props.title} subtitle={props.row?.title || '维护测试步骤、预期结果和优先级'} open={props.open} onClose={props.onClose}>
       <HookForm onSubmit={async (form) => props.onSubmit(form)}>
         {(register) => (
           <>
             <TestCaseFields row={props.row} requirements={props.requirements} defaultRequirementId={props.defaultRequirementId} register={register} />
-            <FormActions><Button type="button" onClick={props.onClose}>取消</Button><Button variant="primary"><Save size={15} /> 保存用例</Button></FormActions>
+            <FormActions><Button type="button" onClick={props.onClose}>取消</Button>{props.canWrite !== false && <Button variant="primary"><Save size={15} /> 保存用例</Button>}</FormActions>
           </>
         )}
       </HookForm>

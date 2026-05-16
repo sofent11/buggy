@@ -22,10 +22,23 @@ export function RecentWork(props: { data: WorkspaceData }) {
 export function RiskBoard(props: { report: ReportSummary | null }) {
   const report = props.report;
   if (!report) return <EmptyState text="暂无风险数据" />;
+  if (report.charts?.riskList?.length) {
+    return (
+      <DataTable
+        headers={['类型', '事项', '原因', '截止']}
+        rows={report.charts.riskList.slice(0, 8).map((item) => [
+          item.type,
+          item.title,
+          item.reason,
+          item.dueDate ? item.dueDate.slice(0, 10) : '-'
+        ])}
+      />
+    );
+  }
   const items = [
     report.execution.failed > 0 ? `存在 ${report.execution.failed} 条失败执行项` : '暂无失败执行项',
     report.execution.blocked > 0 ? `存在 ${report.execution.blocked} 条阻塞执行项` : '暂无阻塞执行项',
-    report.bugs.active > 0 ? `还有 ${report.bugs.active} 个活跃 Bug` : '暂无活跃 Bug',
+    report.bugs.active > 0 ? `还有 ${report.bugs.active} 个活跃 Bug，其中 ${report.bugs.overdue || 0} 个逾期` : '暂无活跃 Bug',
     report.requirements.blocked > 0 ? `有 ${report.requirements.blocked} 个阻塞需求` : '暂无阻塞需求'
   ];
   return <div className="risk-list">{items.map((item) => <span key={item}>{item}</span>)}</div>;
@@ -62,7 +75,7 @@ export function TraceabilityMatrix(props: { data: WorkspaceData }) {
       <StatusBadge value={requirement.status} dictionaryType="requirementStatus" />,
       `${cases.length} 条`,
       runItems.length ? `${passed}/${runItems.length} 通过` : '未执行',
-      activeBugs.length ? `${activeBugs.length} 活跃` : '无活跃 Bug'
+      activeBugs.length ? `${activeBugs.length} 活跃` : (requirement.dueDate ? `截止 ${requirement.dueDate.slice(0, 10)}` : '无活跃 Bug')
     ];
   });
   return (

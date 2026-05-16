@@ -1,16 +1,21 @@
 import type {
   ApiResult,
+  ActivityLog,
   Bug,
   Dictionary,
   DictionaryValue,
+  ImportPreview,
   Iteration,
+  Notification,
   PageResult,
   ProjectMember,
   Project,
   ReportSummary,
   Requirement,
+  SavedView,
   TestCase,
   TestPlan,
+  UploadAsset,
   UserProfile
 } from '@buggy/shared-types';
 
@@ -117,13 +122,31 @@ export const api = {
   createBug: (body: Partial<Bug>) => request<Bug>('/bugs', { method: 'POST', body: JSON.stringify(body) }),
   updateBug: (id: string, body: Partial<Bug>) => request<Bug>(`/bugs/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   addBugComment: (id: string, body: string) => request<Bug>(`/bugs/${id}/comments`, { method: 'POST', body: JSON.stringify({ body }) }),
-  addBugAttachment: (id: string, attachment: { name: string; url: string }) =>
+  addBugAttachment: (id: string, attachment: { name: string; url: string; size?: number; mimeType?: string }) =>
     request<Bug>(`/bugs/${id}/attachments`, { method: 'POST', body: JSON.stringify(attachment) }),
+  uploadBugAttachment: (id: string, file: File) => {
+    const formData = new FormData();
+    formData.set('file', file);
+    return upload<Bug>(`/bugs/${id}/attachments/upload`, formData);
+  },
   deleteBug: (id: string) => request<{ deleted: true }>(`/bugs/${id}`, { method: 'DELETE' }),
   createBugFromRun: (body: { testPlanId: string; runItemId: string; title: string; actualResult?: string }) =>
     request<Bug>('/bugs/from-run', { method: 'POST', body: JSON.stringify(body) }),
 
   report: (projectId: string) => request<ReportSummary>(`/reports/summary?projectId=${projectId}`),
+  activities: async (projectId: string, params?: ListParams) => itemsOf(await request<PageResult<ActivityLog> | ActivityLog[]>(`/activities${queryString({ projectId, pageSize: 20, ...params })}`)),
+  notifications: async (projectId?: string) => itemsOf(await request<PageResult<Notification> | Notification[]>(`/notifications${queryString({ projectId, pageSize: 20 })}`)),
+  markNotificationRead: (id: string) => request<Notification>(`/notifications/${id}/read`, { method: 'PATCH' }),
+  markAllNotificationsRead: () => request<{ updated: number }>('/notifications/read-all', { method: 'POST' }),
+  savedViews: (projectId: string, tab?: string) => request<SavedView[]>(`/saved-views${queryString({ projectId, tab })}`),
+  upsertSavedView: (body: { projectId: string; tab: string; name: string; filters: Record<string, string> }) =>
+    request<SavedView>('/saved-views', { method: 'POST', body: JSON.stringify(body) }),
+  deleteSavedView: (id: string) => request<{ deleted: true }>(`/saved-views/${id}`, { method: 'DELETE' }),
+  uploadFile: (projectId: string, file: File) => {
+    const formData = new FormData();
+    formData.set('file', file);
+    return upload<UploadAsset>(`/uploads?projectId=${projectId}`, formData);
+  },
   dictionaries: (projectId?: string) => request<Dictionary[]>(`/dictionaries${projectId ? `?projectId=${projectId}` : ''}`),
   upsertDictionary: (body: { type: string; projectId?: string; values: DictionaryValue[] }) =>
     request<Dictionary>('/dictionaries', { method: 'POST', body: JSON.stringify(body) }),
@@ -137,6 +160,14 @@ export const api = {
     formData.set('file', file);
     return upload<ImportResult>(
       `/import-export/import-xlsx?projectId=${projectId}&type=${type}`,
+      formData
+    );
+  },
+  previewImportXlsx: (projectId: string, type: string, file: File) => {
+    const formData = new FormData();
+    formData.set('file', file);
+    return upload<ImportPreview>(
+      `/import-export/preview-xlsx?projectId=${projectId}&type=${type}`,
       formData
     );
   }

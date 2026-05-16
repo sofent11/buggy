@@ -54,11 +54,20 @@ export class BugEntity {
   @Prop({ type: SchemaTypes.ObjectId, ref: 'BugEntity' })
   duplicateOfId?: Types.ObjectId;
 
+  @Prop({ type: Date })
+  dueAt?: Date;
+
+  @Prop({ type: Date })
+  resolvedAt?: Date;
+
+  @Prop({ type: Date })
+  verifiedAt?: Date;
+
   @Prop({ type: [SchemaTypes.Mixed], default: [] })
   comments!: Array<{ id: string; authorId?: string; authorName?: string; body: string; createdAt: string }>;
 
   @Prop({ type: [SchemaTypes.Mixed], default: [] })
-  attachments!: Array<{ id: string; name: string; url: string; createdAt: string }>;
+  attachments!: Array<{ id: string; name: string; url: string; size?: number; mimeType?: string; uploaderId?: string; uploaderName?: string; createdAt: string }>;
 
   @Prop({ type: [SchemaTypes.Mixed], default: [] })
   statusHistory!: Array<{ id: string; fromStatus?: BugStatus; toStatus: BugStatus; operatorId?: string; operatorName?: string; note?: string; createdAt: string }>;

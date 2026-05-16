@@ -1,10 +1,13 @@
 import type {
   Bug,
+  ActivityLog,
   Dictionary,
   Iteration,
+  Notification,
   Project,
   ReportSummary,
   Requirement,
+  SavedView,
   TestCase,
   TestPlan,
   UserProfile
@@ -21,6 +24,9 @@ export type WorkspaceData = {
   report: ReportSummary | null;
   dictionaries: Dictionary[];
   users: UserProfile[];
+  activities: ActivityLog[];
+  notifications: Notification[];
+  savedViews: SavedView[];
 };
 
 export type AuthFormValues = {

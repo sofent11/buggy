@@ -23,8 +23,8 @@ export class TestPlanController {
 
   @Post()
   async create(@Body() dto: CreateTestPlanDto, @CurrentUser() user: SessionUser) {
-    await this.projects.assertManage(dto.projectId, user);
-    return this.plans.create(dto);
+    await this.projects.assertWrite(dto.projectId, user);
+    return this.plans.create(dto, user);
   }
 
   @Get(':id')
@@ -35,8 +35,8 @@ export class TestPlanController {
 
   @Patch(':id')
   async update(@Param('id') id: string, @Body() dto: UpdateTestPlanDto, @CurrentUser() user: SessionUser) {
-    await this.projects.assertManage(await this.plans.projectIdOf(id), user);
-    return this.plans.update(id, dto);
+    await this.projects.assertWrite(await this.plans.projectIdOf(id), user);
+    return this.plans.update(id, dto, user);
   }
 
   @Patch(':id/run-items/:runItemId')
@@ -46,7 +46,7 @@ export class TestPlanController {
     @Body() dto: UpdateRunItemDto,
     @CurrentUser() user: SessionUser
   ) {
-    await this.projects.get(await this.plans.projectIdOf(id), user);
+    await this.projects.assertRole(await this.plans.projectIdOf(id), user, ['owner', 'tester']);
     return this.plans.updateRunItem(id, runItemId, dto, user);
   }
 

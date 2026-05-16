@@ -8,12 +8,14 @@ import type { ListQueryDto } from '../dto/common.dto.js';
 import type { CreateTestPlanDto, UpdateRunItemDto, UpdateTestPlanDto } from '../dto/test-plan.dto.js';
 import { idOf, toObjectId } from '../shared/mongo.js';
 import type { SessionUser } from './auth.service.js';
+import { ActivityService } from './activity.service.js';
 
 @Injectable()
 export class TestPlanService {
   constructor(
     @InjectModel(TestPlanEntity.name) private readonly plans: Model<TestPlanEntity>,
-    @InjectModel(TestCaseEntity.name) private readonly cases: Model<TestCaseEntity>
+    @InjectModel(TestCaseEntity.name) private readonly cases: Model<TestCaseEntity>,
+    private readonly activities: ActivityService
   ) {}
 
   async list(query: ListQueryDto): Promise<PageResult<TestPlan>> {
@@ -34,7 +36,7 @@ export class TestPlanService {
     return { total, page, pageSize, items: rows.map((row) => this.toDto(row)) };
   }
 
-  async create(dto: CreateTestPlanDto): Promise<TestPlan> {
+  async create(dto: CreateTestPlanDto, user?: SessionUser): Promise<TestPlan> {
     const caseIds = dto.caseIds.map((id) => new Types.ObjectId(id));
     const cases = await this.cases.find({ _id: { $in: caseIds }, projectId: new Types.ObjectId(dto.projectId) });
     const runItems = cases.map((testCase) => ({
@@ -59,6 +61,15 @@ export class TestPlanService {
       caseIds,
       runItems
     });
+    await this.activities.record({
+      projectId: idOf(row.projectId),
+      entityType: 'test_plan',
+      entityId: idOf(row._id),
+      action: 'created',
+      title: `创建测试计划：${row.name}`,
+      detail: `${runItems.length} 个执行项`,
+      actor: user
+    });
     return this.toDto(row);
   }
 
@@ -68,7 +79,7 @@ export class TestPlanService {
     return this.toDto(row);
   }
 
-  async update(id: string, dto: UpdateTestPlanDto): Promise<TestPlan> {
+  async update(id: string, dto: UpdateTestPlanDto, user?: SessionUser): Promise<TestPlan> {
     const row = await this.plans.findById(id);
     if (!row) throw new NotFoundException('测试计划不存在');
     if (dto.name !== undefined) row.name = dto.name;
@@ -97,6 +108,14 @@ export class TestPlanService {
       });
     }
     await row.save();
+    await this.activities.record({
+      projectId: idOf(row.projectId),
+      entityType: 'test_plan',
+      entityId: id,
+      action: dto.status ? 'status_changed' : 'updated',
+      title: `更新测试计划：${row.name}`,
+      actor: user
+    });
     return this.toDto(row);
   }
 
@@ -112,6 +131,15 @@ export class TestPlanService {
     item.executedAt = new Date();
     if (row.status === 'draft') row.status = 'active';
     await row.save();
+    await this.activities.record({
+      projectId: idOf(row.projectId),
+      entityType: 'run_item',
+      entityId: runItemId,
+      action: 'status_changed',
+      title: `记录执行结果：${item.caseTitle}`,
+      detail: `${item.status}${item.actualResult ? `：${item.actualResult}` : ''}`,
+      actor: user
+    });
     return this.toDto(row);
   }
 

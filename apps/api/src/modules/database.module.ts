@@ -1,10 +1,13 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import { ActivityEntity, ActivitySchema } from '../database/activity.schema.js';
 import { BugEntity, BugSchema } from '../database/bug.schema.js';
 import { DictionaryEntity, DictionarySchema } from '../database/dictionary.schema.js';
 import { IterationEntity, IterationSchema } from '../database/iteration.schema.js';
+import { NotificationEntity, NotificationSchema } from '../database/notification.schema.js';
 import { ProjectEntity, ProjectSchema } from '../database/project.schema.js';
 import { RequirementEntity, RequirementSchema } from '../database/requirement.schema.js';
+import { SavedViewEntity, SavedViewSchema } from '../database/saved-view.schema.js';
 import { TestCaseEntity, TestCaseSchema } from '../database/test-case.schema.js';
 import { TestPlanEntity, TestPlanSchema } from '../database/test-plan.schema.js';
 import { UserEntity, UserSchema } from '../database/user.schema.js';
@@ -22,7 +25,10 @@ import { UserEntity, UserSchema } from '../database/user.schema.js';
       { name: TestCaseEntity.name, schema: TestCaseSchema },
       { name: TestPlanEntity.name, schema: TestPlanSchema },
       { name: BugEntity.name, schema: BugSchema },
-      { name: DictionaryEntity.name, schema: DictionarySchema }
+      { name: DictionaryEntity.name, schema: DictionarySchema },
+      { name: ActivityEntity.name, schema: ActivitySchema },
+      { name: NotificationEntity.name, schema: NotificationSchema },
+      { name: SavedViewEntity.name, schema: SavedViewSchema }
     ])
   ],
   exports: [MongooseModule]
