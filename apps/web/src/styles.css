@@ -3696,3 +3696,345 @@ select[multiple] {
     width: 100%;
   }
 }
+
+/* Product management pass: actionable workbench, quieter rows, and progressive forms. */
+.workflow-navigator,
+.role-workbench {
+  align-content: start;
+}
+
+.workflow-steps {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.workflow-step,
+.role-queue-cards button {
+  min-width: 0;
+  display: grid;
+  justify-items: start;
+  align-content: start;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  padding: 12px;
+  text-align: left;
+  white-space: normal;
+}
+
+.workflow-step {
+  position: relative;
+  min-height: 132px;
+  grid-template-rows: auto auto auto auto;
+}
+
+.workflow-step:hover,
+.role-queue-cards button:hover {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  box-shadow: var(--shadow-soft);
+}
+
+.workflow-step-index {
+  width: 24px;
+  height: 24px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.workflow-step svg,
+.role-queue-cards svg {
+  color: var(--primary);
+}
+
+.workflow-step strong,
+.role-queue-cards span {
+  color: var(--text);
+  font-weight: 850;
+}
+
+.workflow-step b,
+.role-queue-cards strong {
+  color: var(--text);
+  font-size: 24px;
+  line-height: 30px;
+}
+
+.workflow-step small,
+.role-queue-cards small {
+  color: var(--muted);
+}
+
+.workflow-step.tone-risk,
+.role-queue-cards button.has-work {
+  border-color: #f2bab2;
+  background: var(--danger-soft);
+}
+
+.workflow-step.tone-good {
+  border-color: #b9dcc5;
+  background: var(--success-soft);
+}
+
+.workflow-step.tone-warning {
+  border-color: #f5cf75;
+  background: var(--warning-soft);
+}
+
+.workflow-step.tone-info {
+  border-color: #bacbe8;
+  background: var(--primary-soft);
+}
+
+.role-queue-cards {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.workflow-lanes {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.workflow-lanes button.active {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: white;
+  box-shadow: var(--shadow-soft);
+}
+
+.workflow-lanes button.active span,
+.workflow-lanes button.active strong,
+.workflow-lanes button.active small {
+  color: white;
+}
+
+.compact-row-actions {
+  position: relative;
+  flex-wrap: nowrap;
+}
+
+.row-more-menu {
+  position: relative;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.row-more-menu summary {
+  width: 32px;
+  min-height: 30px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: white;
+  list-style: none;
+}
+
+.row-more-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.row-more-menu > div {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 25;
+  min-width: 144px;
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  padding: 8px;
+  box-shadow: var(--shadow-popover);
+}
+
+.row-more-menu > div button,
+.row-more-menu > div .ui-button {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.bug-progressive-form {
+  display: grid;
+  gap: 14px;
+}
+
+.advanced-fields {
+  padding: 12px;
+  background: var(--surface-soft);
+}
+
+.advanced-fields summary {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+}
+
+.advanced-fields[open] summary {
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.saved-view-preview {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+  padding: 10px;
+}
+
+.saved-view-preview > span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.saved-view-preview > strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.saved-view-preview > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.saved-view-preview b {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: white;
+  color: var(--primary-dark);
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.report-decision-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.8fr);
+  gap: 14px;
+  align-items: start;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  padding: 14px;
+}
+
+.report-decision-panel > div {
+  display: grid;
+  gap: 5px;
+}
+
+.report-decision-panel svg {
+  color: var(--primary);
+}
+
+.report-decision-panel span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.report-decision-panel strong {
+  color: var(--text);
+  font-size: 22px;
+  line-height: 28px;
+}
+
+.report-decision-panel p,
+.report-decision-panel li {
+  color: var(--muted);
+}
+
+.report-decision-panel p {
+  margin: 0;
+}
+
+.report-decision-panel ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.report-decision-panel.tone-pass {
+  border-color: #b9dcc5;
+  background: var(--success-soft);
+}
+
+.report-decision-panel.tone-blocked {
+  border-color: #f5cf75;
+  background: var(--warning-soft);
+}
+
+.dictionary-row.has-error {
+  border-color: #f5cf75;
+  background: #fffaf0;
+}
+
+.dictionary-error {
+  border-color: #f5cf75;
+  background: var(--warning-soft);
+  color: #7a4c00;
+}
+
+@media (max-width: 1180px) {
+  .workflow-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .role-queue-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .workflow-steps,
+  .role-queue-cards,
+  .report-decision-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .app {
+    padding-bottom: 0;
+  }
+
+  .sidebar {
+    position: sticky;
+    top: 0;
+    bottom: auto;
+    padding-bottom: 7px;
+  }
+
+  .workspace {
+    padding-bottom: calc(24px + env(safe-area-inset-bottom));
+  }
+
+  .notice {
+    position: static;
+    max-width: none;
+    margin: 0 0 12px;
+  }
+
+  .sidebar nav {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    overflow: visible;
+  }
+
+  .sidebar nav button:nth-child(2),
+  .sidebar nav button:nth-child(3),
+  .sidebar nav button:nth-child(8) {
+    display: grid;
+  }
+}

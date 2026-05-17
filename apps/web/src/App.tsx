@@ -30,7 +30,7 @@ import { labelOf } from './labels.js';
 import { DataTable, Drawer, NavButton, StatusBadge } from './components/workspace/common.js';
 import { DictionaryProvider } from './components/workspace/dictionary.js';
 import { HelpCenter } from './components/workspace/help.js';
-import { MyTodo, ProjectOnboarding, QualityHealthCenter, RecentWork, RiskBoard, TraceabilityMatrix } from './components/workspace/overview.js';
+import { ProjectOnboarding, QualityHealthCenter, QualityWorkflowNavigator, QualityWorkQueue, RecentWork, RiskBoard, TraceabilityMatrix } from './components/workspace/overview.js';
 import { BugSection, CaseSection, IterationSection, PlanSection, ProjectSection, RequirementSection, SettingsSection } from './components/workspace/sections.js';
 
 const LAST_PROJECT_KEY = 'buggy_last_project_id';
@@ -420,8 +420,10 @@ export function App() {
                     <small>{item.detail}</small>
                   </article>
                 ))}
-                <ProjectOnboarding data={data} currentProject={currentProject} onJump={setTab} />
+                <QualityWorkflowNavigator data={data} onJump={setTab} />
+                <QualityWorkQueue data={data} user={user} onJump={setTab} />
                 <QualityHealthCenter data={data} onJump={setTab} />
+                <ProjectOnboarding data={data} currentProject={currentProject} onJump={setTab} />
                 <RecentWork data={visibleData} />
                 <section className="panel">
                   <h2>消息通知</h2>
@@ -434,7 +436,6 @@ export function App() {
                     ))}
                   </div>
                 </section>
-                <MyTodo data={data} user={user} />
                 <TraceabilityMatrix data={data} />
                 <section className="panel wide">
                   <h2>项目动态</h2>
@@ -584,6 +585,7 @@ export function App() {
           tab={tab}
           defaultName={`${page.title}视图`}
           views={data.savedViews.filter((item) => item.tab === tab)}
+          filterSummary={describeSavedViewFilters(tabFilters[tab] || {}, globalKeyword)}
           onClose={() => setSavedViewOpen(false)}
           onDelete={(id) => mutate(() => api.deleteSavedView(id), '视图已删除')}
           onSave={(name, options) => mutate(
@@ -688,6 +690,7 @@ function SavedViewDialog(props: {
   tab: Tab;
   defaultName: string;
   views: SavedView[];
+  filterSummary: Array<{ label: string; value: string }>;
   onClose: () => void;
   onSave: (name: string, options: { visibility: SavedView['visibility']; isDefault: boolean }) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
@@ -709,6 +712,16 @@ function SavedViewDialog(props: {
       <section className="confirm-dialog saved-view-dialog" role="dialog" aria-modal="true" aria-label="保存视图">
         <h3>保存当前视图</h3>
         <p>会保存当前模块真实支持的搜索、筛选、排序、页大小和列配置。</p>
+        <div className="saved-view-preview" aria-label="当前视图条件">
+          <span>当前条件</span>
+          {props.filterSummary.length === 0 ? (
+            <strong>未设置筛选条件，将保存默认视图</strong>
+          ) : (
+            <div>
+              {props.filterSummary.map((item) => <b key={item.label}>{item.label}: {item.value}</b>)}
+            </div>
+          )}
+        </div>
         <label className="dialog-field">
           <span>覆盖已有视图</span>
           <select value={selectedId} onChange={(event) => setSelectedId(event.target.value)}>
@@ -750,6 +763,38 @@ function SavedViewDialog(props: {
       </section>
     </div>
   );
+}
+
+function describeSavedViewFilters(filters: SavedViewFilters, globalKeyword: string) {
+  const rows: Array<{ label: string; value: string }> = [];
+  if (globalKeyword.trim()) rows.push({ label: '全局搜索', value: globalKeyword.trim() });
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value === undefined || value === '' || value === false) return;
+    if (Array.isArray(value) && value.length === 0) return;
+    const label = savedViewFilterLabel(key);
+    const text = Array.isArray(value) ? `${value.length} 项` : String(value);
+    rows.push({ label, value: text });
+  });
+  return rows.slice(0, 8);
+}
+
+function savedViewFilterLabel(key: string) {
+  const labels: Record<string, string> = {
+    keyword: '模块搜索',
+    status: '状态',
+    severity: '严重级别',
+    triageStatus: '分诊',
+    assigneeId: '负责人',
+    ownerId: '负责人',
+    requirementId: '需求',
+    reviewStatus: '评审',
+    automationStatus: '自动化',
+    pageSize: '页大小',
+    sortBy: '排序字段',
+    sortOrder: '排序方向',
+    columns: '列配置'
+  };
+  return labels[key] || key;
 }
 
 function NotificationCenter(props: {

@@ -78,6 +78,7 @@ function ScopedReportContent(props: { report: ReportSummary; query: string; requ
         <a className="primary link-button" href={downloadUrl(`/reports/html?${props.query}`)} target="_blank" rel="noreferrer"><FileText size={15} /> 打开 HTML</a>
         <a className="link-button" href={downloadUrl(`/reports/pdf?${props.query}`)}><Download size={15} /> 导出 PDF</a>
       </div>
+      <ReportDecisionPanel report={report} />
       {acceptance && (
         <div className={`acceptance-callout tone-${acceptance.tone}`}>
           <strong>{acceptance.title}</strong>
@@ -223,6 +224,39 @@ function ScopedReportContent(props: { report: ReportSummary; query: string; requ
         />
       )}
     </div>
+  );
+}
+
+function ReportDecisionPanel(props: { report: ReportSummary }) {
+  const gate = props.report.qualityGate;
+  const blockers = gate?.issues || [];
+  const activeHighRisks = props.report.charts?.riskList?.filter((item) => item.severity === 'high') || [];
+  const canAccept = gate?.status === 'pass' && props.report.bugs.active === 0;
+  const recommendation = canAccept
+    ? '当前范围满足验收条件，可以进入签核或发布确认。'
+    : blockers.length
+      ? `先处理 ${blockers.length} 项准入阻塞，再回到报告复核。`
+      : props.report.bugs.active
+        ? `仍有 ${props.report.bugs.active} 个活跃 Bug，建议完成复测关闭后再签核。`
+        : '建议补齐执行证据后再做验收判断。';
+  const nextSteps = blockers.length
+    ? blockers.slice(0, 4)
+    : activeHighRisks.length
+      ? activeHighRisks.slice(0, 4).map((item) => `${item.title}：${item.reason}`)
+      : ['复核需求覆盖、执行明细和关联缺陷', '确认报告签核意见并导出归档'];
+
+  return (
+    <section className={`report-decision-panel ${canAccept ? 'tone-pass' : 'tone-blocked'}`}>
+      <div>
+        {canAccept ? <CheckCircle2 size={20} /> : <XCircle size={20} />}
+        <span>验收结论</span>
+        <strong>{canAccept ? '建议通过验收' : '暂缓验收'}</strong>
+        <p>{recommendation}</p>
+      </div>
+      <ul>
+        {nextSteps.map((item) => <li key={item}>{item}</li>)}
+      </ul>
+    </section>
   );
 }
 

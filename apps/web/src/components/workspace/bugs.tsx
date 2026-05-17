@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Bug as BugIcon, CheckCircle2, MessageSquare, Paperclip, Pencil, Plus, RotateCcw, Save } from 'lucide-react';
+import { Bug as BugIcon, CheckCircle2, MessageSquare, MoreHorizontal, Paperclip, Pencil, Plus, RotateCcw, Save } from 'lucide-react';
 import type { Bug, BugStatus, PageResult, ProjectMember, Requirement, TestCase, TestPlan, UserProfile } from '@buggy/shared-types';
 import type { UseFormRegister } from 'react-hook-form';
 import { api } from '../../api.js';
@@ -198,15 +198,14 @@ export function BugSection(props: {
             priority: <StatusBadge value={row.priority} dictionaryType="priority" />,
             status: <StatusBadge value={row.status} dictionaryType="bugStatus" />,
             updatedAt: shortDate(row.updatedAt),
-            actions: <div className="row-actions">
-              {props.canWrite && nextBugActions(row.status).map((action) => (
-                <Button key={action.status} type="button" size="sm" onClick={() => setTransition({ bug: row, status: action.status, label: action.label })}>
-                  <action.icon size={14} /> {action.label}
-                </Button>
-              ))}
-              <Button type="button" size="sm" onClick={() => setEditing(row)}><Pencil size={14} /> 详情</Button>
-              {props.canManage && <DangerButton title={`删除 Bug「${row.title}」？`} onConfirm={() => props.mutate(() => api.deleteBug(row.id), 'Bug 已删除')} />}
-            </div>
+            actions: <BugRowActions
+              row={row}
+              canWrite={props.canWrite}
+              canManage={props.canManage}
+              onTransition={(action) => setTransition({ bug: row, status: action.status, label: action.label })}
+              onEdit={() => setEditing(row)}
+              onDelete={() => props.mutate(() => api.deleteBug(row.id), 'Bug 已删除')}
+            />
           };
           return visibleDefinitions.map((column) => cells[column.key]);
         })}
@@ -270,6 +269,42 @@ function bugSource(row: Bug, requirements: Requirement[], cases: TestCase[], pla
   return parts.length ? parts.join(' / ') : '-';
 }
 
+function BugRowActions(props: {
+  row: Bug;
+  canWrite?: boolean;
+  canManage?: boolean;
+  onTransition: (action: ReturnType<typeof nextBugActions>[number]) => void;
+  onEdit: () => void;
+  onDelete: () => void | Promise<void>;
+}) {
+  const actions = nextBugActions(props.row.status);
+  const primaryAction = props.canWrite ? actions[0] : undefined;
+  const secondaryActions = props.canWrite ? actions.slice(1) : [];
+  return (
+    <div className="row-actions compact-row-actions">
+      {primaryAction && (
+        <Button type="button" size="sm" onClick={() => props.onTransition(primaryAction)}>
+          <primaryAction.icon size={14} /> {primaryAction.label}
+        </Button>
+      )}
+      <details className="row-more-menu">
+        <summary aria-label={`更多操作：${props.row.title}`}>
+          <MoreHorizontal size={15} />
+        </summary>
+        <div>
+          <Button type="button" size="sm" onClick={props.onEdit}><Pencil size={14} /> 详情</Button>
+          {secondaryActions.map((action) => (
+            <Button key={action.status} type="button" size="sm" onClick={() => props.onTransition(action)}>
+              <action.icon size={14} /> {action.label}
+            </Button>
+          ))}
+          {props.canManage && <DangerButton title={`删除 Bug「${props.row.title}」？`} onConfirm={() => { void props.onDelete(); }} />}
+        </div>
+      </details>
+    </div>
+  );
+}
+
 function BugTriageBoard(props: { rows: Bug[]; onTriage: (value: string) => void; onStatus: (value: string) => void }) {
   const activeRows = props.rows.filter((row) => !['verified', 'closed'].includes(row.status));
   const needTriage = activeRows.filter((row) => row.triageStatus === 'new' || row.triageStatus === 'needs_info');
@@ -328,44 +363,51 @@ function slaLevelLabel(value?: Bug['slaLevel']) {
 
 export function BugFields(props: { row?: Bug; requirements: Requirement[]; cases: TestCase[]; plans: TestPlan[]; bugs: Bug[]; users: UserProfile[]; register?: UseFormRegister<StringFormValues> }) {
   return (
-    <div className="field-grid">
-      <Field className="span-two"><FieldLabel>Bug 标题</FieldLabel><Input {...registerField(props.register, 'title')} defaultValue={props.row?.title} required /></Field>
-      <Field><FieldLabel>关联需求</FieldLabel><select {...registerField(props.register, 'requirementId')} defaultValue={props.row?.requirementId || ''}><option value="">不绑定需求</option>{props.requirements.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></Field>
-      <Field><FieldLabel>关联用例</FieldLabel><select {...registerField(props.register, 'testCaseId')} defaultValue={props.row?.testCaseId || ''}><option value="">不绑定用例</option>{props.cases.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></Field>
-      <Field><FieldLabel>关联计划</FieldLabel><select {...registerField(props.register, 'testPlanId')} defaultValue={props.row?.testPlanId || ''}><option value="">不绑定计划</option>{props.plans.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
-      <Field><FieldLabel>负责人</FieldLabel><select {...registerField(props.register, 'assigneeId')} defaultValue={props.row?.assigneeId || ''}><option value="">未指派</option>{props.users.map((item) => <option key={item.id} value={item.id}>{item.username}</option>)}</select></Field>
-      <Field><FieldLabel>重复缺陷</FieldLabel><select {...registerField(props.register, 'duplicateOfId')} defaultValue={props.row?.duplicateOfId || ''}><option value="">不标记重复</option>{props.bugs.filter((item) => item.id !== props.row?.id).map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></Field>
-      <Field><FieldLabel>严重级别</FieldLabel><Select name="severity" register={props.register} values={severities} dictionaryType="severity" defaultValue={props.row?.severity || 'S2'} /></Field>
-      <Field><FieldLabel>优先级</FieldLabel><Select name="priority" register={props.register} values={priorities} dictionaryType="priority" defaultValue={props.row?.priority || 'P2'} /></Field>
-      <Field><FieldLabel>分诊状态</FieldLabel><Select name="triageStatus" register={props.register} values={triageStatuses} defaultValue={props.row?.triageStatus || 'new'} /></Field>
-      <Field>
-        <FieldLabel>{props.row ? '当前状态' : '状态'}</FieldLabel>
-        {props.row ? (
-          <div className="readonly-status-field">
-            <StatusBadge value={props.row.status} dictionaryType="bugStatus" />
-            <input type="hidden" {...registerField(props.register, 'status')} value={props.row.status} readOnly />
-          </div>
-        ) : (
-          <Select name="status" register={props.register} values={bugStatuses} dictionaryType="bugStatus" defaultValue="open" />
-        )}
-      </Field>
-      <Field><FieldLabel>SLA 截止时间</FieldLabel><Input type="date" {...registerField(props.register, 'dueAt')} defaultValue={props.row?.dueAt ? props.row.dueAt.slice(0, 10) : ''} /></Field>
-      <Field><FieldLabel>发现环境</FieldLabel><Input {...registerField(props.register, 'environment')} defaultValue={props.row?.environment} placeholder="浏览器 / 设备 / 环境" /></Field>
-      <Field><FieldLabel>发现版本</FieldLabel><Input {...registerField(props.register, 'foundVersion')} defaultValue={props.row?.foundVersion} /></Field>
-      <Field><FieldLabel>修复版本</FieldLabel><Input {...registerField(props.register, 'fixVersion')} defaultValue={props.row?.fixVersion} /></Field>
-      <Field><FieldLabel>SLA 等级</FieldLabel><select {...registerField(props.register, 'slaLevel')} defaultValue={props.row?.slaLevel || 'normal'}><option value="critical">紧急</option><option value="high">高</option><option value="normal">标准</option><option value="low">低</option></select></Field>
-      <Field className="span-two">
-        <FieldLabel>关注人</FieldLabel>
-        <select name="watcherIds" multiple defaultValue={props.row?.watcherIds || []} aria-label="关注人">
-          {props.users.map((item) => <option key={item.id} value={item.id}>{item.username}</option>)}
-        </select>
-      </Field>
-      <Field className="span-four"><FieldLabel>复现步骤</FieldLabel><Textarea {...registerField(props.register, 'reproduceSteps')} defaultValue={props.row?.reproduceSteps} /></Field>
-      <Field className="span-two"><FieldLabel>实际结果</FieldLabel><Textarea {...registerField(props.register, 'actualResult')} defaultValue={props.row?.actualResult} /></Field>
-      <Field className="span-two"><FieldLabel>期望结果</FieldLabel><Textarea {...registerField(props.register, 'expectedResult')} defaultValue={props.row?.expectedResult} /></Field>
-      <Field className="span-two"><FieldLabel>根因分析</FieldLabel><Textarea {...registerField(props.register, 'rootCause')} defaultValue={props.row?.rootCause} /></Field>
-      <Field className="span-two"><FieldLabel>修复说明</FieldLabel><Textarea {...registerField(props.register, 'resolution')} defaultValue={props.row?.resolution} /></Field>
-      <Field className="span-four"><FieldLabel>验证结论</FieldLabel><Textarea {...registerField(props.register, 'verifyResult')} defaultValue={props.row?.verifyResult} /></Field>
+    <div className="bug-progressive-form">
+      <div className="field-grid">
+        <Field className="span-two"><FieldLabel>Bug 标题</FieldLabel><Input {...registerField(props.register, 'title')} defaultValue={props.row?.title} required /></Field>
+        <Field><FieldLabel>严重级别</FieldLabel><Select name="severity" register={props.register} values={severities} dictionaryType="severity" defaultValue={props.row?.severity || 'S2'} /></Field>
+        <Field><FieldLabel>优先级</FieldLabel><Select name="priority" register={props.register} values={priorities} dictionaryType="priority" defaultValue={props.row?.priority || 'P2'} /></Field>
+        <Field><FieldLabel>关联需求</FieldLabel><select {...registerField(props.register, 'requirementId')} defaultValue={props.row?.requirementId || ''}><option value="">不绑定需求</option>{props.requirements.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></Field>
+        <Field><FieldLabel>关联用例</FieldLabel><select {...registerField(props.register, 'testCaseId')} defaultValue={props.row?.testCaseId || ''}><option value="">不绑定用例</option>{props.cases.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></Field>
+        <Field><FieldLabel>关联计划</FieldLabel><select {...registerField(props.register, 'testPlanId')} defaultValue={props.row?.testPlanId || ''}><option value="">不绑定计划</option>{props.plans.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
+        <Field><FieldLabel>负责人</FieldLabel><select {...registerField(props.register, 'assigneeId')} defaultValue={props.row?.assigneeId || ''}><option value="">未指派</option>{props.users.map((item) => <option key={item.id} value={item.id}>{item.username}</option>)}</select></Field>
+        <Field className="span-four"><FieldLabel>复现步骤</FieldLabel><Textarea {...registerField(props.register, 'reproduceSteps')} defaultValue={props.row?.reproduceSteps} placeholder="建议写清环境、入口、操作路径和稳定复现条件" /></Field>
+        <Field className="span-two"><FieldLabel>实际结果</FieldLabel><Textarea {...registerField(props.register, 'actualResult')} defaultValue={props.row?.actualResult} /></Field>
+        <Field className="span-two"><FieldLabel>期望结果</FieldLabel><Textarea {...registerField(props.register, 'expectedResult')} defaultValue={props.row?.expectedResult} /></Field>
+      </div>
+      <details className="advanced-fields" open={Boolean(props.row)}>
+        <summary>高级信息</summary>
+        <div className="field-grid">
+          <Field><FieldLabel>重复缺陷</FieldLabel><select {...registerField(props.register, 'duplicateOfId')} defaultValue={props.row?.duplicateOfId || ''}><option value="">不标记重复</option>{props.bugs.filter((item) => item.id !== props.row?.id).map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></Field>
+          <Field><FieldLabel>分诊状态</FieldLabel><Select name="triageStatus" register={props.register} values={triageStatuses} defaultValue={props.row?.triageStatus || 'new'} /></Field>
+          <Field>
+            <FieldLabel>{props.row ? '当前状态' : '状态'}</FieldLabel>
+            {props.row ? (
+              <div className="readonly-status-field">
+                <StatusBadge value={props.row.status} dictionaryType="bugStatus" />
+                <input type="hidden" {...registerField(props.register, 'status')} value={props.row.status} readOnly />
+              </div>
+            ) : (
+              <Select name="status" register={props.register} values={bugStatuses} dictionaryType="bugStatus" defaultValue="open" />
+            )}
+          </Field>
+          <Field><FieldLabel>SLA 截止时间</FieldLabel><Input type="date" {...registerField(props.register, 'dueAt')} defaultValue={props.row?.dueAt ? props.row.dueAt.slice(0, 10) : ''} /></Field>
+          <Field><FieldLabel>发现环境</FieldLabel><Input {...registerField(props.register, 'environment')} defaultValue={props.row?.environment} placeholder="浏览器 / 设备 / 环境" /></Field>
+          <Field><FieldLabel>发现版本</FieldLabel><Input {...registerField(props.register, 'foundVersion')} defaultValue={props.row?.foundVersion} /></Field>
+          <Field><FieldLabel>修复版本</FieldLabel><Input {...registerField(props.register, 'fixVersion')} defaultValue={props.row?.fixVersion} /></Field>
+          <Field><FieldLabel>SLA 等级</FieldLabel><select {...registerField(props.register, 'slaLevel')} defaultValue={props.row?.slaLevel || 'normal'}><option value="critical">紧急</option><option value="high">高</option><option value="normal">标准</option><option value="low">低</option></select></Field>
+          <Field className="span-two">
+            <FieldLabel>关注人</FieldLabel>
+            <select name="watcherIds" multiple defaultValue={props.row?.watcherIds || []} aria-label="关注人">
+              {props.users.map((item) => <option key={item.id} value={item.id}>{item.username}</option>)}
+            </select>
+          </Field>
+          <Field className="span-two"><FieldLabel>根因分析</FieldLabel><Textarea {...registerField(props.register, 'rootCause')} defaultValue={props.row?.rootCause} /></Field>
+          <Field className="span-two"><FieldLabel>修复说明</FieldLabel><Textarea {...registerField(props.register, 'resolution')} defaultValue={props.row?.resolution} /></Field>
+          <Field className="span-four"><FieldLabel>验证结论</FieldLabel><Textarea {...registerField(props.register, 'verifyResult')} defaultValue={props.row?.verifyResult} /></Field>
+        </div>
+      </details>
     </div>
   );
 }

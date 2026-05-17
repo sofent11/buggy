@@ -1,8 +1,131 @@
 import type { Project, ReportSummary, UserProfile } from '@buggy/shared-types';
-import { Activity, Bug, ClipboardCheck, FileText, Flag, FolderKanban, Users } from 'lucide-react';
+import { Activity, Bug, ClipboardCheck, FileText, Flag, FolderKanban, GitPullRequestArrow, RotateCcw, ShieldAlert, Users } from 'lucide-react';
 import { labelOf } from '../../labels.js';
 import type { Tab, WorkspaceData } from '../../app/types.js';
 import { DataTable, EmptyState, StatusBadge, Table } from './common.js';
+
+export function QualityWorkflowNavigator(props: { data: WorkspaceData; onJump?: (tab: Tab) => void }) {
+  const coveredRequirementIds = new Set(props.data.cases.map((item) => item.requirementId).filter(Boolean));
+  const uncoveredRequirements = props.data.requirements.filter((item) => !coveredRequirementIds.has(item.id));
+  const pendingReviews = props.data.cases.filter((item) => ['draft', 'in_review', 'changes_requested'].includes(item.reviewStatus || 'draft'));
+  const runItems = props.data.plans.flatMap((plan) => plan.runItems);
+  const failedOrBlocked = runItems.filter((item) => ['failed', 'blocked'].includes(item.status));
+  const resolvedBugs = props.data.bugs.filter((item) => item.status === 'resolved');
+  const activeSevereBugs = props.data.bugs.filter((item) => ['S0', 'S1'].includes(item.severity) && !['verified', 'closed'].includes(item.status));
+  const signoffBlocked = (props.data.report?.qualityGate?.issues || []).length;
+  const stages = [
+    {
+      label: '需求准入',
+      detail: uncoveredRequirements.length ? `${uncoveredRequirements.length} 个需求缺少用例` : '需求覆盖就绪',
+      value: `${props.data.requirements.length}`,
+      tone: uncoveredRequirements.length ? 'risk' : 'good',
+      tab: 'requirements' as Tab,
+      icon: Flag
+    },
+    {
+      label: '用例设计 / 评审',
+      detail: pendingReviews.length ? `${pendingReviews.length} 条待评审或需修改` : '评审队列清爽',
+      value: `${props.data.cases.length}`,
+      tone: pendingReviews.length ? 'warning' : 'good',
+      tab: 'cases' as Tab,
+      icon: ClipboardCheck
+    },
+    {
+      label: '执行计划',
+      detail: failedOrBlocked.length ? `${failedOrBlocked.length} 个失败/阻塞执行项` : `${runItems.length} 个执行项`,
+      value: `${props.data.plans.length}`,
+      tone: failedOrBlocked.length ? 'risk' : 'info',
+      tab: 'plans' as Tab,
+      icon: Activity
+    },
+    {
+      label: '缺陷复测',
+      detail: resolvedBugs.length ? `${resolvedBugs.length} 个已解决待复测` : `${activeSevereBugs.length} 个高危活跃缺陷`,
+      value: `${props.data.bugs.length}`,
+      tone: activeSevereBugs.length ? 'risk' : resolvedBugs.length ? 'warning' : 'good',
+      tab: 'bugs' as Tab,
+      icon: Bug
+    },
+    {
+      label: '报告签核',
+      detail: signoffBlocked ? `${signoffBlocked} 项准入阻塞` : '可进入验收判断',
+      value: props.data.report?.qualityGate?.status === 'pass' ? 'PASS' : 'CHECK',
+      tone: signoffBlocked ? 'risk' : 'good',
+      tab: 'requirements' as Tab,
+      icon: FileText
+    }
+  ];
+
+  return (
+    <section className="panel wide workflow-navigator">
+      <div className="section-heading compact">
+        <span>核心闭环</span>
+        <strong>从需求准入到验收签核</strong>
+      </div>
+      <div className="workflow-steps">
+        {stages.map((stage, index) => (
+          <button key={stage.label} type="button" className={`workflow-step tone-${stage.tone}`} onClick={() => props.onJump?.(stage.tab)}>
+            <span className="workflow-step-index">{index + 1}</span>
+            <stage.icon size={17} />
+            <strong>{stage.label}</strong>
+            <b>{stage.value}</b>
+            <small>{stage.detail}</small>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+export function QualityWorkQueue(props: { data: WorkspaceData; user: UserProfile; onJump?: (tab: Tab) => void }) {
+  const runEntries = props.data.plans.flatMap((plan) => plan.runItems.map((item) => ({ plan, item })));
+  const myUntested = runEntries.filter(({ item }) => item.status === 'untested' && (!item.executorId || item.executorId === props.user.id));
+  const failedWithoutBug = runEntries.filter(({ item }) => ['failed', 'blocked'].includes(item.status) && item.bugIds.length === 0);
+  const triageBugs = props.data.bugs.filter((bug) => !['verified', 'closed'].includes(bug.status) && ['new', 'needs_info'].includes(bug.triageStatus || 'new'));
+  const retestBugs = props.data.bugs.filter((bug) => bug.status === 'resolved');
+  const signoffRisks = props.data.requirements.filter((requirement) =>
+    requirement.status === 'blocked' ||
+    requirement.acceptanceStatus === 'rejected' ||
+    requirement.qualityGateResult?.status === 'blocked'
+  );
+  const rows = [
+    ...myUntested.slice(0, 3).map(({ plan, item }) => ['我的待执行', item.caseTitle, plan.name, <button className="linkish" type="button" onClick={() => props.onJump?.('plans')}>记录结果</button>]),
+    ...failedWithoutBug.slice(0, 3).map(({ plan, item }) => ['失败待建 Bug', item.caseTitle, plan.name, <button className="linkish" type="button" onClick={() => props.onJump?.('plans')}>进入执行</button>]),
+    ...triageBugs.slice(0, 3).map((bug) => ['待分诊 Bug', bug.title, bug.assigneeId ? '已指派' : '未指派', <button className="linkish" type="button" onClick={() => props.onJump?.('bugs')}>分诊</button>]),
+    ...retestBugs.slice(0, 3).map((bug) => ['待复测', bug.title, bug.resolution || '等待验证结论', <button className="linkish" type="button" onClick={() => props.onJump?.('bugs')}>复测</button>]),
+    ...signoffRisks.slice(0, 3).map((requirement) => ['验收阻塞', requirement.title, requirement.qualityGateResult?.summary || requirement.riskNote || '需要补齐验收证据', <button className="linkish" type="button" onClick={() => props.onJump?.('requirements')}>处理</button>])
+  ];
+  const queueCards = [
+    { label: '我的待执行', value: myUntested.length, detail: '等待记录测试结果', icon: Activity, tab: 'plans' as Tab },
+    { label: '待分诊 Bug', value: triageBugs.length, detail: '新建或需补充信息', icon: ShieldAlert, tab: 'bugs' as Tab },
+    { label: '待复测', value: retestBugs.length, detail: '已解决缺陷等待验证', icon: RotateCcw, tab: 'bugs' as Tab },
+    { label: '验收阻塞', value: signoffRisks.length, detail: '准入或签核前风险', icon: GitPullRequestArrow, tab: 'requirements' as Tab }
+  ];
+
+  return (
+    <section className="panel wide role-workbench">
+      <div className="section-heading compact">
+        <span>{labelOf(props.user.role)}工作台</span>
+        <strong>今天最该处理的事项</strong>
+      </div>
+      <div className="role-queue-cards">
+        {queueCards.map((card) => (
+          <button key={card.label} type="button" className={card.value ? 'has-work' : ''} onClick={() => props.onJump?.(card.tab)}>
+            <card.icon size={17} />
+            <span>{card.label}</span>
+            <strong>{card.value}</strong>
+            <small>{card.detail}</small>
+          </button>
+        ))}
+      </div>
+      {rows.length > 0 ? (
+        <DataTable headers={['队列', '对象', '上下文', '下一步']} rows={rows} />
+      ) : (
+        <EmptyState text="暂无待办" detail="待执行、待分诊、待复测和验收阻塞会自动聚合到这里。" />
+      )}
+    </section>
+  );
+}
 
 export function ProjectOnboarding(props: { data: WorkspaceData; currentProject?: Project; onJump?: (tab: Tab) => void }) {
   const hasProject = Boolean(props.currentProject);

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ClipboardCheck, GitBranch, Pencil, Plus, Save } from 'lucide-react';
+import { ClipboardCheck, GitBranch, MoreHorizontal, Pencil, Plus, Save } from 'lucide-react';
 import type { Bug, PageResult, Requirement, TestCase, TestPlan, UserProfile } from '@buggy/shared-types';
 import type { UseFormRegister } from 'react-hook-form';
 import { api } from '../../api.js';
@@ -29,6 +29,7 @@ const caseColumns = [
 ];
 
 const defaultCaseColumns = ['case', 'requirement', 'coverage', 'bugs', 'version', 'review', 'automation', 'status', 'updatedAt', 'actions'];
+type CaseQueue = 'all' | 'coverage' | 'review' | 'stale' | 'activeBugs' | 'ready' | 'automation';
 
 export function CaseSection(props: {
   projectId: string;
@@ -51,6 +52,7 @@ export function CaseSection(props: {
   const [pageSize, setPageSize] = useState(20);
   const [sortBy, setSortBy] = useState('updatedAt');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [caseQueue, setCaseQueue] = useState<CaseQueue>('all');
   const [visibleColumns, setVisibleColumns] = useState(defaultCaseColumns);
   const [pageResult, setPageResult] = useState<PageResult<TestCase>>({ total: props.rows.length, page: 1, pageSize, items: props.rows.slice(0, pageSize) });
   const [loadingPage, setLoadingPage] = useState(false);
@@ -60,7 +62,10 @@ export function CaseSection(props: {
   const [bulkReviewStatus, setBulkReviewStatus] = useState<TestCase['reviewStatus']>('in_review');
   const [bulkAutomationStatus, setBulkAutomationStatus] = useState<TestCase['automationStatus']>('manual');
   const effectiveKeyword = keyword || props.globalKeyword || '';
-  const rows = pageResult.items;
+  const rows = useMemo(
+    () => filterCaseRowsForQueue(pageResult.items, caseQueue, props.requirements, props.plans || [], props.bugs || []),
+    [pageResult.items, caseQueue, props.requirements, props.plans, props.bugs]
+  );
   const ready = props.rows.filter((row) => row.status === 'ready').length;
   const runItemsByCase = useMemo(() => {
     const map = new Map<string, { total: number; failed: number; passed: number; bugCount: number }>();
@@ -109,9 +114,9 @@ export function CaseSection(props: {
   }, [props.projectId, props.rows, page, pageSize, effectiveKeyword, requirementId, status, reviewStatus, automationStatus, sortBy, sortOrder]);
 
   useEffect(() => {
-    const filters = { keyword, requirementId, status, reviewStatus, automationStatus, pageSize, sortBy, sortOrder, columns: visibleColumns };
+    const filters = { keyword, requirementId, status, reviewStatus, automationStatus, caseQueue, pageSize, sortBy, sortOrder, columns: visibleColumns };
     window.dispatchEvent(new CustomEvent('buggy:filters-change', { detail: { tab: 'cases', filters } }));
-  }, [keyword, requirementId, status, reviewStatus, automationStatus, pageSize, sortBy, sortOrder, visibleColumns]);
+  }, [keyword, requirementId, status, reviewStatus, automationStatus, caseQueue, pageSize, sortBy, sortOrder, visibleColumns]);
 
   useEffect(() => {
     const apply = (event: Event) => {
@@ -123,6 +128,7 @@ export function CaseSection(props: {
       setStatus(typeof filters.status === 'string' ? filters.status : '');
       setReviewStatus(typeof filters.reviewStatus === 'string' ? filters.reviewStatus : '');
       setAutomationStatus(typeof filters.automationStatus === 'string' ? filters.automationStatus : '');
+      setCaseQueue(isCaseQueue(filters.caseQueue) ? filters.caseQueue : 'all');
       setPageSize(typeof filters.pageSize === 'number' ? filters.pageSize : 20);
       setSortBy(typeof filters.sortBy === 'string' ? filters.sortBy : 'updatedAt');
       setSortOrder(filters.sortOrder === 'asc' ? 'asc' : 'desc');
@@ -175,7 +181,22 @@ export function CaseSection(props: {
         </section>
       }
     >
-      <CaseGovernanceBoard rows={props.rows} requirements={props.requirements} plans={props.plans || []} bugs={props.bugs || []} onRequirement={setRequirementId} onReview={setReviewStatus} />
+      <CaseGovernanceBoard
+        rows={props.rows}
+        requirements={props.requirements}
+        plans={props.plans || []}
+        bugs={props.bugs || []}
+        activeQueue={caseQueue}
+        onQueue={(queue) => {
+          setCaseQueue(queue);
+          setPage(1);
+          if (queue !== 'review') setReviewStatus('');
+          if (queue !== 'ready') setStatus('');
+          if (queue !== 'automation') setAutomationStatus('');
+        }}
+        onRequirement={setRequirementId}
+        onReview={setReviewStatus}
+      />
       <div className="split-layout case-layout">
         <aside className="requirement-tree">
           <button className={!requirementId ? 'active' : ''} type="button" onClick={() => setRequirementId('')}>全部需求 <span>{props.rows.length}</span></button>
@@ -197,7 +218,7 @@ export function CaseSection(props: {
               <option value={50}>50 / 页</option>
             </select>
             <ColumnChooser columns={caseColumns} visible={visibleColumns} onChange={setVisibleColumns} />
-            <span className="toolbar-summary">{loadingPage ? '加载中...' : `${pageResult.total} 条用例`}</span>
+            <span className="toolbar-summary">{loadingPage ? '加载中...' : `${rows.length}/${pageResult.total} 条用例`}</span>
             {props.canWrite && <button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建用例</button>}
           </Toolbar>
           {props.canWrite && (
@@ -238,16 +259,17 @@ export function CaseSection(props: {
                 priority: <StatusBadge value={row.priority} dictionaryType="priority" />,
                 status: props.canWrite ? <Select value={row.status} onChange={(value) => props.mutate(() => api.updateTestCase(row.id, { status: value as never }), '用例状态已更新')} values={caseStatuses} dictionaryType="testCaseStatus" /> : <StatusBadge value={row.status} dictionaryType="testCaseStatus" />,
                 updatedAt: shortDate(row.updatedAt),
-                actions: <div className="row-actions">
-                  {props.canWrite && caseReviewActions(row.reviewStatus || 'draft').map((action) => (
-                    <Button key={action.status} type="button" size="sm" onClick={() => props.mutate(() => api.updateTestCase(row.id, { reviewStatus: action.status, changeSummary: action.note }), action.message)}>
-                      {action.label}
-                    </Button>
-                  ))}
-                  {props.canWrite && <Button type="button" size="sm" onClick={() => props.mutate(() => api.updateTestCase(row.id, { baselineVersion: row.version || 'v1', changeSummary: `设置 ${row.version || 'v1'} 为基线` }), '用例基线已设置')}><GitBranch size={14} /> 基线</Button>}
-                  <Button type="button" size="sm" onClick={() => setEditing(row)}><Pencil size={14} /> 详情</Button>
-                  {props.canManage && <DangerButton title={`删除用例「${row.title}」？`} description={`关联 ${runSummary?.total || 0} 个执行项、${caseBugs.length} 个 Bug。有关联数据时系统会阻止删除，请先迁移或清理。`} onConfirm={() => props.mutate(() => api.deleteTestCase(row.id), '用例已删除')} />}
-                </div>
+                actions: <CaseRowActions
+                  row={row}
+                  runCount={runSummary?.total || 0}
+                  bugCount={caseBugs.length}
+                  canWrite={props.canWrite}
+                  canManage={props.canManage}
+                  onReview={(action) => props.mutate(() => api.updateTestCase(row.id, { reviewStatus: action.status, changeSummary: action.note }), action.message)}
+                  onBaseline={() => props.mutate(() => api.updateTestCase(row.id, { baselineVersion: row.version || 'v1', changeSummary: `设置 ${row.version || 'v1'} 为基线` }), '用例基线已设置')}
+                  onEdit={() => setEditing(row)}
+                  onDelete={() => props.mutate(() => api.deleteTestCase(row.id), '用例已删除')}
+                />
               };
               return [
                 <input
@@ -299,39 +321,132 @@ function CaseGovernanceBoard(props: {
   requirements: Requirement[];
   plans: TestPlan[];
   bugs: Bug[];
+  activeQueue: CaseQueue;
+  onQueue: (queue: CaseQueue) => void;
   onRequirement: (id: string) => void;
   onReview: (status: string) => void;
 }) {
+  const requirementIds = new Set(props.requirements.map((requirement) => requirement.id));
   const coveredRequirementIds = new Set(props.rows.map((row) => row.requirementId).filter(Boolean));
   const uncoveredRequirements = props.requirements.filter((requirement) => !coveredRequirementIds.has(requirement.id));
+  const orphanCases = props.rows.filter((row) => !row.requirementId || !requirementIds.has(row.requirementId));
+  const pendingReviewCases = props.rows.filter((row) => ['draft', 'in_review', 'changes_requested'].includes(row.reviewStatus || 'draft'));
   const staleCases = props.rows.filter((row) => props.plans.some((plan) =>
     plan.runItems.some((item) => item.caseId === row.id && item.caseVersion && item.caseVersion !== (row.version || 'v1'))
   ));
   const casesWithActiveBugs = props.rows.filter((row) => props.bugs.some((bug) => bug.testCaseId === row.id && !['verified', 'closed'].includes(bug.status)));
+  const readyCases = props.rows.filter((row) => row.status === 'ready' && (row.reviewStatus === 'approved' || !row.reviewStatus));
+  const automationCandidates = props.rows.filter((row) => row.automationStatus === 'candidate');
   return (
     <section className="workflow-lanes" aria-label="用例治理工作台">
-      <button type="button" onClick={() => props.onRequirement(uncoveredRequirements[0]?.id || '')}>
+      <button type="button" className={props.activeQueue === 'coverage' ? 'active' : ''} onClick={() => {
+        props.onQueue('coverage');
+        props.onRequirement('');
+      }}>
         <span>覆盖缺口</span>
-        <strong>{uncoveredRequirements.length}</strong>
-        <small>需求尚无用例</small>
+        <strong>{uncoveredRequirements.length + orphanCases.length}</strong>
+        <small>需求无用例或用例未绑定需求</small>
       </button>
-      <button type="button" onClick={() => props.onReview('in_review')}>
+      <button type="button" className={props.activeQueue === 'review' ? 'active' : ''} onClick={() => {
+        props.onQueue('review');
+        props.onReview('');
+      }}>
         <span>待评审</span>
-        <strong>{props.rows.filter((row) => ['draft', 'in_review', 'changes_requested'].includes(row.reviewStatus || 'draft')).length}</strong>
+        <strong>{pendingReviewCases.length}</strong>
         <small>需要提交或处理评审</small>
       </button>
-      <button type="button">
+      <button type="button" className={props.activeQueue === 'ready' ? 'active' : ''} onClick={() => props.onQueue('ready')}>
+        <span>可执行</span>
+        <strong>{readyCases.length}</strong>
+        <small>可直接纳入测试计划</small>
+      </button>
+      <button type="button" className={props.activeQueue === 'automation' ? 'active' : ''} onClick={() => props.onQueue('automation')}>
+        <span>自动化候选</span>
+        <strong>{automationCandidates.length}</strong>
+        <small>适合推进自动化</small>
+      </button>
+      <button type="button" className={props.activeQueue === 'stale' ? 'active' : ''} onClick={() => props.onQueue('stale')}>
         <span>快照差异</span>
         <strong>{staleCases.length}</strong>
         <small>计划快照落后当前版本</small>
       </button>
-      <button type="button" className={casesWithActiveBugs.length ? 'tone-risk' : ''}>
+      <button type="button" className={`${casesWithActiveBugs.length ? 'tone-risk' : ''} ${props.activeQueue === 'activeBugs' ? 'active' : ''}`} onClick={() => props.onQueue('activeBugs')}>
         <span>缺陷关联</span>
         <strong>{casesWithActiveBugs.length}</strong>
         <small>仍有活跃 Bug</small>
       </button>
+      <button type="button" className={props.activeQueue === 'all' ? 'active' : ''} onClick={() => props.onQueue('all')}>
+        <span>全部用例</span>
+        <strong>{props.rows.length}</strong>
+        <small>清除队列视图</small>
+      </button>
     </section>
   );
+}
+
+function CaseRowActions(props: {
+  row: TestCase;
+  runCount: number;
+  bugCount: number;
+  canWrite?: boolean;
+  canManage?: boolean;
+  onReview: (action: ReturnType<typeof caseReviewActions>[number]) => void | Promise<void>;
+  onBaseline: () => void | Promise<void>;
+  onEdit: () => void;
+  onDelete: () => void | Promise<void>;
+}) {
+  const reviewActions = props.canWrite ? caseReviewActions(props.row.reviewStatus || 'draft') : [];
+  const primaryAction = reviewActions[0];
+  const secondaryActions = reviewActions.slice(1);
+  return (
+    <div className="row-actions compact-row-actions">
+      {primaryAction && (
+        <Button type="button" size="sm" onClick={() => { void props.onReview(primaryAction); }}>
+          {primaryAction.label}
+        </Button>
+      )}
+      <details className="row-more-menu">
+        <summary aria-label={`更多操作：${props.row.title}`}>
+          <MoreHorizontal size={15} />
+        </summary>
+        <div>
+          <Button type="button" size="sm" onClick={props.onEdit}><Pencil size={14} /> 详情</Button>
+          {secondaryActions.map((action) => (
+            <Button key={action.status} type="button" size="sm" onClick={() => { void props.onReview(action); }}>
+              {action.label}
+            </Button>
+          ))}
+          {props.canWrite && <Button type="button" size="sm" onClick={() => { void props.onBaseline(); }}><GitBranch size={14} /> 设为基线</Button>}
+          {props.canManage && (
+            <DangerButton
+              title={`删除用例「${props.row.title}」？`}
+              description={`关联 ${props.runCount} 个执行项、${props.bugCount} 个 Bug。有关联数据时系统会阻止删除，请先迁移或清理。`}
+              onConfirm={() => { void props.onDelete(); }}
+            />
+          )}
+        </div>
+      </details>
+    </div>
+  );
+}
+
+function filterCaseRowsForQueue(rows: TestCase[], queue: CaseQueue, requirements: Requirement[], plans: TestPlan[], bugs: Bug[]) {
+  if (queue === 'all') return rows;
+  const requirementIds = new Set(requirements.map((requirement) => requirement.id));
+  if (queue === 'coverage') return rows.filter((row) => !row.requirementId || !requirementIds.has(row.requirementId));
+  if (queue === 'review') return rows.filter((row) => ['draft', 'in_review', 'changes_requested'].includes(row.reviewStatus || 'draft'));
+  if (queue === 'ready') return rows.filter((row) => row.status === 'ready' && (row.reviewStatus === 'approved' || !row.reviewStatus));
+  if (queue === 'automation') return rows.filter((row) => row.automationStatus === 'candidate');
+  if (queue === 'stale') {
+    return rows.filter((row) => plans.some((plan) =>
+      plan.runItems.some((item) => item.caseId === row.id && item.caseVersion && item.caseVersion !== (row.version || 'v1'))
+    ));
+  }
+  return rows.filter((row) => bugs.some((bug) => bug.testCaseId === row.id && !['verified', 'closed'].includes(bug.status)));
+}
+
+function isCaseQueue(value: unknown): value is CaseQueue {
+  return typeof value === 'string' && ['all', 'coverage', 'review', 'stale', 'activeBugs', 'ready', 'automation'].includes(value);
 }
 
 function caseReviewActions(status: TestCase['reviewStatus']) {
