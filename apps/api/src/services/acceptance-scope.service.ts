@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import type { AcceptanceScope, PageResult, QualityGateRule, RiskWaiver } from '@buggy/shared-types';
+import type { AcceptanceReportSnapshot, AcceptanceScope, PageResult, QualityGateRule, ReportSignoff, RiskWaiver } from '@buggy/shared-types';
 import { AcceptanceScopeEntity } from '../database/acceptance-scope.schema.js';
 import type { AddRiskWaiverDto, CreateAcceptanceScopeDto, SignoffAcceptanceScopeDto, UpdateAcceptanceScopeDto } from '../dto/acceptance-scope.dto.js';
 import type { ListQueryDto } from '../dto/common.dto.js';
@@ -136,14 +136,17 @@ export class AcceptanceScopeService {
   async signoff(id: string, dto: SignoffAcceptanceScopeDto, user: SessionUser): Promise<AcceptanceScope> {
     const row = await this.scopes.findById(id);
     if (!row) throw new NotFoundException('验收范围不存在');
-    row.status = dto.status === 'signed' ? 'signed' : 'rejected';
-    row.reportSignoff = {
+    const signedAt = new Date().toISOString();
+    const reportSignoff: ReportSignoff = {
       status: dto.status,
       signerId: user.id,
       signerName: user.username,
       note: dto.note.trim(),
-      signedAt: new Date().toISOString()
+      signedAt
     };
+    row.status = dto.status === 'signed' ? 'signed' : 'rejected';
+    row.reportSignoff = reportSignoff;
+    row.reportSnapshot = this.snapshotReport(row, reportSignoff, signedAt);
     await row.save();
     await this.activities.record({
       projectId: idOf(row.projectId),
@@ -194,8 +197,34 @@ export class AcceptanceScopeService {
       qualityGateResult: row.qualityGateResult,
       riskWaivers: row.riskWaivers || [],
       reportSignoff: row.reportSignoff,
+      reportSnapshot: row.reportSnapshot,
       createdAt: row.createdAt?.toISOString(),
       updatedAt: row.updatedAt?.toISOString()
+    };
+  }
+
+  private snapshotReport(row: AcceptanceScopeEntity & { _id: unknown }, reportSignoff: ReportSignoff, frozenAt: string): AcceptanceReportSnapshot {
+    const projectId = idOf(row.projectId);
+    const scopeId = idOf(row._id);
+    const query = `projectId=${encodeURIComponent(projectId)}&acceptanceScopeId=${encodeURIComponent(scopeId)}`;
+    return {
+      id: new Types.ObjectId().toString(),
+      frozenAt,
+      scopeName: row.name,
+      projectId,
+      scopeStatus: reportSignoff.status === 'signed' ? 'signed' : 'rejected',
+      targetDate: row.targetDate?.toISOString(),
+      iterationIds: row.iterationIds.map(idOf),
+      requirementIds: row.requirementIds.map(idOf),
+      testPlanIds: row.testPlanIds.map(idOf),
+      bugIds: row.bugIds.map(idOf),
+      qualityGateResult: row.qualityGateResult,
+      riskWaivers: row.riskWaivers || [],
+      reportSignoff,
+      exportLinks: {
+        html: `/reports/html?${query}`,
+        pdf: `/reports/pdf?${query}`
+      }
     };
   }
 }

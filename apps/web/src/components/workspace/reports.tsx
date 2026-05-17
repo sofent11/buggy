@@ -163,6 +163,7 @@ export function ReportSection(props: {
               </div>
             </section>
           )}
+          {selectedScope?.reportSnapshot && <ReportSnapshotCard scope={selectedScope} />}
         </section>
       </div>
       )}
@@ -233,6 +234,51 @@ export function ReportSection(props: {
         </>
       )}
     </DataPage>
+  );
+}
+
+function ReportSnapshotCard(props: { scope: AcceptanceScope }) {
+  const snapshot = props.scope.reportSnapshot;
+  if (!snapshot) return null;
+  const gateStatus = snapshot.qualityGateResult?.status || 'unknown';
+  const gateLabel = gateStatus === 'pass' ? '门禁通过' : gateStatus === 'risk' ? '带风险通过' : gateStatus === 'blocked' ? '门禁阻塞' : '未记录门禁';
+  return (
+    <section className={`report-snapshot-card tone-${gateStatus}`}>
+      <div className="section-heading compact">
+        <span>签核快照</span>
+        <strong>{snapshot.scopeName}</strong>
+      </div>
+      <div className="snapshot-grid">
+        <article>
+          <span>冻结时间</span>
+          <strong>{new Date(snapshot.frozenAt).toLocaleString('zh-CN')}</strong>
+        </article>
+        <article>
+          <span>范围资产</span>
+          <strong>{snapshot.requirementIds.length} 需求 · {snapshot.testPlanIds.length} 计划</strong>
+          <small>{snapshot.bugIds.length} 个保留缺陷</small>
+        </article>
+        <article>
+          <span>准入结论</span>
+          <strong>{gateLabel}</strong>
+          <small>{snapshot.qualityGateResult?.summary || '以签核时范围数据为准'}</small>
+        </article>
+        <article>
+          <span>签核人</span>
+          <strong>{snapshot.reportSignoff.signerName || '-'}</strong>
+          <small>{snapshot.reportSignoff.note || '未填写签核意见'}</small>
+        </article>
+      </div>
+      <div className="snapshot-risk-list">
+        {snapshot.riskWaivers.length === 0 ? <span>无风险豁免</span> : snapshot.riskWaivers.map((waiver) => (
+          <span key={waiver.id}>{waiver.ownerName || '责任人待定'} · {waiver.reason}{waiver.expiresAt ? ` · ${waiver.expiresAt.slice(0, 10)} 到期` : ''}</span>
+        ))}
+      </div>
+      <div className="report-actions">
+        {snapshot.exportLinks?.html && <a className="link-button" href={downloadUrl(snapshot.exportLinks.html)} target="_blank" rel="noreferrer">快照 HTML</a>}
+        {snapshot.exportLinks?.pdf && <a className="link-button" href={downloadUrl(snapshot.exportLinks.pdf)}>快照 PDF</a>}
+      </div>
+    </section>
   );
 }
 

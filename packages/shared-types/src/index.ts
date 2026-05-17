@@ -85,6 +85,26 @@ export interface RiskWaiver {
   createdAt: string;
 }
 
+export interface AcceptanceReportSnapshot {
+  id: Id;
+  frozenAt: string;
+  scopeName: string;
+  projectId: Id;
+  scopeStatus: 'signed' | 'rejected';
+  targetDate?: string;
+  iterationIds: Id[];
+  requirementIds: Id[];
+  testPlanIds: Id[];
+  bugIds: Id[];
+  qualityGateResult?: QualityGateResult;
+  riskWaivers: RiskWaiver[];
+  reportSignoff: ReportSignoff;
+  exportLinks?: {
+    html?: string;
+    pdf?: string;
+  };
+}
+
 export interface ProjectSlaPolicy {
   enabled: boolean;
   criticalHours: number;
@@ -328,6 +348,7 @@ export interface AcceptanceScope {
   qualityGateResult?: QualityGateResult;
   riskWaivers: RiskWaiver[];
   reportSignoff?: ReportSignoff;
+  reportSnapshot?: AcceptanceReportSnapshot;
   createdAt?: string;
   updatedAt?: string;
 }

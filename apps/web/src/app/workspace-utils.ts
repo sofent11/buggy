@@ -181,7 +181,7 @@ export function bugPayload(form: FormData, projectId: string): Partial<Bug> {
     rootCause: text(form, 'rootCause'),
     resolution: text(form, 'resolution'),
     verifyResult: text(form, 'verifyResult'),
-    slaLevel: text(form, 'slaLevel') as never,
+    slaLevel: (text(form, 'slaLevel') || undefined) as never,
     triageStatus: text(form, 'triageStatus') as never,
     watcherIds: (watcherValues.length ? watcherValues : text(form, 'watcherIds')
       .split(',')

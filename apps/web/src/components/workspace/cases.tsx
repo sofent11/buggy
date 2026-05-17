@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ClipboardCheck, GitBranch, MoreHorizontal, Pencil, Plus, Save } from 'lucide-react';
+import { ClipboardCheck, Copy, GitBranch, MoreHorizontal, Pencil, Plus, Save } from 'lucide-react';
 import type { Bug, PageResult, Requirement, TestCase, TestPlan, UserProfile } from '@buggy/shared-types';
 import type { UseFormRegister } from 'react-hook-form';
 import { api } from '../../api.js';
@@ -10,11 +10,12 @@ import { Textarea } from '../ui/textarea.js';
 import { automationStatuses, caseReviewStatuses, caseStatuses, priorities } from '../../app/constants.js';
 import type { StringFormValues } from '../../app/types.js';
 import { matchKeyword, requirementTitle, shortDate, testCasePayload, userName } from '../../app/workspace-utils.js';
-import { ColumnChooser, DataPage, DataTable, DangerButton, Drawer, EmptyState, HookForm, MetricCard, Pagination, registerField, SearchBox, Select, StatusBadge, StepEditor, TextConfirmDialog, Toolbar, RowMoreMenu } from './common.js';
+import { ColumnChooser, DataPage, DataTable, DangerButton, Drawer, EmptyState, FilterChips, HookForm, MetricCard, Pagination, registerField, SearchBox, Select, StatusBadge, StepEditor, TextConfirmDialog, Toolbar, RowMoreMenu } from './common.js';
 
 const caseColumns = [
   { key: 'case', label: '用例', locked: true, sortKey: 'title' },
   { key: 'requirement', label: '需求' },
+  { key: 'owner', label: '负责人' },
   { key: 'module', label: '模块' },
   { key: 'steps', label: '步骤' },
   { key: 'coverage', label: '执行覆盖' },
@@ -28,7 +29,7 @@ const caseColumns = [
   { key: 'actions', label: '操作', locked: true }
 ];
 
-const defaultCaseColumns = ['case', 'requirement', 'coverage', 'bugs', 'version', 'review', 'automation', 'status', 'updatedAt', 'actions'];
+const defaultCaseColumns = ['case', 'requirement', 'owner', 'coverage', 'review', 'status', 'updatedAt', 'actions'];
 type CaseQueue = 'all' | 'coverage' | 'review' | 'stale' | 'activeBugs' | 'ready' | 'automation';
 
 export function CaseSection(props: {
@@ -244,6 +245,16 @@ export function CaseSection(props: {
             <span className="toolbar-summary">{loadingPage ? '加载中...' : `${rows.length}/${pageResult.total} 条用例`}</span>
             {props.canWrite && <button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建用例</button>}
           </Toolbar>
+          <FilterChips filters={[
+            { label: '本页搜索', value: keyword, onClear: () => setKeyword('') },
+            { label: '需求', value: requirementId ? requirementTitle(props.requirements, requirementId) : '', onClear: () => setRequirementId('') },
+            { label: '模块', value: moduleFilter, onClear: () => setModuleFilter('') },
+            { label: '用例集', value: suiteFilter, onClear: () => setSuiteFilter('') },
+            { label: '状态', value: status ? userNameOrLabel(status) : '', onClear: () => setStatus('') },
+            { label: '评审', value: reviewStatus ? userNameOrLabel(reviewStatus) : '', onClear: () => setReviewStatus('') },
+            { label: '自动化', value: automationStatus ? automationLabel(automationStatus) : '', onClear: () => setAutomationStatus('') },
+            { label: '队列', value: caseQueue !== 'all' ? caseQueueLabel(caseQueue) : '', onClear: () => setCaseQueue('all') }
+          ]} />
           {props.canWrite && props.rows.length > 0 && (
             <div className="bulk-action-bar" aria-label="用例批量操作">
               <strong>{hasSelectedCases ? `已选 ${selectedCaseIds.length} 条` : '未选择用例'}</strong>
@@ -272,6 +283,7 @@ export function CaseSection(props: {
               const cells: Record<string, ReactNode> = {
                 case: <div className="cell-main"><strong>{row.title}</strong><span>{row.expectedResult || row.preconditions || '未填写预期结果'}</span></div>,
                 requirement: row.requirementId ? requirementTitle(props.requirements, row.requirementId) : '-',
+                owner: row.ownerId ? userName(props.users, row.ownerId) : '-',
                 module: <div className="cell-main"><strong>{row.module || '-'}</strong><span>{row.suiteId || row.version || '-'}</span></div>,
                 steps: row.steps.length,
                 coverage: runSummary ? `${runSummary.passed}/${runSummary.total} 通过 · ${runSummary.failed} 失败` : '未纳入计划',
@@ -292,6 +304,7 @@ export function CaseSection(props: {
                   onReview={(action) => setCaseReviewChange({ row, action })}
                   onBaseline={() => props.mutate(() => api.updateTestCase(row.id, { baselineVersion: row.version || 'v1', changeSummary: `设置 ${row.version || 'v1'} 为基线` }), '用例基线已设置')}
                   onRestore={() => props.mutate(() => api.restoreTestCaseBaseline(row.id), '用例已恢复到基线')}
+                  onClone={() => props.mutate(() => api.createTestCase(cloneCasePayload(row, props.projectId)), '用例已复制')}
                   onEdit={() => setEditing(row)}
                   onDelete={() => props.mutate(() => api.deleteTestCase(row.id), '用例已删除')}
                 />
@@ -449,6 +462,7 @@ function CaseRowActions(props: {
   onReview: (action: ReturnType<typeof caseReviewActions>[number]) => void | Promise<void>;
   onBaseline: () => void | Promise<void>;
   onRestore: () => void | Promise<void>;
+  onClone: () => void | Promise<void>;
   onEdit: () => void;
   onDelete: () => void | Promise<void>;
 }) {
@@ -474,6 +488,7 @@ function CaseRowActions(props: {
             {action.label}
           </Button>
         ))}
+        {props.canWrite && <Button type="button" size="sm" onClick={() => { void props.onClone(); }}><Copy size={14} /> 复制用例</Button>}
         {props.canWrite && <Button type="button" size="sm" onClick={() => { void props.onBaseline(); }}><GitBranch size={14} /> 设为基线</Button>}
         {props.canWrite && props.row.baselineSnapshot && <Button type="button" size="sm" onClick={() => { void props.onRestore(); }}><GitBranch size={14} /> 恢复基线</Button>}
         {props.canManage && (
@@ -486,6 +501,28 @@ function CaseRowActions(props: {
       </RowMoreMenu>
     </div>
   );
+}
+
+function cloneCasePayload(row: TestCase, projectId: string): Partial<TestCase> {
+  return {
+    projectId,
+    requirementId: row.requirementId,
+    title: `${row.title} 副本`,
+    preconditions: row.preconditions,
+    steps: row.steps.map((step, index) => ({ action: step.action, expected: step.expected, sort: step.sort || index + 1 })),
+    expectedResult: row.expectedResult,
+    priority: row.priority,
+    status: 'draft',
+    module: row.module,
+    suiteId: row.suiteId,
+    version: row.version || 'v1',
+    reviewStatus: 'draft',
+    automationStatus: row.automationStatus || 'manual',
+    ownerId: row.ownerId,
+    reviewerId: row.reviewerId,
+    tags: row.tags,
+    changeSummary: `复制自 ${row.title}`
+  };
 }
 
 function filterCaseRowsForQueue(rows: TestCase[], queue: CaseQueue, requirements: Requirement[], plans: TestPlan[], bugs: Bug[]) {
@@ -515,6 +552,16 @@ function groupCounts(rows: TestCase[], keyOf: (row: TestCase) => string) {
 
 function isCaseQueue(value: unknown): value is CaseQueue {
   return typeof value === 'string' && ['all', 'coverage', 'review', 'stale', 'activeBugs', 'ready', 'automation'].includes(value);
+}
+
+function caseQueueLabel(queue: CaseQueue) {
+  if (queue === 'coverage') return '覆盖缺口';
+  if (queue === 'review') return '待评审';
+  if (queue === 'stale') return '快照差异';
+  if (queue === 'activeBugs') return '缺陷关联';
+  if (queue === 'ready') return '可执行';
+  if (queue === 'automation') return '自动化候选';
+  return '全部用例';
 }
 
 function caseReviewActions(status: TestCase['reviewStatus']) {

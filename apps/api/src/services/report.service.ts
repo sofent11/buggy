@@ -233,6 +233,10 @@ export class ReportService {
         activeS01Bugs: activeS01BugCount
       }
     });
+    if (acceptanceScope) {
+      acceptanceScope.qualityGateResult = qualityGate;
+      await acceptanceScope.save();
+    }
     return {
       projectId: query.projectId,
       iterationId: query.iterationId,

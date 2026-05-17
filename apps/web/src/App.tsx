@@ -31,7 +31,7 @@ import { labelOf } from './labels.js';
 import { DataTable, Drawer, NavButton, StatusBadge } from './components/workspace/common.js';
 import { DictionaryProvider } from './components/workspace/dictionary.js';
 import { HelpCenter } from './components/workspace/help.js';
-import { ProjectOnboarding, QualityCommandCenter, QualityHealthCenter, QualityWorkflowNavigator, RecentWork, RiskBoard, TraceabilityMatrix } from './components/workspace/overview.js';
+import { QualityCommandCenter, QualityWorkflowNavigator, TraceabilityMatrix } from './components/workspace/overview.js';
 import { BugSection, CaseSection, IterationSection, PlanSection, ProjectSection, RequirementSection, SettingsSection } from './components/workspace/sections.js';
 import { ReportSection } from './components/workspace/reports.js';
 
@@ -245,15 +245,6 @@ export function App() {
     applySavedView(view);
   }, [appliedDefaultViewKeys, applySavedView, currentProject, data.savedViews, tab]);
 
-  const dashboard = useMemo(() => {
-    const report = data.report;
-    return [
-      { label: '需求', value: report?.requirements.total || 0, detail: `${report?.requirements.done || 0} 已完成`, icon: Flag },
-      { label: '用例', value: report?.cases.total || 0, detail: `${report?.cases.ready || 0} 可执行`, icon: ClipboardCheck },
-      { label: '通过率', value: `${report?.execution.passRate || 0}%`, detail: `${report?.execution.passed || 0}/${report?.execution.total || 0}`, icon: Activity },
-      { label: '活跃缺陷', value: report?.bugs.active || 0, detail: `${report?.bugs.total || 0} 总数`, icon: BugIcon }
-    ];
-  }, [data.report]);
   const visibleData = useMemo(() => filterWorkspaceData(data, deferredGlobalKeyword), [data, deferredGlobalKeyword]);
   const page = pageInfo(tab);
   const projectRole = currentProject?.members.find((member) => member.userId === user?.id)?.role;
@@ -460,36 +451,14 @@ export function App() {
         ) : (
           <>
             {tab === 'overview' && currentProject && (
-              <section className="grid">
+              <section className="grid role-dashboard-grid">
                 <QualityCommandCenter data={data} user={user} onJump={changeTab} onOpenEntity={openEntity} />
-                {dashboard.map((item) => (
-                  <article key={item.label} className="metric">
-                    <item.icon size={22} />
-                    <span>{item.label}</span>
-                    <strong>{item.value}</strong>
-                    <small>{item.detail}</small>
-                  </article>
-                ))}
                 <QualityWorkflowNavigator data={data} onJump={changeTab} />
-                <QualityHealthCenter data={data} onJump={changeTab} onOpenEntity={openEntity} />
-                <ProjectOnboarding data={data} currentProject={currentProject} onJump={changeTab} />
-                <RecentWork data={visibleData} />
-                <section className="panel">
-                  <h2>消息通知</h2>
-                  <div className="timeline-list compact-timeline">
-                    {data.notifications.length === 0 ? <span className="muted">暂无通知</span> : data.notifications.slice(0, 6).map((item) => (
-                      <article key={item.id} className={item.status === 'unread' ? 'is-unread' : ''}>
-                        <strong>{item.title}</strong>
-                        <span>{item.body || '系统提醒'} · {new Date(item.createdAt).toLocaleString('zh-CN')}</span>
-                      </article>
-                    ))}
-                  </div>
-                </section>
                 <TraceabilityMatrix data={data} />
-                <section className="panel wide">
+                <section className="panel wide compact-activity-panel">
                   <h2>项目动态</h2>
                   <div className="timeline-list compact-timeline">
-                    {data.activities.length === 0 ? <span className="muted">暂无动态</span> : data.activities.map((item) => (
+                    {data.activities.length === 0 ? <span className="muted">暂无动态</span> : data.activities.slice(0, 8).map((item) => (
                       <article key={item.id}>
                         <strong>{item.title}</strong>
                         <span>{item.actorName || '系统'} · {new Date(item.createdAt).toLocaleString('zh-CN')}</span>
@@ -497,10 +466,6 @@ export function App() {
                       </article>
                     ))}
                   </div>
-                </section>
-                <section className="panel wide">
-                  <h2>项目风险</h2>
-                  <RiskBoard report={data.report} onOpenEntity={openEntity} />
                 </section>
               </section>
             )}

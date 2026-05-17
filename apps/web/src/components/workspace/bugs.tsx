@@ -28,7 +28,7 @@ const bugColumns = [
   { key: 'actions', label: '操作', locked: true }
 ];
 
-const defaultBugColumns = bugColumns.map((column) => column.key);
+const defaultBugColumns = ['bug', 'triage', 'assignee', 'sla', 'severity', 'status', 'updatedAt', 'actions'];
 const unassignedTeamKey = '__unassigned';
 
 export function BugSection(props: {
@@ -184,13 +184,14 @@ export function BugSection(props: {
         {props.canWrite && <button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建缺陷</button>}
       </Toolbar>
       <FilterChips filters={[
+        { label: '本页搜索', value: keyword, onClear: () => setKeyword('') },
         { label: '状态', value: status, onClear: () => setStatus('') },
         { label: '严重级别', value: severity, onClear: () => setSeverity('') },
         { label: '分诊', value: triageStatus, onClear: () => setTriageStatus('') },
         { label: '团队', value: team ? teamLabel(team) : '', onClear: () => setTeam('') },
         { label: '负责人', value: assigneeId ? userName(props.users, assigneeId) : '', onClear: () => setAssigneeId('') }
       ]} />
-      <BugTriageBoard rows={props.rows} onTriage={setTriageStatus} onStatus={setStatus} />
+      <BugTriageBoard rows={props.rows} activeTriage={triageStatus} activeStatus={status} onTriage={setTriageStatus} onStatus={setStatus} />
       <BugTeamBoard groups={teamGroups} selectedTeam={team} onTeam={setTeam} />
       <DataTable
         headers={visibleDefinitions.map((column) => column.label)}
@@ -376,19 +377,37 @@ function BugRowActions(props: {
   );
 }
 
-function BugTriageBoard(props: { rows: Bug[]; onTriage: (value: string) => void; onStatus: (value: string) => void }) {
+function BugTriageBoard(props: { rows: Bug[]; activeTriage: string; activeStatus: string; onTriage: (value: string) => void; onStatus: (value: string) => void }) {
   const activeRows = props.rows.filter((row) => !['verified', 'closed'].includes(row.status));
-  const needTriage = activeRows.filter((row) => row.triageStatus === 'new' || row.triageStatus === 'needs_info');
+  const needTriage = activeRows.filter((row) => (row.triageStatus || 'new') === 'new');
+  const needInfo = activeRows.filter((row) => row.triageStatus === 'needs_info');
+  const accepted = activeRows.filter((row) => row.triageStatus === 'accepted');
+  const inProgress = activeRows.filter((row) => row.status === 'in_progress');
   const overdue = activeRows.filter((row) => isOverdue(row));
   const readyForRetest = props.rows.filter((row) => row.status === 'resolved');
   return (
-    <section className="workflow-lanes" aria-label="缺陷分诊工作台">
-      <button type="button" onClick={() => props.onTriage('new')}>
+    <section className="workflow-lanes bug-triage-lanes" aria-label="缺陷分诊工作台">
+      <button type="button" className={props.activeTriage === 'new' ? 'active' : ''} onClick={() => props.onTriage('new')}>
         <span>待分诊</span>
         <strong>{needTriage.length}</strong>
-        <small>新建或需补充信息</small>
+        <small>新建缺陷需要判断责任流</small>
       </button>
-      <button type="button" onClick={() => props.onStatus('resolved')}>
+      <button type="button" className={props.activeTriage === 'needs_info' ? 'active' : ''} onClick={() => props.onTriage('needs_info')}>
+        <span>需补充</span>
+        <strong>{needInfo.length}</strong>
+        <small>复现、范围或证据不足</small>
+      </button>
+      <button type="button" className={props.activeTriage === 'accepted' ? 'active' : ''} onClick={() => props.onTriage('accepted')}>
+        <span>已接收</span>
+        <strong>{accepted.length}</strong>
+        <small>已明确团队和责任人</small>
+      </button>
+      <button type="button" className={props.activeStatus === 'in_progress' ? 'active' : ''} onClick={() => props.onStatus('in_progress')}>
+        <span>处理中</span>
+        <strong>{inProgress.length}</strong>
+        <small>开发处理中的活跃缺陷</small>
+      </button>
+      <button type="button" className={props.activeStatus === 'resolved' ? 'active' : ''} onClick={() => props.onStatus('resolved')}>
         <span>待复测</span>
         <strong>{readyForRetest.length}</strong>
         <small>已解决，等待验证结论</small>
@@ -436,8 +455,15 @@ export function BugFields(props: { row?: Bug; requirements: Requirement[]; cases
   const defaultRequirementId = props.row?.requirementId || (props.requirements.length === 1 ? props.requirements[0]?.id : '') || '';
   const defaultCaseId = props.row?.testCaseId || (props.cases.length === 1 ? props.cases[0]?.id : '') || '';
   const defaultPlanId = props.row?.testPlanId || (props.plans.length === 1 ? props.plans[0]?.id : '') || '';
+  const advice = props.row ? null : bugIntakeAdvice();
   return (
     <div className="bug-progressive-form">
+      {advice && (
+        <section className="form-advice">
+          <strong>{advice.title}</strong>
+          <span>{advice.detail}</span>
+        </section>
+      )}
       <div className="field-grid">
         <Field className="span-two"><FieldLabel required>缺陷标题</FieldLabel><Input {...registerField(props.register, 'title')} defaultValue={props.row?.title} required /></Field>
         <Field><FieldLabel required>严重级别</FieldLabel><Select name="severity" register={props.register} values={severities} dictionaryType="severity" defaultValue={props.row?.severity || 'S2'} /></Field>
@@ -471,7 +497,7 @@ export function BugFields(props: { row?: Bug; requirements: Requirement[]; cases
           <Field><FieldLabel>发现环境</FieldLabel><Input {...registerField(props.register, 'environment')} defaultValue={props.row?.environment} placeholder="浏览器 / 设备 / 环境" /></Field>
           <Field><FieldLabel>发现版本</FieldLabel><Input {...registerField(props.register, 'foundVersion')} defaultValue={props.row?.foundVersion} /></Field>
           <Field><FieldLabel>修复版本</FieldLabel><Input {...registerField(props.register, 'fixVersion')} defaultValue={props.row?.fixVersion} /></Field>
-          <Field><FieldLabel>SLA 等级</FieldLabel><select {...registerField(props.register, 'slaLevel')} defaultValue={props.row?.slaLevel || 'normal'}><option value="critical">紧急</option><option value="high">高</option><option value="normal">标准</option><option value="low">低</option></select></Field>
+          <Field><FieldLabel>SLA 等级</FieldLabel><select {...registerField(props.register, 'slaLevel')} defaultValue={props.row?.slaLevel || ''}><option value="">按严重级别自动</option><option value="critical">紧急</option><option value="high">高</option><option value="normal">标准</option><option value="low">低</option></select></Field>
           <Field className="span-two">
             <FieldLabel>关注人</FieldLabel>
             <select name="watcherIds" multiple defaultValue={props.row?.watcherIds || []} aria-label="关注人">
@@ -485,6 +511,13 @@ export function BugFields(props: { row?: Bug; requirements: Requirement[]; cases
       </details>
     </div>
   );
+}
+
+function bugIntakeAdvice() {
+  return {
+    title: '分诊建议',
+    detail: 'S0/S1 会自动进入高优先 SLA；未指派缺陷会先进入待分诊队列，接收后进入处理中。'
+  };
 }
 
 export function BugDrawer(props: {

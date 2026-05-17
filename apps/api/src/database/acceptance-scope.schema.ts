@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, SchemaTypes, Types } from 'mongoose';
-import type { AcceptanceScope, QualityGateResult, QualityGateRule, ReportSignoff, RiskWaiver } from '@buggy/shared-types';
+import type { AcceptanceReportSnapshot, AcceptanceScope, QualityGateResult, QualityGateRule, ReportSignoff, RiskWaiver } from '@buggy/shared-types';
 
 export type AcceptanceScopeDocument = HydratedDocument<AcceptanceScopeEntity>;
 
@@ -47,6 +47,9 @@ export class AcceptanceScopeEntity {
 
   @Prop({ type: SchemaTypes.Mixed })
   reportSignoff?: ReportSignoff;
+
+  @Prop({ type: SchemaTypes.Mixed })
+  reportSnapshot?: AcceptanceReportSnapshot;
 }
 
 export const AcceptanceScopeSchema = SchemaFactory.createForClass(AcceptanceScopeEntity);

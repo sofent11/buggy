@@ -87,7 +87,7 @@ export class BugService {
       verifyResult: dto.verifyResult || '',
       slaLevel,
       watcherIds: (dto.watcherIds || []).map((id) => new Types.ObjectId(id)),
-      triageStatus: dto.triageStatus || 'new',
+      triageStatus: dto.triageStatus || (dto.assigneeId ? 'accepted' : 'new'),
       comments: [],
       attachments: [],
       statusHistory: [this.statusHistoryEntry(undefined, status, user, '创建缺陷')]
@@ -196,13 +196,26 @@ export class BugService {
   }
 
   async transition(id: string, dto: TransitionBugDto, user: SessionUser): Promise<Bug> {
+    const row = await this.bugs.findById(id).select('fixVersion foundVersion rootCause resolution');
+    if (!row) throw new NotFoundException('Bug 不存在');
+    const reason = dto.reason.trim();
     return this.update(
       id,
       {
         status: dto.nextStatus,
-        statusReason: dto.reason.trim(),
-        ...(dto.nextStatus === 'resolved' ? { resolution: dto.resolution || dto.reason.trim() } : {}),
-        ...(dto.nextStatus === 'verified' || dto.nextStatus === 'closed' ? { verifyResult: dto.verifyResult || dto.reason.trim() } : {}),
+        statusReason: reason,
+        ...(dto.nextStatus === 'in_progress' ? { triageStatus: 'accepted' as const } : {}),
+        ...(dto.nextStatus === 'resolved' ? {
+          triageStatus: 'accepted' as const,
+          resolution: dto.resolution || reason,
+          rootCause: row.rootCause || dto.resolution || reason,
+          fixVersion: row.fixVersion || row.foundVersion || '待发布版本'
+        } : {}),
+        ...(dto.nextStatus === 'verified' || dto.nextStatus === 'closed' ? {
+          verifyResult: dto.verifyResult || reason,
+          rootCause: row.rootCause || row.resolution || reason,
+          fixVersion: row.fixVersion || row.foundVersion || '待发布版本'
+        } : {}),
         ...(dto.assigneeId !== undefined ? { assigneeId: dto.assigneeId } : {}),
         ...(dto.dueAt !== undefined ? { dueAt: dto.dueAt } : {})
       },
