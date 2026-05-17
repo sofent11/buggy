@@ -127,6 +127,84 @@ export function QualityWorkQueue(props: { data: WorkspaceData; user: UserProfile
   );
 }
 
+export function QualityCommandCenter(props: { data: WorkspaceData; user: UserProfile; onJump?: (tab: Tab) => void; onOpenEntity?: (entityType: string, entityId?: string) => void }) {
+  const requirementIds = new Set(props.data.requirements.map((item) => item.id));
+  const caseIds = new Set(props.data.cases.map((item) => item.id));
+  const planIds = new Set(props.data.plans.map((item) => item.id));
+  const coveredRequirementIds = new Set(props.data.cases.map((item) => item.requirementId).filter(Boolean));
+  const runEntries = props.data.plans.flatMap((plan) => plan.runItems.map((item) => ({ plan, item })));
+  const myUntested = runEntries.filter(({ item }) => item.status === 'untested' && (!item.executorId || item.executorId === props.user.id));
+  const assignedBugs = props.data.bugs.filter((bugItem) => bugItem.assigneeId === props.user.id && !['verified', 'closed'].includes(bugItem.status));
+  const triageBugs = props.data.bugs.filter((bugItem) => !['verified', 'closed'].includes(bugItem.status) && ['new', 'needs_info'].includes(bugItem.triageStatus || 'new'));
+  const retestBugs = props.data.bugs.filter((bugItem) => bugItem.status === 'resolved');
+  const uncoveredRequirements = props.data.requirements.filter((item) => !coveredRequirementIds.has(item.id));
+  const orphanCases = props.data.cases.filter((item) => !item.requirementId || !requirementIds.has(item.requirementId));
+  const orphanBugs = props.data.bugs.filter((item) =>
+    (!item.requirementId || !requirementIds.has(item.requirementId)) &&
+    (!item.testCaseId || !caseIds.has(item.testCaseId)) &&
+    (!item.testPlanId || !planIds.has(item.testPlanId))
+  );
+  const failedWithoutBug = runEntries.filter(({ item }) => ['failed', 'blocked'].includes(item.status) && item.bugIds.length === 0);
+  const severeActiveBugs = props.data.bugs.filter((bugItem) => ['S0', 'S1'].includes(bugItem.severity) && !['verified', 'closed'].includes(bugItem.status));
+  const riskList = props.data.report?.charts?.riskList || [];
+
+  const todoRows = [
+    ...myUntested.slice(0, 4).map(({ plan, item }) => ['记录执行', item.caseTitle, plan.name, <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('run_item', item.id)}>记录结果</button>]),
+    ...assignedBugs.slice(0, 4).map((bugItem) => ['处理缺陷', bugItem.title, bugItem.actualResult || '指派给我', <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('bug', bugItem.id)}>处理</button>]),
+    ...triageBugs.slice(0, 3).map((bugItem) => ['分诊缺陷', bugItem.title, bugItem.assigneeId ? '已指派' : '未指派', <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('bug', bugItem.id)}>分诊</button>]),
+    ...retestBugs.slice(0, 3).map((bugItem) => ['复测缺陷', bugItem.title, bugItem.resolution || '等待验证结论', <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('bug', bugItem.id)}>复测</button>])
+  ];
+  const blockerRows = [
+    ...uncoveredRequirements.slice(0, 4).map((item) => ['未覆盖需求', item.title, '缺少可执行用例', <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('requirement', item.id)}>补用例</button>]),
+    ...orphanCases.slice(0, 4).map((item) => ['孤立用例', item.title, '未绑定有效需求', <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('test_case', item.id)}>绑定需求</button>]),
+    ...orphanBugs.slice(0, 4).map((item) => ['孤立 Bug', item.title, '缺少需求/用例/计划来源', <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('bug', item.id)}>补来源</button>]),
+    ...failedWithoutBug.slice(0, 4).map(({ plan, item }) => ['失败未建 Bug', item.caseTitle, plan.name, <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('run_item', item.id)}>建 Bug</button>]),
+    ...severeActiveBugs.slice(0, 4).map((item) => ['高危活跃 Bug', item.title, labelOf(item.severity), <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('bug', item.id)}>分诊</button>])
+  ];
+  const riskRows = riskList.slice(0, 5).map((item) => [
+    riskTypeLabel(item.type),
+    item.title,
+    item.reason,
+    <button className="linkish" type="button" onClick={() => props.onOpenEntity?.(riskEntity(item.type), item.id)}>定位处理</button>
+  ]);
+
+  return (
+    <section className="command-center" aria-label="今日质量指挥台">
+      <article className="command-card primary-command">
+        <div className="section-heading compact">
+          <span>{labelOf(props.user.role)}待办</span>
+          <strong>今天先处理这些</strong>
+        </div>
+        <div className="command-metric-row">
+          <button type="button" onClick={() => props.onJump?.('plans')}><Activity size={16} /><span>待执行</span><strong>{myUntested.length}</strong></button>
+          <button type="button" onClick={() => props.onJump?.('bugs')}><ShieldAlert size={16} /><span>待分诊</span><strong>{triageBugs.length}</strong></button>
+          <button type="button" onClick={() => props.onJump?.('bugs')}><RotateCcw size={16} /><span>待复测</span><strong>{retestBugs.length}</strong></button>
+        </div>
+        {todoRows.length ? <DataTable headers={['队列', '对象', '上下文', '动作']} rows={todoRows.slice(0, 6)} /> : <EmptyState text="暂无个人待办" detail="待执行、指派缺陷和复测任务会自动进入这里。" />}
+      </article>
+      <article className="command-card blocker-command">
+        <div className="section-heading compact">
+          <span>质量阻塞</span>
+          <strong>断点必须能被修复</strong>
+        </div>
+        <div className="command-metric-row">
+          <button type="button" onClick={() => props.onJump?.('requirements')}><Flag size={16} /><span>覆盖缺口</span><strong>{uncoveredRequirements.length + orphanCases.length}</strong></button>
+          <button type="button" onClick={() => props.onJump?.('plans')}><Bug size={16} /><span>失败未建 Bug</span><strong>{failedWithoutBug.length}</strong></button>
+          <button type="button" onClick={() => props.onJump?.('reports')}><FileText size={16} /><span>准入阻塞</span><strong>{props.data.report?.qualityGate?.issues.length || 0}</strong></button>
+        </div>
+        {blockerRows.length ? <DataTable headers={['阻塞', '对象', '原因', '修复动作']} rows={blockerRows.slice(0, 7)} /> : <EmptyState text="闭环健康" detail="需求、用例、执行和 Bug 当前没有明显断点。" />}
+      </article>
+      <article className="command-card risk-command">
+        <div className="section-heading compact">
+          <span>最近风险</span>
+          <strong>影响验收判断的事项</strong>
+        </div>
+        {riskRows.length ? <DataTable headers={['类型', '事项', '原因', '下一步']} rows={riskRows} /> : <EmptyState text="暂无报告风险" detail="失败执行项、高危 Bug 和准入问题会汇总到这里。" />}
+      </article>
+    </section>
+  );
+}
+
 export function ProjectOnboarding(props: { data: WorkspaceData; currentProject?: Project; onJump?: (tab: Tab) => void }) {
   const hasProject = Boolean(props.currentProject);
   const hasMembers = (props.currentProject?.members.length || 0) > 1;
@@ -175,10 +253,10 @@ export function QualityHealthCenter(props: { data: WorkspaceData; onJump?: (tab:
   const failedItems = props.data.plans.flatMap((plan) => plan.runItems.filter((item) => ['failed', 'blocked'].includes(item.status)).map((item) => ({ plan, item })));
   const severeActiveBugs = props.data.bugs.filter((bugItem) => ['S0', 'S1'].includes(bugItem.severity) && !['verified', 'closed'].includes(bugItem.status));
   const rows = [
-    ...uncoveredRequirements.slice(0, 4).map((item) => ['未覆盖需求', item.title, '缺少可执行用例', <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('requirement', item.id)}>查看需求</button>]),
-    ...orphanCases.slice(0, 4).map((item) => ['孤立用例', item.title, '未绑定有效需求', <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('test_case', item.id)}>查看用例</button>]),
-    ...orphanBugs.slice(0, 4).map((item) => ['孤立 Bug', item.title, '缺少需求/用例/计划来源', <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('bug', item.id)}>查看 Bug</button>]),
-    ...failedItems.slice(0, 4).map(({ plan, item }) => ['失败执行项', item.caseTitle, plan.name, <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('run_item', item.id)}>进入执行</button>]),
+    ...uncoveredRequirements.slice(0, 4).map((item) => ['未覆盖需求', item.title, '缺少可执行用例', <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('requirement', item.id)}>补用例</button>]),
+    ...orphanCases.slice(0, 4).map((item) => ['孤立用例', item.title, '未绑定有效需求', <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('test_case', item.id)}>绑定需求</button>]),
+    ...orphanBugs.slice(0, 4).map((item) => ['孤立 Bug', item.title, '缺少需求/用例/计划来源', <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('bug', item.id)}>补来源</button>]),
+    ...failedItems.slice(0, 4).map(({ plan, item }) => ['失败执行项', item.caseTitle, plan.name, <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('run_item', item.id)}>{item.bugIds.length ? '进入执行' : '建 Bug'}</button>]),
     ...severeActiveBugs.slice(0, 4).map((item) => ['严重活跃 Bug', item.title, labelOf(item.severity), <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('bug', item.id)}>分诊</button>])
   ];
   return (

@@ -237,15 +237,20 @@ export function RequirementFields(props: { row?: Requirement; iterations: Iterat
       <Field className="span-two"><FieldLabel>需求标题</FieldLabel><Input {...registerField(props.register, 'title')} defaultValue={props.row?.title} required /></Field>
       <Field><FieldLabel>绑定迭代</FieldLabel><select {...registerField(props.register, 'iterationId')} defaultValue={props.row?.iterationId || ''}><option value="">不绑定迭代</option>{props.iterations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
       <Field><FieldLabel>负责人</FieldLabel><select {...registerField(props.register, 'ownerId')} defaultValue={props.row?.ownerId || ''}><option value="">未指派负责人</option>{props.users.map((item) => <option key={item.id} value={item.id}>{item.username}</option>)}</select></Field>
-      <Field><FieldLabel>风险负责人</FieldLabel><select {...registerField(props.register, 'riskOwnerId')} defaultValue={props.row?.riskOwnerId || ''}><option value="">未设置风险负责人</option>{props.users.map((item) => <option key={item.id} value={item.id}>{item.username}</option>)}</select></Field>
-      <Field><FieldLabel>风险截止时间</FieldLabel><Input type="date" {...registerField(props.register, 'dueDate')} defaultValue={props.row?.dueDate ? props.row.dueDate.slice(0, 10) : ''} /></Field>
       <Field><FieldLabel>优先级</FieldLabel><Select name="priority" register={props.register} values={priorities} dictionaryType="priority" defaultValue={props.row?.priority || 'P2'} /></Field>
       <Field><FieldLabel>状态</FieldLabel><Select name="status" register={props.register} values={requirementStatuses} dictionaryType="requirementStatus" defaultValue={props.row?.status || 'ready'} /></Field>
-      <Field><FieldLabel>验收状态</FieldLabel><Select name="acceptanceStatus" register={props.register} values={acceptanceStatuses} defaultValue={props.row?.acceptanceStatus || 'not_ready'} /></Field>
-      <Field><FieldLabel>验收人</FieldLabel><select {...registerField(props.register, 'reviewerId')} defaultValue={props.row?.reviewerId || ''}><option value="">未指定验收人</option>{props.users.map((item) => <option key={item.id} value={item.id}>{item.username}</option>)}</select></Field>
-      <Field className="span-two"><FieldLabel>Lark Webhook</FieldLabel><Input {...registerField(props.register, 'larkWebhook')} defaultValue={props.row?.larkWebhook} /></Field>
-      <Field className="span-two"><FieldLabel>风险说明</FieldLabel><Input {...registerField(props.register, 'riskNote')} defaultValue={props.row?.riskNote} placeholder="风险原因、依赖方或处理策略" /></Field>
       <Field className="span-four"><FieldLabel>需求描述</FieldLabel><Textarea {...registerField(props.register, 'description')} defaultValue={props.row?.description} /></Field>
+      <details className="advanced-fields span-four" open={Boolean(props.row)}>
+        <summary>高级信息</summary>
+        <div className="field-grid">
+          <Field><FieldLabel>风险负责人</FieldLabel><select {...registerField(props.register, 'riskOwnerId')} defaultValue={props.row?.riskOwnerId || ''}><option value="">未设置风险负责人</option>{props.users.map((item) => <option key={item.id} value={item.id}>{item.username}</option>)}</select></Field>
+          <Field><FieldLabel>风险截止时间</FieldLabel><Input type="date" {...registerField(props.register, 'dueDate')} defaultValue={props.row?.dueDate ? props.row.dueDate.slice(0, 10) : ''} /></Field>
+          <Field><FieldLabel>验收状态</FieldLabel><Select name="acceptanceStatus" register={props.register} values={acceptanceStatuses} defaultValue={props.row?.acceptanceStatus || 'not_ready'} /></Field>
+          <Field><FieldLabel>验收人</FieldLabel><select {...registerField(props.register, 'reviewerId')} defaultValue={props.row?.reviewerId || ''}><option value="">未指定验收人</option>{props.users.map((item) => <option key={item.id} value={item.id}>{item.username}</option>)}</select></Field>
+          <Field className="span-two"><FieldLabel>Lark Webhook</FieldLabel><Input {...registerField(props.register, 'larkWebhook')} defaultValue={props.row?.larkWebhook} /></Field>
+          <Field className="span-two"><FieldLabel>风险说明</FieldLabel><Input {...registerField(props.register, 'riskNote')} defaultValue={props.row?.riskNote} placeholder="风险原因、依赖方或处理策略" /></Field>
+        </div>
+      </details>
     </div>
   );
 }

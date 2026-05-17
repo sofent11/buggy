@@ -200,8 +200,6 @@ function PlanCreateDrawer(props: {
         {(register) => (
           <>
             <Field><FieldLabel>计划名称</FieldLabel><Input {...register('name')} required /></Field>
-            <Field><FieldLabel>轮次</FieldLabel><Input {...register('round')} placeholder="第 1 轮" /></Field>
-            <Field><FieldLabel>绑定迭代</FieldLabel><select {...register('iterationId')}><option value="">不绑定迭代</option>{props.iterations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
             <Field><FieldLabel>需求范围</FieldLabel><select {...register('requirementId')} onChange={(event) => setRequirementFilter(event.target.value)}><option value="">全部需求</option>{props.requirements.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></Field>
             <div className="case-picker">
               {visibleCases.map((testCase) => (
@@ -213,6 +211,13 @@ function PlanCreateDrawer(props: {
               ))}
               {visibleCases.length === 0 && <EmptyState text="还没有可选用例" />}
             </div>
+            <details className="advanced-fields" open={false}>
+              <summary>高级信息</summary>
+              <div className="field-grid two">
+                <Field><FieldLabel>轮次</FieldLabel><Input {...register('round')} placeholder="第 1 轮" /></Field>
+                <Field><FieldLabel>绑定迭代</FieldLabel><select {...register('iterationId')}><option value="">不绑定迭代</option>{props.iterations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
+              </div>
+            </details>
             <FormActions><Button type="button" onClick={props.onClose}>取消</Button><Button variant="primary"><Plus size={16} /> 创建计划</Button></FormActions>
           </>
         )}
@@ -454,12 +459,13 @@ function RunItemActions(props: { planId: string; item: TestRunItem; users: UserP
         description={props.item.caseTitle}
         label={quickStatus === 'failed' || quickStatus === 'blocked' ? '问题说明' : '验证说明'}
         placeholder={quickStatus === 'failed' || quickStatus === 'blocked' ? '说明失败/阻塞现象、环境或依赖' : '说明通过依据、验证环境或数据范围'}
-        confirmText="确认记录"
+        confirmText={quickStatus === 'failed' || quickStatus === 'blocked' ? (props.item.bugIds.length ? '确认记录' : '确认并补 Bug') : '确认记录'}
         destructive={quickStatus === 'failed' || quickStatus === 'blocked'}
         onCancel={() => setQuickStatus(null)}
         onConfirm={async (note) => {
           if (!quickStatus) return;
           await props.mutate(() => api.updateRunItem(props.planId, props.item.id, { status: quickStatus, actualResult: note }), '执行结果已更新');
+          if ((quickStatus === 'failed' || quickStatus === 'blocked') && props.item.bugIds.length === 0) setBugOpen(true);
           setQuickStatus(null);
         }}
       />

@@ -31,7 +31,7 @@ import { labelOf } from './labels.js';
 import { DataTable, Drawer, NavButton, StatusBadge } from './components/workspace/common.js';
 import { DictionaryProvider } from './components/workspace/dictionary.js';
 import { HelpCenter } from './components/workspace/help.js';
-import { ProjectOnboarding, QualityHealthCenter, QualityWorkflowNavigator, QualityWorkQueue, RecentWork, RiskBoard, TraceabilityMatrix } from './components/workspace/overview.js';
+import { ProjectOnboarding, QualityCommandCenter, QualityHealthCenter, QualityWorkflowNavigator, RecentWork, RiskBoard, TraceabilityMatrix } from './components/workspace/overview.js';
 import { BugSection, CaseSection, IterationSection, PlanSection, ProjectSection, RequirementSection, SettingsSection } from './components/workspace/sections.js';
 import { ReportSection } from './components/workspace/reports.js';
 
@@ -94,7 +94,7 @@ export function App() {
       { key: 'users', label: '账号', load: () => api.users() },
       { key: 'activities', label: '项目动态', load: () => api.activities(projectId) },
       { key: 'notifications', label: '通知', load: () => api.notifications(projectId) },
-      { key: 'savedViews', label: '保存视图', load: () => api.savedViews(projectId) }
+      { key: 'savedViews', label: '常用筛选', load: () => api.savedViews(projectId) }
     ] satisfies Array<{ key: keyof WorkspaceData; label: string; load: () => Promise<WorkspaceData[keyof WorkspaceData]> }>;
     const results = await Promise.allSettled(tasks.map((task) => task.load()));
     const nextData = { ...emptyData } as WorkspaceData;
@@ -348,7 +348,7 @@ export function App() {
             <input
               value={globalKeyword}
               onChange={(event) => setGlobalKeyword(event.target.value)}
-              placeholder="搜索需求、用例、缺陷、项目..."
+              placeholder="全局搜索需求、用例、缺陷、项目..."
             />
           </label>
           <div className="top-actions">
@@ -381,18 +381,18 @@ export function App() {
           {currentProject && isSavedViewSupported(tab) && (
             <div className="saved-view-tools">
               <select
-                aria-label="保存视图"
+                aria-label="常用筛选"
                 value=""
                 onChange={(event) => {
                   const view = data.savedViews.find((item) => item.id === event.target.value);
                   if (view) applySavedView(view);
                 }}
               >
-                <option value="">应用保存视图</option>
-                {data.savedViews.filter((item) => item.tab === tab).map((view) => <option key={view.id} value={view.id}>{view.isDefault ? '默认 · ' : ''}{view.name}{view.visibility === 'project' ? ' · 共享' : ''}</option>)}
+                <option value="">常用筛选</option>
+                {data.savedViews.filter((item) => item.tab === tab).map((view) => <option key={view.id} value={view.id}>{view.isDefault ? '默认 · ' : ''}{view.name}{view.visibility === 'project' ? ' · 团队' : ' · 我的'}</option>)}
               </select>
               <Button type="button" onClick={() => setSavedViewOpen(true)}>
-                保存视图
+                管理常用筛选
               </Button>
             </div>
           )}
@@ -456,6 +456,7 @@ export function App() {
           <>
             {tab === 'overview' && currentProject && (
               <section className="grid">
+                <QualityCommandCenter data={data} user={user} onJump={setTab} onOpenEntity={openEntity} />
                 {dashboard.map((item) => (
                   <article key={item.label} className="metric">
                     <item.icon size={22} />
@@ -465,7 +466,6 @@ export function App() {
                   </article>
                 ))}
                 <QualityWorkflowNavigator data={data} onJump={setTab} />
-                <QualityWorkQueue data={data} user={user} onJump={setTab} />
                 <QualityHealthCenter data={data} onJump={setTab} onOpenEntity={openEntity} />
                 <ProjectOnboarding data={data} currentProject={currentProject} onJump={setTab} />
                 <RecentWork data={visibleData} />
@@ -644,11 +644,11 @@ export function App() {
         <SavedViewDialog
           open={savedViewOpen}
           tab={tab}
-          defaultName={`${page.title}视图`}
+          defaultName={`${page.title}常用筛选`}
           views={data.savedViews.filter((item) => item.tab === tab)}
           filterSummary={describeSavedViewFilters(tabFilters[tab] || {}, globalKeyword)}
           onClose={() => setSavedViewOpen(false)}
-          onDelete={(id) => mutate(() => api.deleteSavedView(id), '视图已删除')}
+          onDelete={(id) => mutate(() => api.deleteSavedView(id), '常用筛选已删除')}
           onSave={(name, options) => mutate(
             () => api.upsertSavedView({
               projectId: currentProject.id,
@@ -658,7 +658,7 @@ export function App() {
               visibility: options.visibility,
               isDefault: options.isDefault
             }),
-            '视图已保存'
+            '常用筛选已保存'
           )}
         />
       )}
@@ -667,11 +667,13 @@ export function App() {
 }
 
 async function chooseDefaultProject(rows: Project[]) {
+  const candidates = rows.filter((project) => (project.status || 'active') === 'active' && (project.category || 'standard') === 'standard');
+  const scopedRows = candidates.length ? candidates : rows.filter((project) => (project.status || 'active') === 'active');
   const remembered = localStorage.getItem(LAST_PROJECT_KEY);
-  if (remembered && rows.some((item) => item.id === remembered)) return remembered;
-  if (rows.length <= 1) return rows[0]?.id || '';
+  if (remembered && scopedRows.some((item) => item.id === remembered)) return remembered;
+  if (scopedRows.length <= 1) return scopedRows[0]?.id || '';
   const scored = await Promise.all(
-    rows.map(async (project) => {
+    scopedRows.map(async (project) => {
       try {
         const report = await api.reportSummary({ projectId: project.id });
         return {
@@ -688,7 +690,7 @@ async function chooseDefaultProject(rows: Project[]) {
       }
     })
   );
-  return scored.reduce((best, item) => (item.score > best.score ? item : best), scored[0])?.id || rows[0]?.id || '';
+  return scored.reduce((best, item) => (item.score > best.score ? item : best), scored[0])?.id || scopedRows[0]?.id || '';
 }
 
 function ProjectSwitcher(props: { projects: Project[]; currentProjectId: string; currentUserId: string; onSelect: (id: string) => void }) {
@@ -704,13 +706,15 @@ function ProjectSwitcher(props: { projects: Project[]; currentProjectId: string;
   const current = props.projects.find((project) => project.id === props.currentProjectId);
   const filtered = useMemo(() => {
     const keyword = query.trim().toLowerCase();
+    const selectableProjects = props.projects.filter((project) => (project.status || 'active') === 'active');
     const rows = keyword
-      ? props.projects.filter((project) => `${project.name} ${project.code || ''}`.toLowerCase().includes(keyword))
-      : props.projects;
+      ? selectableProjects.filter((project) => `${project.name} ${project.code || ''}`.toLowerCase().includes(keyword))
+      : selectableProjects;
     const score = (project: Project) => {
+      if ((project.category || 'standard') === 'standard') return recentIds.includes(project.id) ? 0 : 1;
       if (recentIds.includes(project.id)) return 0;
-      if (project.members.some((member) => member.userId === props.currentUserId && member.role === 'owner')) return 1;
-      return 2;
+      if (project.members.some((member) => member.userId === props.currentUserId && member.role === 'owner')) return 2;
+      return 3;
     };
     return [...rows].sort((a, b) => score(a) - score(b) || a.name.localeCompare(b.name)).slice(0, 12);
   }, [props.projects, props.currentUserId, query, recentIds]);
@@ -770,13 +774,13 @@ function SavedViewDialog(props: {
   if (!props.open) return null;
   return (
     <div className="confirm-layer" role="presentation">
-      <section className="confirm-dialog saved-view-dialog" role="dialog" aria-modal="true" aria-label="保存视图">
-        <h3>保存当前视图</h3>
-        <p>会保存当前模块真实支持的搜索、筛选、排序、页大小和列配置。</p>
-        <div className="saved-view-preview" aria-label="当前视图条件">
+      <section className="confirm-dialog saved-view-dialog" role="dialog" aria-modal="true" aria-label="保存常用筛选">
+        <h3>保存常用筛选</h3>
+        <p>会保存当前模块真实支持的搜索、筛选、排序、页大小和列配置，便于自己复用或团队共享。</p>
+        <div className="saved-view-preview" aria-label="当前筛选条件">
           <span>当前条件</span>
           {props.filterSummary.length === 0 ? (
-            <strong>未设置筛选条件，将保存默认视图</strong>
+            <strong>未设置筛选条件，将保存默认筛选</strong>
           ) : (
             <div>
               {props.filterSummary.map((item) => <b key={item.label}>{item.label}: {item.value}</b>)}
@@ -784,14 +788,14 @@ function SavedViewDialog(props: {
           )}
         </div>
         <label className="dialog-field">
-          <span>覆盖已有视图</span>
+          <span>覆盖已有筛选</span>
           <select value={selectedId} onChange={(event) => setSelectedId(event.target.value)}>
-            <option value="">新建视图</option>
+            <option value="">新建常用筛选</option>
             {props.views.map((view) => <option key={view.id} value={view.id}>{view.name}</option>)}
           </select>
         </label>
         <label className="dialog-field">
-          <span>视图名称</span>
+          <span>筛选名称</span>
           <Input value={name} onChange={(event) => setName(event.target.value)} />
         </label>
         <label className="dialog-field">
@@ -803,18 +807,18 @@ function SavedViewDialog(props: {
         </label>
         <label className="check-row compact-check-row">
           <input type="checkbox" checked={isDefault} onChange={(event) => setIsDefault(event.target.checked)} />
-          <span>设为当前模块默认视图</span>
+          <span>设为当前模块默认筛选</span>
         </label>
         <div className="form-actions">
           <Button type="button" disabled={!selectedId} onClick={() => {
             const url = new URL(window.location.href);
             url.searchParams.set('view', selectedId);
             void navigator.clipboard?.writeText(url.toString());
-          }}>复制已有视图链接</Button>
+          }}>复制筛选链接</Button>
           {selectedId && <Button type="button" variant="destructive" onClick={async () => {
             await props.onDelete(selectedId);
             setSelectedId('');
-          }}>删除视图</Button>}
+          }}>删除筛选</Button>}
           <Button type="button" onClick={props.onClose}>取消</Button>
           <Button type="button" variant="primary" disabled={!name.trim()} onClick={async () => {
             await props.onSave(name.trim(), { visibility, isDefault });

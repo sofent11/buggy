@@ -1256,6 +1256,70 @@ summary {
   gap: 16px;
 }
 
+.command-center {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1.05fr) minmax(280px, 0.75fr);
+  gap: 14px;
+}
+
+.command-card {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
+  padding: 16px;
+  box-shadow: 0 1px 0 rgba(16, 24, 40, 0.03);
+}
+
+.primary-command {
+  border-left: 4px solid var(--primary);
+}
+
+.blocker-command {
+  border-left: 4px solid var(--danger);
+}
+
+.risk-command {
+  border-left: 4px solid var(--warning);
+}
+
+.command-metric-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.command-metric-row button {
+  min-height: 74px;
+  display: grid;
+  justify-items: start;
+  gap: 3px;
+  border-color: var(--line);
+  background: var(--surface-soft);
+  padding: 10px;
+  white-space: normal;
+}
+
+.command-metric-row svg {
+  color: var(--primary);
+}
+
+.command-metric-row span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.command-metric-row strong {
+  color: var(--text);
+  font-size: 24px;
+  line-height: 28px;
+}
+
 .report-grid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
@@ -4043,6 +4107,73 @@ select[multiple] {
   align-items: start;
 }
 
+.acceptance-guide {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.85fr) auto;
+  gap: 14px;
+  align-items: center;
+  border: 1px solid #f5cf75;
+  border-radius: 8px;
+  background: var(--warning-soft);
+  padding: 18px;
+}
+
+.acceptance-guide > div:first-child {
+  display: grid;
+  gap: 5px;
+}
+
+.acceptance-guide span {
+  color: #7a4c00;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.acceptance-guide strong {
+  color: var(--text);
+  font-size: 22px;
+  line-height: 28px;
+}
+
+.acceptance-guide p {
+  max-width: 680px;
+  margin: 0;
+  color: var(--muted);
+}
+
+.acceptance-guide-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.acceptance-guide-steps article {
+  display: grid;
+  gap: 4px;
+  border: 1px solid rgba(183, 121, 31, 0.24);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+  padding: 10px;
+}
+
+.acceptance-guide-steps article span {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: #fff;
+}
+
+.acceptance-guide-steps article strong {
+  font-size: 15px;
+  line-height: 20px;
+}
+
+.acceptance-guide-steps article small {
+  color: var(--muted);
+}
+
 .report-scope-list,
 .report-decision-stack {
   display: grid;
@@ -4158,6 +4289,14 @@ select[multiple] {
 }
 
 @media (max-width: 1180px) {
+  .command-center {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .risk-command {
+    grid-column: 1 / -1;
+  }
+
   .workflow-steps {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -4169,14 +4308,20 @@ select[multiple] {
   .report-workspace {
     grid-template-columns: 1fr;
   }
+
+  .acceptance-guide {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 720px) {
+  .command-center,
   .workflow-steps,
   .role-queue-cards,
   .report-decision-panel,
   .scope-picker-grid,
-  .gate-rule-picker > div:last-child {
+  .gate-rule-picker > div:last-child,
+  .acceptance-guide-steps {
     grid-template-columns: 1fr;
   }
 
@@ -4202,14 +4347,25 @@ select[multiple] {
   }
 
   .sidebar nav {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    overflow: visible;
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    scrollbar-width: none;
   }
 
-  .sidebar nav button:nth-child(2),
-  .sidebar nav button:nth-child(3),
-  .sidebar nav button:nth-child(8) {
-    display: grid;
+  .sidebar nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .sidebar nav button {
+    min-width: 88px;
+    grid-template-columns: 20px 18px minmax(0, 1fr);
+  }
+
+  .sidebar nav button > span:last-child {
+    display: inline;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 }

@@ -15,6 +15,8 @@ export type ApiResult<T = unknown> =
 export type SystemRole = 'admin' | 'project_owner' | 'tester' | 'developer' | 'viewer';
 export type UserStatus = 'active' | 'disabled';
 export type ProjectRole = 'owner' | 'tester' | 'developer' | 'viewer';
+export type ProjectStatus = 'active' | 'archived' | 'deleted';
+export type ProjectCategory = 'standard' | 'demo' | 'test';
 
 export type IterationStatus = 'planning' | 'active' | 'done' | 'archived';
 export type RequirementStatus = 'draft' | 'ready' | 'testing' | 'done' | 'blocked';
@@ -105,6 +107,8 @@ export interface Project {
   name: string;
   code?: string;
   description?: string;
+  status?: ProjectStatus;
+  category?: ProjectCategory;
   ownerId: Id;
   members: ProjectMember[];
   createdAt?: string;

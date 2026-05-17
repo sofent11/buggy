@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, SchemaTypes, Types } from 'mongoose';
-import type { ProjectRole } from '@buggy/shared-types';
+import type { ProjectCategory, ProjectRole, ProjectStatus } from '@buggy/shared-types';
 
 export type ProjectDocument = HydratedDocument<ProjectEntity>;
 
@@ -31,6 +31,12 @@ export class ProjectEntity {
 
   @Prop({ type: String, trim: true, default: '' })
   description!: string;
+
+  @Prop({ type: String, required: true, default: 'active', enum: ['active', 'archived', 'deleted'] })
+  status!: ProjectStatus;
+
+  @Prop({ type: String, required: true, default: 'standard', enum: ['standard', 'demo', 'test'] })
+  category!: ProjectCategory;
 
   @Prop({ type: SchemaTypes.ObjectId, ref: 'UserEntity', required: true })
   ownerId!: Types.ObjectId;

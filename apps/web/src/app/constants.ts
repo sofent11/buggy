@@ -30,5 +30,7 @@ export const caseReviewStatuses = ['draft', 'in_review', 'approved', 'changes_re
 export const automationStatuses = ['manual', 'candidate', 'automated'] as const;
 export const triageStatuses = ['new', 'triaged', 'needs_info', 'duplicate', 'accepted'] as const;
 export const savedViewVisibilities = ['private', 'project'] as const;
+export const projectStatuses = ['active', 'archived', 'deleted'] as const;
+export const projectCategories = ['standard', 'demo', 'test'] as const;
 export const systemRoles = ['admin', 'project_owner', 'tester', 'developer', 'viewer'] as const;
 export const userStatuses = ['active', 'disabled'] as const;

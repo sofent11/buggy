@@ -1,7 +1,7 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import type { PageResult, Project, ProjectMember, ProjectRole } from '@buggy/shared-types';
+import type { PageResult, Project, ProjectCategory, ProjectMember, ProjectRole, ProjectStatus } from '@buggy/shared-types';
 import { ProjectEntity } from '../database/project.schema.js';
 import { UserEntity } from '../database/user.schema.js';
 import type { CreateProjectDto, UpdateProjectDto, UpsertProjectMemberDto } from '../dto/project.dto.js';
@@ -38,6 +38,8 @@ export class ProjectService {
       delete filter.$or;
     }
     if (query.ownerId) filter.ownerId = new Types.ObjectId(query.ownerId);
+    if (query.status) filter.status = query.status;
+    if (query.category) filter.category = query.category;
     const page = query.page || 1;
     const pageSize = query.pageSize || 50;
     const sortBy = query.sortBy;
@@ -57,6 +59,8 @@ export class ProjectService {
       name: dto.name,
       code: dto.code || '',
       description: dto.description || '',
+      status: dto.status || 'active',
+      category: dto.category || inferProjectCategory(dto.name, dto.code, dto.description),
       ownerId,
       members: [{ userId: ownerId, username: user.username, email: user.email, role: 'owner' }]
     });
@@ -78,7 +82,9 @@ export class ProjectService {
         $set: {
           ...(dto.name !== undefined ? { name: dto.name } : {}),
           ...(dto.code !== undefined ? { code: dto.code } : {}),
-          ...(dto.description !== undefined ? { description: dto.description } : {})
+          ...(dto.description !== undefined ? { description: dto.description } : {}),
+          ...(dto.status !== undefined ? { status: dto.status } : {}),
+          ...(dto.category !== undefined ? { category: dto.category } : {})
         }
       },
       { new: true }
@@ -180,6 +186,8 @@ export class ProjectService {
       name: project.name,
       code: project.code,
       description: project.description,
+      status: (project.status || 'active') as ProjectStatus,
+      category: (project.category || inferProjectCategory(project.name, project.code, project.description)) as ProjectCategory,
       ownerId: idOf(project.ownerId),
       members: project.members.map(
         (member): ProjectMember => ({
@@ -193,4 +201,11 @@ export class ProjectService {
       updatedAt: project.updatedAt?.toISOString()
     };
   }
+}
+
+function inferProjectCategory(name?: string, code?: string, description?: string): ProjectCategory {
+  const haystack = `${name || ''} ${code || ''} ${description || ''}`.toLowerCase();
+  if (/(demo|演示|示例)/.test(haystack)) return 'demo';
+  if (/(test|api|html|验收|浏览器|完整|报告|\bqa\b|\be2e\b|\d{6,})/.test(haystack)) return 'test';
+  return 'standard';
 }

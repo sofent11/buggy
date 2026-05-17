@@ -253,7 +253,7 @@ export function BugSection(props: {
       <TextConfirmDialog
         open={Boolean(transition)}
         title={transition ? `确认${transition.label} Bug？` : '确认流转 Bug？'}
-        description={transition?.bug.title}
+        description={transition ? `${transition.bug.title} · ${labelOf(transition.bug.status)} -> ${labelOf(transition.status)}。${bugTransitionImpact(transition.status)}` : undefined}
         label={transition?.status === 'resolved' ? '修复说明' : transition?.status === 'verified' ? '验证结论' : '流转原因'}
         placeholder={transition?.status === 'resolved' ? '说明根因、修复版本和修复范围' : transition?.status === 'verified' ? '说明复测环境、数据和验证结论' : '填写处理说明或重开原因'}
         confirmText={transition?.label || '确认'}
@@ -632,4 +632,13 @@ function nextBugActions(status: BugStatus): Array<{ status: BugStatus; label: st
   ];
   if (status === 'verified') return [{ status: 'closed', label: '关闭', message: 'Bug 已关闭', icon: CheckCircle2 }];
   return [];
+}
+
+function bugTransitionImpact(status: BugStatus) {
+  if (status === 'in_progress') return '进入处理中后会继续计入活跃 Bug 和验收风险。';
+  if (status === 'resolved') return '解决后会进入待复测队列，仍会提醒验证负责人。';
+  if (status === 'verified') return '验证后不再作为待复测项，但关闭前仍保留历史证据。';
+  if (status === 'closed') return '关闭后不再计入活跃 Bug 和验收阻塞。';
+  if (status === 'reopened') return '重开后会重新计入活跃 Bug 和质量风险。';
+  return '状态变更会记录到历史并通知相关成员。';
 }

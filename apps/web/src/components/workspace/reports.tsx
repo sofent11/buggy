@@ -94,6 +94,15 @@ export function ReportSection(props: {
         {props.canWrite && <button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建验收范围</button>}
       </Toolbar>
 
+      {props.scopes.length === 0 ? (
+        <AcceptanceScopeGuide
+          requirements={props.requirements.length}
+          plans={props.plans.length}
+          activeBugs={props.bugs.filter((bug) => !['verified', 'closed'].includes(bug.status)).length}
+          canWrite={props.canWrite}
+          onCreate={() => setCreating(true)}
+        />
+      ) : (
       <div className="report-workspace">
         <section className="report-scope-list">
           <div className="section-heading compact">
@@ -153,6 +162,7 @@ export function ReportSection(props: {
           )}
         </section>
       </div>
+      )}
 
       <AcceptanceScopeDrawer
         title="新建验收范围"
@@ -218,6 +228,24 @@ export function ReportSection(props: {
         </>
       )}
     </DataPage>
+  );
+}
+
+function AcceptanceScopeGuide(props: { requirements: number; plans: number; activeBugs: number; canWrite?: boolean; onCreate: () => void }) {
+  return (
+    <section className="acceptance-guide">
+      <div>
+        <span>发布验收向导</span>
+        <strong>先定义验收范围，再生成正式结论。</strong>
+        <p>选择本次交付涉及的需求、测试计划和保留 Bug，系统会基于范围计算准入阻塞、风险豁免和签核记录。</p>
+      </div>
+      <div className="acceptance-guide-steps">
+        <article><span>1</span><strong>选需求</strong><small>{props.requirements} 个可选需求</small></article>
+        <article><span>2</span><strong>选计划</strong><small>{props.plans} 个测试计划</small></article>
+        <article><span>3</span><strong>留风险</strong><small>{props.activeBugs} 个活跃 Bug</small></article>
+      </div>
+      {props.canWrite && <button className="primary" type="button" onClick={props.onCreate}><Plus size={16} /> 创建验收范围</button>}
+    </section>
   );
 }
 

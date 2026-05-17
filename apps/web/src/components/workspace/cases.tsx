@@ -542,18 +542,23 @@ export function TestCaseFields(props: { row?: TestCase; requirements: Requiremen
       <Field><FieldLabel>绑定需求</FieldLabel><select {...registerField(props.register, 'requirementId')} defaultValue={props.row?.requirementId || props.defaultRequirementId || ''}><option value="">不绑定需求</option>{props.requirements.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></Field>
       <Field><FieldLabel>优先级</FieldLabel><Select name="priority" register={props.register} values={priorities} dictionaryType="priority" defaultValue={props.row?.priority || 'P2'} /></Field>
       <Field><FieldLabel>状态</FieldLabel><Select name="status" register={props.register} values={caseStatuses} dictionaryType="testCaseStatus" defaultValue={props.row?.status || 'ready'} /></Field>
-      <Field><FieldLabel>业务模块</FieldLabel><Input {...registerField(props.register, 'module')} defaultValue={props.row?.module} placeholder="如：登录 / 结算" /></Field>
-      <Field><FieldLabel>用例集</FieldLabel><Input {...registerField(props.register, 'suiteId')} defaultValue={props.row?.suiteId} placeholder="如：冒烟 / 回归" /></Field>
-      <Field><FieldLabel>版本</FieldLabel><Input {...registerField(props.register, 'version')} defaultValue={props.row?.version || 'v1'} /></Field>
       <Field><FieldLabel>负责人</FieldLabel><select {...registerField(props.register, 'ownerId')} defaultValue={props.row?.ownerId || ''}><option value="">未指派</option>{(props.users || []).map((item) => <option key={item.id} value={item.id}>{item.username}</option>)}</select></Field>
-      <Field><FieldLabel>评审状态</FieldLabel><Select name="reviewStatus" register={props.register} values={caseReviewStatuses} defaultValue={props.row?.reviewStatus || 'draft'} /></Field>
-      <Field><FieldLabel>自动化状态</FieldLabel><Select name="automationStatus" register={props.register} values={automationStatuses} defaultValue={props.row?.automationStatus || 'manual'} /></Field>
-      <Field><FieldLabel>评审人</FieldLabel><select {...registerField(props.register, 'reviewerId')} defaultValue={props.row?.reviewerId || ''}><option value="">自动记录/未指定</option>{(props.users || []).map((item) => <option key={item.id} value={item.id}>{item.username}</option>)}</select></Field>
-      <Field className="span-two"><FieldLabel>标签</FieldLabel><Input {...registerField(props.register, 'tags')} defaultValue={(props.row?.tags || []).join(', ')} placeholder="逗号分隔，如 smoke, payment" /></Field>
       <Field className="span-two"><FieldLabel>前置条件</FieldLabel><Input {...registerField(props.register, 'preconditions')} defaultValue={props.row?.preconditions} /></Field>
-      <Field className="span-two"><FieldLabel>变更说明</FieldLabel><Input {...registerField(props.register, 'changeSummary')} defaultValue={props.row?.changeSummary} placeholder="本次变更、评审意见或版本基线说明" /></Field>
       <div className="span-four"><StepEditor initialSteps={props.row?.steps} /></div>
       <Field className="span-four"><FieldLabel>最终预期结果</FieldLabel><Textarea {...registerField(props.register, 'expectedResult')} defaultValue={props.row?.expectedResult} /></Field>
+      <details className="advanced-fields span-four" open={Boolean(props.row)}>
+        <summary>高级信息</summary>
+        <div className="field-grid">
+          <Field><FieldLabel>业务模块</FieldLabel><Input {...registerField(props.register, 'module')} defaultValue={props.row?.module} placeholder="如：登录 / 结算" /></Field>
+          <Field><FieldLabel>用例集</FieldLabel><Input {...registerField(props.register, 'suiteId')} defaultValue={props.row?.suiteId} placeholder="如：冒烟 / 回归" /></Field>
+          <Field><FieldLabel>版本</FieldLabel><Input {...registerField(props.register, 'version')} defaultValue={props.row?.version || 'v1'} /></Field>
+          <Field><FieldLabel>评审状态</FieldLabel><Select name="reviewStatus" register={props.register} values={caseReviewStatuses} defaultValue={props.row?.reviewStatus || 'draft'} /></Field>
+          <Field><FieldLabel>自动化状态</FieldLabel><Select name="automationStatus" register={props.register} values={automationStatuses} defaultValue={props.row?.automationStatus || 'manual'} /></Field>
+          <Field><FieldLabel>评审人</FieldLabel><select {...registerField(props.register, 'reviewerId')} defaultValue={props.row?.reviewerId || ''}><option value="">自动记录/未指定</option>{(props.users || []).map((item) => <option key={item.id} value={item.id}>{item.username}</option>)}</select></Field>
+          <Field className="span-two"><FieldLabel>标签</FieldLabel><Input {...registerField(props.register, 'tags')} defaultValue={(props.row?.tags || []).join(', ')} placeholder="逗号分隔，如 smoke, payment" /></Field>
+          <Field className="span-two"><FieldLabel>变更说明</FieldLabel><Input {...registerField(props.register, 'changeSummary')} defaultValue={props.row?.changeSummary} placeholder="本次变更、评审意见或版本基线说明" /></Field>
+        </div>
+      </details>
     </div>
   );
 }

@@ -115,10 +115,11 @@ export function DataToolbar(props: { children: ReactNode }) {
 }
 
 export function SearchBox(props: { value: string; onChange: (value: string) => void; placeholder: string }) {
+  const placeholder = props.placeholder.startsWith('当前列表搜索') ? props.placeholder : `当前列表搜索：${props.placeholder.replace(/^搜索/, '')}`;
   return (
-    <label className="search-box">
+    <label className="search-box" aria-label="当前列表搜索">
       <Search size={16} />
-      <input value={props.value} onChange={(event) => props.onChange(event.target.value)} placeholder={props.placeholder} />
+      <input value={props.value} onChange={(event) => props.onChange(event.target.value)} placeholder={placeholder} />
     </label>
   );
 }

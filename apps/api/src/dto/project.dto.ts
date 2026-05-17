@@ -1,5 +1,5 @@
 import { IsEmail, IsIn, IsMongoId, IsOptional, IsString, MinLength } from 'class-validator';
-import type { ProjectRole } from '@buggy/shared-types';
+import type { ProjectCategory, ProjectRole, ProjectStatus } from '@buggy/shared-types';
 
 export class CreateProjectDto {
   @IsString()
@@ -13,6 +13,14 @@ export class CreateProjectDto {
   @IsOptional()
   @IsString()
   description?: string;
+
+  @IsOptional()
+  @IsIn(['active', 'archived', 'deleted'])
+  status?: ProjectStatus;
+
+  @IsOptional()
+  @IsIn(['standard', 'demo', 'test'])
+  category?: ProjectCategory;
 }
 
 export class UpdateProjectDto {
@@ -28,6 +36,14 @@ export class UpdateProjectDto {
   @IsOptional()
   @IsString()
   description?: string;
+
+  @IsOptional()
+  @IsIn(['active', 'archived', 'deleted'])
+  status?: ProjectStatus;
+
+  @IsOptional()
+  @IsIn(['standard', 'demo', 'test'])
+  category?: ProjectCategory;
 }
 
 export class UpsertProjectMemberDto {
