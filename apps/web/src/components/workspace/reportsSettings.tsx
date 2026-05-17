@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowDown, ArrowUp, CheckCircle2, Download, FileText, Plus, Save, Settings, Trash2, Upload, XCircle } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { DEFAULT_DICTIONARIES, type Dictionary, type DictionaryValue, type ImportPreview, type ReportSummary, type UserProfile } from '@buggy/shared-types';
+import { DEFAULT_DICTIONARIES, DEFAULT_PROJECT_GATE_RULES, DEFAULT_PROJECT_SLA_POLICY, type Dictionary, type DictionaryValue, type ImportPreview, type Project, type ProjectQualitySettings, type QualityGateRule, type ReportSummary, type UserProfile } from '@buggy/shared-types';
 import { api, downloadUrl, type ImportResult } from '../../api.js';
 import { Button } from '../ui/button.js';
+import { Field, FieldLabel } from '../ui/form.js';
 import { Input } from '../ui/input.js';
 import { labelOf } from '../../labels.js';
 import { systemRoles, userStatuses } from '../../app/constants.js';
@@ -18,7 +19,7 @@ const dictionaryTypeOptions = [
   { value: 'testCaseStatus', label: '用例状态' },
   { value: 'testPlanStatus', label: '测试计划状态' },
   { value: 'testRunStatus', label: '执行状态' },
-  { value: 'bugStatus', label: 'Bug 状态' },
+  { value: 'bugStatus', label: '缺陷状态' },
   { value: 'priority', label: '优先级' },
   { value: 'severity', label: '严重级别' }
 ];
@@ -54,7 +55,7 @@ export function ScopedReportDrawer(props: {
 
   return (
     <Drawer title={props.title} subtitle={props.subtitle} open={props.open} onClose={props.onClose} size="wide">
-      {loading && <EmptyState text="正在生成报告" detail="正在汇总需求、用例、执行和 Bug 数据。" />}
+      {loading && <EmptyState text="正在生成报告" detail="正在汇总需求、用例、执行和缺陷数据。" />}
       {error && <EmptyState text="报告生成失败" detail={error} />}
       {!loading && !error && report && <ScopedReportContent report={report} query={reportQuery(props)} requirementId={props.requirementId} onRefresh={loadReport} />}
       {!loading && !error && !report && <EmptyState text="暂无报告数据" />}
@@ -70,7 +71,7 @@ function ScopedReportContent(props: { report: ReportSummary; query: string; requ
   const acceptance = isRequirement
     ? gate?.status === 'pass'
       ? { title: '建议通过验收', detail: gate.summary, tone: 'good' }
-      : { title: '建议暂缓验收', detail: gate?.issues?.join('；') || '请先处理失败/阻塞执行项、活跃 Bug 或阻塞风险。', tone: 'risk' }
+      : { title: '建议暂缓验收', detail: gate?.issues?.join('；') || '请先处理失败/阻塞执行项、活跃缺陷或阻塞风险。', tone: 'risk' }
     : null;
   return (
     <div className="scoped-report">
@@ -103,7 +104,7 @@ function ScopedReportContent(props: { report: ReportSummary; query: string; requ
             <MetricCard label="需求完成率" value={rate(report.requirements.done, report.requirements.total)} detail={`${report.requirements.done}/${report.requirements.total}`} tone="good" />
             <MetricCard label="用例准备率" value={rate(report.cases.ready, report.cases.total)} detail={`${report.cases.ready}/${report.cases.total}`} />
             <MetricCard label="执行通过率" value={`${report.execution.passRate}%`} detail={`${report.execution.passed}/${report.execution.total}`} tone="info" />
-            <MetricCard label="活跃 Bug" value={report.bugs.active} detail={`${report.bugs.overdue || 0} 个逾期`} tone={report.bugs.active ? 'risk' : 'good'} />
+            <MetricCard label="活跃缺陷" value={report.bugs.active} detail={`${report.bugs.overdue || 0} 个逾期`} tone={report.bugs.active ? 'risk' : 'good'} />
           </section>
           <div className="chart-grid">
             <article className="chart-panel">
@@ -143,7 +144,7 @@ function ScopedReportContent(props: { report: ReportSummary; query: string; requ
             </article>
           </div>
           <DataTable
-            headers={['需求', '状态', '用例覆盖', '关联 Bug', '风险截止']}
+            headers={['需求', '状态', '用例覆盖', '关联缺陷', '风险截止']}
             emptyText="暂无需求覆盖数据"
             rows={(report.charts?.requirementCoverage || []).map((item) => [
               item.title,
@@ -195,8 +196,8 @@ function ScopedReportContent(props: { report: ReportSummary; query: string; requ
             ])}
           />
           <DataTable
-            headers={['关联 Bug', '严重级别', '优先级', '状态', '截止时间']}
-            emptyText="暂无关联 Bug"
+            headers={['关联缺陷', '严重级别', '优先级', '状态', '截止时间']}
+            emptyText="暂无关联缺陷"
             rows={(report.details?.bugs || []).map((item) => [
               item.title,
               <StatusBadge value={item.severity} dictionaryType="severity" />,
@@ -237,7 +238,7 @@ function ReportDecisionPanel(props: { report: ReportSummary }) {
     : blockers.length
       ? `先处理 ${blockers.length} 项准入阻塞，再回到报告复核。`
       : props.report.bugs.active
-        ? `仍有 ${props.report.bugs.active} 个活跃 Bug，建议完成复测关闭后再签核。`
+        ? `仍有 ${props.report.bugs.active} 个活跃缺陷，建议完成复测关闭后再签核。`
         : '建议补齐执行证据后再做验收判断。';
   const nextSteps = blockers.length
     ? blockers.slice(0, 4)
@@ -291,11 +292,13 @@ function riskTypeLabel(type: string) {
 
 export function SettingsSection(props: {
   projectId: string;
+  currentProject: Project;
   currentUser: UserProfile;
+  canManage?: boolean;
   dictionaries: Dictionary[];
   users: UserProfile[];
   onNotice: (message: string) => void;
-  mutate: (action: () => Promise<unknown>, message: string) => Promise<void>;
+  mutate: (action: () => Promise<unknown>, message: string, options?: { reloadProjects?: boolean }) => Promise<void>;
   mutateWithResult: <T>(action: () => Promise<T>, resolveMessage: (result: T) => string) => Promise<void>;
 }) {
   const [lastImport, setLastImport] = useState<ImportResult | null>(null);
@@ -307,11 +310,11 @@ export function SettingsSection(props: {
       <div className="cards two">
         <article className="item-card">
           <strong>Excel 模板</strong>
-          <p>下载模板后可按表头批量导入需求、用例和 Bug。</p>
+          <p>下载模板后可按表头批量导入需求、用例和缺陷。</p>
           <div className="report-actions">
             <TemplateLink type="requirements" label="需求模板" />
             <TemplateLink type="test-cases" label="用例模板" />
-            <TemplateLink type="bugs" label="Bug 模板" />
+            <TemplateLink type="bugs" label="缺陷模板" />
           </div>
         </article>
         <article className="item-card">
@@ -331,7 +334,7 @@ export function SettingsSection(props: {
             <select name="type" value={importType} onChange={(event) => setImportType(event.target.value)}>
               <option value="requirements">需求</option>
               <option value="test-cases">用例</option>
-              <option value="bugs">Bug</option>
+              <option value="bugs">缺陷</option>
               <option value="run-results">执行结果</option>
             </select>
             <Input name="file" type="file" accept=".xlsx" onChange={(event) => setImportFile(event.target.files?.[0] || null)} />
@@ -374,11 +377,176 @@ export function SettingsSection(props: {
             </div>
           )}
         </article>
+        <QualityStrategyConsole project={props.currentProject} canManage={props.canManage} mutate={props.mutate} />
         <UserAdmin currentUser={props.currentUser} users={props.users} mutate={props.mutate} />
         <DictionaryEditor dictionaries={props.dictionaries} projectId={props.projectId} mutate={props.mutate} />
       </div>
     </DataPage>
   );
+}
+
+function QualityStrategyConsole(props: {
+  project: Project;
+  canManage?: boolean;
+  mutate: (action: () => Promise<unknown>, message: string, options?: { reloadProjects?: boolean }) => Promise<void>;
+}) {
+  const settings = qualitySettingsOf(props.project);
+  const enabledIntegrations = [
+    settings.integrations.larkWebhook,
+    settings.integrations.jiraBaseUrl || settings.integrations.jiraProjectKey,
+    settings.integrations.ciDashboardUrl,
+    settings.integrations.externalWebhookUrl
+  ].filter(Boolean).length;
+  return (
+    <article className="item-card span-two">
+      <div className="quality-console-heading">
+        <div>
+          <strong>质量策略与外部集成</strong>
+          <p>项目默认门禁、SLA 和外部系统入口会作为新验收范围和新缺陷的默认策略。</p>
+        </div>
+        <span>{enabledIntegrations} 个集成已配置</span>
+      </div>
+      <form className="quality-settings-console" onSubmit={(event) => {
+        event.preventDefault();
+        if (!props.canManage) return;
+        const form = new FormData(event.currentTarget);
+        const qualitySettings = collectProjectQualitySettings(form, settings.defaultGateRules);
+        void props.mutate(
+          () => api.updateProject(props.project.id, { qualitySettings }),
+          '质量策略已保存',
+          { reloadProjects: true }
+        );
+      }}>
+        <section className="quality-settings-block">
+          <div className="section-heading compact">
+            <span>SLA 策略</span>
+            <strong>缺陷默认截止时间</strong>
+          </div>
+          <label className="check-row compact-check-row">
+            <input type="checkbox" name="slaEnabled" defaultChecked={settings.slaPolicy.enabled} />
+            <span>启用新缺陷默认 SLA</span>
+          </label>
+          <div className="sla-policy-grid">
+            <Field><FieldLabel required>紧急 SLA</FieldLabel><Input type="number" min={1} name="criticalHours" defaultValue={settings.slaPolicy.criticalHours} /></Field>
+            <Field><FieldLabel required>高 SLA</FieldLabel><Input type="number" min={1} name="highHours" defaultValue={settings.slaPolicy.highHours} /></Field>
+            <Field><FieldLabel required>标准 SLA</FieldLabel><Input type="number" min={1} name="normalHours" defaultValue={settings.slaPolicy.normalHours} /></Field>
+            <Field><FieldLabel required>低 SLA</FieldLabel><Input type="number" min={1} name="lowHours" defaultValue={settings.slaPolicy.lowHours} /></Field>
+          </div>
+        </section>
+        <section className="quality-settings-block">
+          <div className="section-heading compact">
+            <span>默认质量门禁</span>
+            <strong>新建验收范围时自动带入</strong>
+          </div>
+          <div className="quality-gate-config-grid">
+            {settings.defaultGateRules.map((rule) => (
+              <article key={rule.id}>
+                <label className="check-row compact-check-row">
+                  <input type="checkbox" name="projectGateRuleIds" value={rule.id} defaultChecked={rule.enabled} />
+                  <span>{rule.label}</span>
+                  <small>{rule.description || rule.metric}</small>
+                </label>
+                <label className="check-row compact-check-row">
+                  <input type="checkbox" name="projectGateBlockingIds" value={rule.id} defaultChecked={rule.blocking} />
+                  <span>阻断发布</span>
+                </label>
+                <label className="gate-threshold-field">
+                  <span>允许阈值</span>
+                  <Input type="number" min={0} name={`projectGateThreshold_${rule.id}`} defaultValue={rule.threshold ?? 0} aria-label={`${rule.label}默认阈值`} />
+                </label>
+              </article>
+            ))}
+          </div>
+        </section>
+        <section className="quality-settings-block">
+          <div className="section-heading compact">
+            <span>外部系统集成</span>
+            <strong>Lark、Jira、CI 和通用 Webhook</strong>
+          </div>
+          <div className="field-grid">
+            <Field className="span-two"><FieldLabel hint="需求未单独配置时，Lark 日报发送会使用这里">项目 Lark Webhook</FieldLabel><Input name="larkWebhook" defaultValue={settings.integrations.larkWebhook || ''} placeholder="https://open.larksuite.com/..." /></Field>
+            <Field><FieldLabel>Jira 地址</FieldLabel><Input name="jiraBaseUrl" defaultValue={settings.integrations.jiraBaseUrl || ''} placeholder="https://jira.example.com" /></Field>
+            <Field><FieldLabel>Jira 项目 Key</FieldLabel><Input name="jiraProjectKey" defaultValue={settings.integrations.jiraProjectKey || ''} placeholder="QA" /></Field>
+            <Field><FieldLabel>CI 仪表盘</FieldLabel><Input name="ciDashboardUrl" defaultValue={settings.integrations.ciDashboardUrl || ''} placeholder="https://ci.example.com/project" /></Field>
+            <Field><FieldLabel>通用 Webhook</FieldLabel><Input name="externalWebhookUrl" defaultValue={settings.integrations.externalWebhookUrl || ''} placeholder="https://hooks.example.com/quality" /></Field>
+          </div>
+        </section>
+        <div className="report-actions">
+          <Button variant="primary" disabled={!props.canManage}><Save size={15} /> 保存质量策略</Button>
+          {!props.canManage && <span className="muted">仅项目负责人或管理员可保存策略</span>}
+        </div>
+      </form>
+    </article>
+  );
+}
+
+function qualitySettingsOf(project: Project): ProjectQualitySettings {
+  const input = project.qualitySettings;
+  return {
+    slaPolicy: {
+      ...DEFAULT_PROJECT_SLA_POLICY,
+      ...(input?.slaPolicy || {}),
+      enabled: input?.slaPolicy?.enabled !== false,
+      criticalHours: positiveHours(input?.slaPolicy?.criticalHours, DEFAULT_PROJECT_SLA_POLICY.criticalHours),
+      highHours: positiveHours(input?.slaPolicy?.highHours, DEFAULT_PROJECT_SLA_POLICY.highHours),
+      normalHours: positiveHours(input?.slaPolicy?.normalHours, DEFAULT_PROJECT_SLA_POLICY.normalHours),
+      lowHours: positiveHours(input?.slaPolicy?.lowHours, DEFAULT_PROJECT_SLA_POLICY.lowHours)
+    },
+    defaultGateRules: mergeProjectGateRules(input?.defaultGateRules),
+    integrations: {
+      larkWebhook: input?.integrations?.larkWebhook || '',
+      jiraBaseUrl: input?.integrations?.jiraBaseUrl || '',
+      jiraProjectKey: input?.integrations?.jiraProjectKey || '',
+      ciDashboardUrl: input?.integrations?.ciDashboardUrl || '',
+      externalWebhookUrl: input?.integrations?.externalWebhookUrl || ''
+    }
+  };
+}
+
+function collectProjectQualitySettings(form: FormData, existingRules?: QualityGateRule[]): ProjectQualitySettings {
+  const enabledIds = new Set(form.getAll('projectGateRuleIds').map(String));
+  const blockingIds = new Set(form.getAll('projectGateBlockingIds').map(String));
+  return {
+    slaPolicy: {
+      enabled: form.get('slaEnabled') === 'on',
+      criticalHours: positiveHours(form.get('criticalHours'), DEFAULT_PROJECT_SLA_POLICY.criticalHours),
+      highHours: positiveHours(form.get('highHours'), DEFAULT_PROJECT_SLA_POLICY.highHours),
+      normalHours: positiveHours(form.get('normalHours'), DEFAULT_PROJECT_SLA_POLICY.normalHours),
+      lowHours: positiveHours(form.get('lowHours'), DEFAULT_PROJECT_SLA_POLICY.lowHours)
+    },
+    defaultGateRules: mergeProjectGateRules(existingRules).map((rule) => ({
+      ...rule,
+      enabled: enabledIds.has(rule.id),
+      blocking: blockingIds.has(rule.id),
+      threshold: nonNegativeNumber(form.get(`projectGateThreshold_${rule.id}`), rule.threshold || 0)
+    })),
+    integrations: {
+      larkWebhook: formText(form, 'larkWebhook'),
+      jiraBaseUrl: formText(form, 'jiraBaseUrl'),
+      jiraProjectKey: formText(form, 'jiraProjectKey'),
+      ciDashboardUrl: formText(form, 'ciDashboardUrl'),
+      externalWebhookUrl: formText(form, 'externalWebhookUrl')
+    }
+  };
+}
+
+function mergeProjectGateRules(rules?: QualityGateRule[]) {
+  const byId = new Map((rules || []).map((rule) => [rule.id, rule]));
+  return DEFAULT_PROJECT_GATE_RULES.map((rule) => ({ ...rule, ...byId.get(rule.id) }));
+}
+
+function positiveHours(value: unknown, fallback: number) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? Math.round(number) : fallback;
+}
+
+function nonNegativeNumber(value: FormDataEntryValue | null, fallback: number) {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? number : fallback;
+}
+
+function formText(form: FormData, key: string) {
+  return String(form.get(key) || '').trim();
 }
 
 export function UserAdmin(props: { currentUser: UserProfile; users: UserProfile[]; mutate: (action: () => Promise<unknown>, message: string) => Promise<void> }) {

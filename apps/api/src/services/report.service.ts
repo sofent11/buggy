@@ -5,16 +5,19 @@ import type { BugStatus, Priority, QualityGateRule, ReportSummary, RequirementSt
 import { AcceptanceScopeEntity } from '../database/acceptance-scope.schema.js';
 import { IterationEntity } from '../database/iteration.schema.js';
 import { BugEntity } from '../database/bug.schema.js';
+import { ProjectEntity } from '../database/project.schema.js';
 import { RequirementEntity } from '../database/requirement.schema.js';
 import { TestCaseEntity } from '../database/test-case.schema.js';
 import { TestPlanEntity } from '../database/test-plan.schema.js';
 import type { ListQueryDto } from '../dto/common.dto.js';
 import { idOf } from '../shared/mongo.js';
+import { normalizeProjectQualitySettings } from './project.service.js';
 
 @Injectable()
 export class ReportService {
   constructor(
     @InjectModel(AcceptanceScopeEntity.name) private readonly acceptanceScopes: Model<AcceptanceScopeEntity>,
+    @InjectModel(ProjectEntity.name) private readonly projects: Model<ProjectEntity>,
     @InjectModel(RequirementEntity.name) private readonly requirements: Model<RequirementEntity>,
     @InjectModel(IterationEntity.name) private readonly iterations: Model<IterationEntity>,
     @InjectModel(TestCaseEntity.name) private readonly cases: Model<TestCaseEntity>,
@@ -25,14 +28,16 @@ export class ReportService {
   async summary(query: ListQueryDto): Promise<ReportSummary> {
     const projectId = query.projectId ? new Types.ObjectId(query.projectId) : undefined;
     const projectFilter = projectId ? { projectId } : {};
-    const [allRequirements, allIterations, allCases, allPlans, allBugs, acceptanceScope] = await Promise.all([
+    const [allRequirements, allIterations, allCases, allPlans, allBugs, acceptanceScope, project] = await Promise.all([
       this.requirements.find(projectFilter),
       this.iterations.find(projectFilter),
       this.cases.find(projectFilter),
       this.plans.find(projectFilter),
       this.bugs.find(projectFilter),
-      query.acceptanceScopeId ? this.acceptanceScopes.findById(query.acceptanceScopeId) : Promise.resolve(null)
+      query.acceptanceScopeId ? this.acceptanceScopes.findById(query.acceptanceScopeId) : Promise.resolve(null),
+      projectId ? this.projects.findById(projectId).select('qualitySettings') : Promise.resolve(null)
     ]);
+    const projectQualitySettings = normalizeProjectQualitySettings(project?.qualitySettings);
     const acceptanceScopeIds = acceptanceScope
       ? {
           iterationIds: new Set(acceptanceScope.iterationIds.map(idOf)),
@@ -181,7 +186,7 @@ export class ReportService {
         title: bug.title,
         ownerId: bug.assigneeId ? String(bug.assigneeId) : undefined,
         dueDate: bug.dueAt?.toISOString(),
-        reason: 'Bug SLA 已逾期',
+        reason: '缺陷 SLA 已逾期',
         severity: ['S0', 'S1'].includes(bug.severity) ? ('high' as const) : ('medium' as const)
       })),
       ...runItems
@@ -217,7 +222,7 @@ export class ReportService {
     const visibleIterations = query.iterationId ? allIterations.filter((iteration) => idOf(iteration._id) === query.iterationId) : allIterations;
     const activeS01BugCount = bugs.filter((bug) => !['verified', 'closed'].includes(bug.status) && ['S0', 'S1'].includes(bug.severity)).length;
     const qualityGate = this.evaluateQualityGate({
-      rules: acceptanceScope?.qualityGateRules,
+      rules: acceptanceScope?.qualityGateRules || projectQualitySettings.defaultGateRules,
       waivers: acceptanceScope?.riskWaivers,
       facts: {
         cases: cases.length,
@@ -281,6 +286,7 @@ export class ReportService {
           value: this.countBy(bugs, 'severity', severity)
         })),
         bugRootCause: this.rootCauseChart(bugs),
+        bugTrend: this.bugTrendChart(bugs),
         priority: (['P0', 'P1', 'P2', 'P3'] as Priority[]).map((priority) => ({
           key: priority,
           label: priority,
@@ -362,7 +368,12 @@ export class ReportService {
           priority: bug.priority,
           status: bug.status,
           assigneeId: bug.assigneeId ? idOf(bug.assigneeId) : undefined,
-          dueAt: bug.dueAt?.toISOString()
+          dueAt: bug.dueAt?.toISOString(),
+          rootCause: bug.rootCause,
+          slaLevel: bug.slaLevel,
+          environment: bug.environment,
+          foundVersion: bug.foundVersion,
+          fixVersion: bug.fixVersion
         }))
       }
     };
@@ -411,17 +422,17 @@ export class ReportService {
     <div class="card">需求总数<div class="num">${summary.requirements.total}</div></div>
     <div class="card">用例总数<div class="num">${summary.cases.total}</div></div>
     <div class="card">执行通过率<div class="num">${summary.execution.passRate}%</div></div>
-    <div class="card">活跃 Bug<div class="num">${summary.bugs.active}</div></div>
+    <div class="card">活跃缺陷<div class="num">${summary.bugs.active}</div></div>
   </div>
   <table>
     <tr><th>模块</th><th>指标</th><th>数量</th></tr>
     <tr><td>执行</td><td>通过 / 失败 / 阻塞 / 跳过 / 未测</td><td>${summary.execution.passed} / ${summary.execution.failed} / ${summary.execution.blocked} / ${summary.execution.skipped} / ${summary.execution.untested}</td></tr>
-    <tr><td>Bug</td><td>新建 / 处理中 / 已解决 / 已验证 / 已关闭 / 重开</td><td>${summary.bugs.open} / ${summary.bugs.inProgress} / ${summary.bugs.resolved} / ${summary.bugs.verified} / ${summary.bugs.closed} / ${summary.bugs.reopened}</td></tr>
+    <tr><td>缺陷</td><td>新建 / 处理中 / 已解决 / 已验证 / 已关闭 / 重开</td><td>${summary.bugs.open} / ${summary.bugs.inProgress} / ${summary.bugs.resolved} / ${summary.bugs.verified} / ${summary.bugs.closed} / ${summary.bugs.reopened}</td></tr>
     <tr><td>需求</td><td>测试中 / 已完成 / 阻塞</td><td>${summary.requirements.testing} / ${summary.requirements.done} / ${summary.requirements.blocked}</td></tr>
   </table>
   <h2>需求覆盖与风险</h2>
   <table>
-    <tr><th>需求</th><th>状态</th><th>用例覆盖</th><th>关联 Bug</th></tr>
+    <tr><th>需求</th><th>状态</th><th>用例覆盖</th><th>关联缺陷</th></tr>
     ${coverageRows || '<tr><td colspan="4">暂无需求覆盖数据</td></tr>'}
   </table>
   <h2>风险清单</h2>
@@ -439,12 +450,12 @@ export class ReportService {
     <tr><th>计划</th><th>用例</th><th>状态</th><th>实际结果</th></tr>
     ${executionRows || '<tr><td colspan="4">暂无执行明细</td></tr>'}
   </table>
-  <h2>关联 Bug</h2>
+  <h2>关联缺陷</h2>
   <table>
-    <tr><th>Bug</th><th>严重级别</th><th>状态</th><th>截止时间</th></tr>
-    ${bugRows || '<tr><td colspan="4">暂无关联 Bug</td></tr>'}
+    <tr><th>缺陷</th><th>严重级别</th><th>状态</th><th>截止时间</th></tr>
+    ${bugRows || '<tr><td colspan="4">暂无关联缺陷</td></tr>'}
   </table>
-  <h2>Bug 根因分类</h2>
+  <h2>缺陷根因分类</h2>
   <table>
     <tr><th>根因</th><th>数量</th></tr>
     ${rootCauseRows || '<tr><td colspan="2">暂无根因分类</td></tr>'}
@@ -463,7 +474,7 @@ export class ReportService {
       `需求：${summary.requirements.total}，完成：${summary.requirements.done}，阻塞：${summary.requirements.blocked}`,
       `用例：${summary.cases.total}，可执行：${summary.cases.ready}`,
       `执行通过率：${summary.execution.passRate}% (${summary.execution.passed}/${summary.execution.total})`,
-      `活跃 Bug：${summary.bugs.active}，逾期 Bug：${summary.bugs.overdue}`,
+      `活跃缺陷：${summary.bugs.active}，逾期缺陷：${summary.bugs.overdue}`,
       `验收准入：${summary.qualityGate?.summary || '未检查'}`,
       ...(summary.qualityGate?.waivedIssues?.length ? [`豁免项：${summary.qualityGate.waivedIssues.join('；')}`] : []),
       `报告签核：${this.reportSignoffLabel(summary.reportSignoff?.status)}${summary.reportSignoff?.signerName ? ` / ${summary.reportSignoff.signerName}` : ''}`,
@@ -471,7 +482,7 @@ export class ReportService {
       '风险清单：',
       ...(summary.charts?.riskList || []).map((item) => `${this.riskTypeLabel(item.type)} | ${item.title} | ${item.reason}`),
       '',
-      'Bug 根因分类：',
+      '缺陷根因分类：',
       ...(summary.charts?.bugRootCause || []).map((item) => `${item.label} | ${item.value}`)
     ];
     return createSimplePdf(lines);
@@ -492,7 +503,7 @@ export class ReportService {
       if (rule.metric === 'untested_runs' && input.facts.untested > (rule.threshold || 0)) return [`${input.facts.untested} 个执行项未测`];
       if (rule.metric === 'failed_runs' && input.facts.failed > (rule.threshold || 0)) return [`${input.facts.failed} 个执行项失败`];
       if (rule.metric === 'blocked_runs' && input.facts.blocked > (rule.threshold || 0)) return [`${input.facts.blocked} 个执行项阻塞`];
-      if (rule.metric === 'active_s01_bugs' && input.facts.activeS01Bugs > (rule.threshold || 0)) return [`${input.facts.activeS01Bugs} 个 S0/S1 活跃 Bug`];
+      if (rule.metric === 'active_s01_bugs' && input.facts.activeS01Bugs > (rule.threshold || 0)) return [`${input.facts.activeS01Bugs} 个 S0/S1 活跃缺陷`];
       return [];
     });
     const waivedIssues = hasGateWaiver ? issues : [];
@@ -533,6 +544,17 @@ export class ReportService {
       .map(([key, value]) => ({ key, label: key, value }))
       .sort((a, b) => b.value - a.value || a.label.localeCompare(b.label))
       .slice(0, 8);
+  }
+
+  private bugTrendChart(bugs: Array<{ createdAt?: Date; resolvedAt?: Date; verifiedAt?: Date; status: BugStatus; dueAt?: Date }>) {
+    const buckets = lastWeeks(8);
+    return buckets.map((bucket) => {
+      const created = bugs.filter((bug) => bug.createdAt && inRange(bug.createdAt, bucket.start, bucket.end)).length;
+      const resolved = bugs.filter((bug) => bug.resolvedAt && inRange(bug.resolvedAt, bucket.start, bucket.end)).length;
+      const closed = bugs.filter((bug) => bug.verifiedAt && inRange(bug.verifiedAt, bucket.start, bucket.end)).length;
+      const overdue = bugs.filter((bug) => bug.dueAt && inRange(bug.dueAt, bucket.start, bucket.end) && !['verified', 'closed'].includes(bug.status)).length;
+      return { label: bucket.label, created, resolved, closed, overdue };
+    });
   }
 
   private reportTitle(summary: ReportSummary) {
@@ -631,6 +653,28 @@ function escapeHtml(value: string) {
     };
     return entities[char] || char;
   });
+}
+
+function lastWeeks(count: number) {
+  const end = new Date();
+  end.setHours(23, 59, 59, 999);
+  return Array.from({ length: count }, (_, index) => {
+    const weekEnd = new Date(end);
+    weekEnd.setDate(end.getDate() - (count - index - 1) * 7);
+    const weekStart = new Date(weekEnd);
+    weekStart.setDate(weekEnd.getDate() - 6);
+    weekStart.setHours(0, 0, 0, 0);
+    return {
+      label: `${weekStart.getMonth() + 1}/${weekStart.getDate()}`,
+      start: weekStart,
+      end: weekEnd
+    };
+  });
+}
+
+function inRange(value: Date, start: Date, end: Date) {
+  const time = value.getTime();
+  return time >= start.getTime() && time <= end.getTime();
 }
 
 const DEFAULT_QUALITY_GATE_RULES: QualityGateRule[] = [

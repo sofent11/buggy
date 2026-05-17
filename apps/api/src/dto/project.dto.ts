@@ -1,5 +1,5 @@
 import { IsEmail, IsIn, IsMongoId, IsOptional, IsString, MinLength } from 'class-validator';
-import type { ProjectCategory, ProjectRole, ProjectStatus } from '@buggy/shared-types';
+import type { ProjectCategory, ProjectQualitySettings, ProjectRole, ProjectStatus } from '@buggy/shared-types';
 
 export class CreateProjectDto {
   @IsString()
@@ -21,6 +21,9 @@ export class CreateProjectDto {
   @IsOptional()
   @IsIn(['standard', 'demo', 'test'])
   category?: ProjectCategory;
+
+  @IsOptional()
+  qualitySettings?: ProjectQualitySettings;
 }
 
 export class UpdateProjectDto {
@@ -44,6 +47,9 @@ export class UpdateProjectDto {
   @IsOptional()
   @IsIn(['standard', 'demo', 'test'])
   category?: ProjectCategory;
+
+  @IsOptional()
+  qualitySettings?: ProjectQualitySettings;
 }
 
 export class UpsertProjectMemberDto {

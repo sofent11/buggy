@@ -90,14 +90,14 @@ export function QualityWorkQueue(props: { data: WorkspaceData; user: UserProfile
   );
   const rows = [
     ...myUntested.slice(0, 3).map(({ plan, item }) => ['我的待执行', item.caseTitle, plan.name, <button className="linkish" type="button" onClick={() => props.onJump?.('plans')}>记录结果</button>]),
-    ...failedWithoutBug.slice(0, 3).map(({ plan, item }) => ['失败待建 Bug', item.caseTitle, plan.name, <button className="linkish" type="button" onClick={() => props.onJump?.('plans')}>进入执行</button>]),
-    ...triageBugs.slice(0, 3).map((bug) => ['待分诊 Bug', bug.title, bug.assigneeId ? '已指派' : '未指派', <button className="linkish" type="button" onClick={() => props.onJump?.('bugs')}>分诊</button>]),
+    ...failedWithoutBug.slice(0, 3).map(({ plan, item }) => ['失败待建缺陷', item.caseTitle, plan.name, <button className="linkish" type="button" onClick={() => props.onJump?.('plans')}>进入执行</button>]),
+    ...triageBugs.slice(0, 3).map((bug) => ['待分诊缺陷', bug.title, bug.assigneeId ? '已指派' : '未指派', <button className="linkish" type="button" onClick={() => props.onJump?.('bugs')}>分诊</button>]),
     ...retestBugs.slice(0, 3).map((bug) => ['待复测', bug.title, bug.resolution || '等待验证结论', <button className="linkish" type="button" onClick={() => props.onJump?.('bugs')}>复测</button>]),
     ...signoffRisks.slice(0, 3).map((requirement) => ['验收阻塞', requirement.title, requirement.qualityGateResult?.summary || requirement.riskNote || '需要补齐验收证据', <button className="linkish" type="button" onClick={() => props.onJump?.('requirements')}>处理</button>])
   ];
   const queueCards = [
     { label: '我的待执行', value: myUntested.length, detail: '等待记录测试结果', icon: Activity, tab: 'plans' as Tab },
-    { label: '待分诊 Bug', value: triageBugs.length, detail: '新建或需补充信息', icon: ShieldAlert, tab: 'bugs' as Tab },
+    { label: '待分诊缺陷', value: triageBugs.length, detail: '新建或需补充信息', icon: ShieldAlert, tab: 'bugs' as Tab },
     { label: '待复测', value: retestBugs.length, detail: '已解决缺陷等待验证', icon: RotateCcw, tab: 'bugs' as Tab },
     { label: '验收阻塞', value: signoffRisks.length, detail: '准入或签核前风险', icon: GitPullRequestArrow, tab: 'requirements' as Tab }
   ];
@@ -157,9 +157,9 @@ export function QualityCommandCenter(props: { data: WorkspaceData; user: UserPro
   const blockerRows = [
     ...uncoveredRequirements.slice(0, 4).map((item) => ['未覆盖需求', item.title, '缺少可执行用例', <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('requirement', item.id)}>补用例</button>]),
     ...orphanCases.slice(0, 4).map((item) => ['孤立用例', item.title, '未绑定有效需求', <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('test_case', item.id)}>绑定需求</button>]),
-    ...orphanBugs.slice(0, 4).map((item) => ['孤立 Bug', item.title, '缺少需求/用例/计划来源', <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('bug', item.id)}>补来源</button>]),
-    ...failedWithoutBug.slice(0, 4).map(({ plan, item }) => ['失败未建 Bug', item.caseTitle, plan.name, <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('run_item', item.id)}>建 Bug</button>]),
-    ...severeActiveBugs.slice(0, 4).map((item) => ['高危活跃 Bug', item.title, labelOf(item.severity), <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('bug', item.id)}>分诊</button>])
+    ...orphanBugs.slice(0, 4).map((item) => ['孤立缺陷', item.title, '缺少需求/用例/计划来源', <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('bug', item.id)}>补来源</button>]),
+    ...failedWithoutBug.slice(0, 4).map(({ plan, item }) => ['失败未建缺陷', item.caseTitle, plan.name, <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('run_item', item.id)}>建缺陷</button>]),
+    ...severeActiveBugs.slice(0, 4).map((item) => ['高危活跃缺陷', item.title, labelOf(item.severity), <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('bug', item.id)}>分诊</button>])
   ];
   const riskRows = riskList.slice(0, 5).map((item) => [
     riskTypeLabel(item.type),
@@ -167,8 +167,37 @@ export function QualityCommandCenter(props: { data: WorkspaceData; user: UserPro
     item.reason,
     <button className="linkish" type="button" onClick={() => props.onOpenEntity?.(riskEntity(item.type), item.id)}>定位处理</button>
   ]);
+  const roleFocus = roleFocusFor(props.user.role, {
+    myUntested: myUntested.length,
+    failedWithoutBug: failedWithoutBug.length,
+    retestBugs: retestBugs.length,
+    assignedBugs: assignedBugs.length,
+    triageBugs: triageBugs.length,
+    uncoveredRequirements: uncoveredRequirements.length + orphanCases.length,
+    signoffBlockers: props.data.report?.qualityGate?.issues.length || 0,
+    activeSevereBugs: severeActiveBugs.length,
+    activeBugs: props.data.report?.bugs.active || 0,
+    passRate: props.data.report?.execution.passRate || 0
+  });
 
   return (
+    <>
+    <section className="role-focus-panel" aria-label="角色任务入口">
+      <div className="section-heading compact">
+        <span>{roleFocus.label}</span>
+        <strong>{roleFocus.title}</strong>
+      </div>
+      <div className="role-focus-grid">
+        {roleFocus.items.map((item) => (
+          <button key={item.label} type="button" className={`role-focus-card tone-${item.tone || 'neutral'}`} onClick={() => props.onJump?.(item.tab)}>
+            <item.icon size={18} />
+            <span>{item.label}</span>
+            <strong>{item.value}</strong>
+            <small>{item.detail}</small>
+          </button>
+        ))}
+      </div>
+    </section>
     <section className="command-center" aria-label="今日质量指挥台">
       <article className="command-card primary-command">
         <div className="section-heading compact">
@@ -189,20 +218,77 @@ export function QualityCommandCenter(props: { data: WorkspaceData; user: UserPro
         </div>
         <div className="command-metric-row">
           <button type="button" onClick={() => props.onJump?.('requirements')}><Flag size={16} /><span>覆盖缺口</span><strong>{uncoveredRequirements.length + orphanCases.length}</strong></button>
-          <button type="button" onClick={() => props.onJump?.('plans')}><Bug size={16} /><span>失败未建 Bug</span><strong>{failedWithoutBug.length}</strong></button>
+          <button type="button" onClick={() => props.onJump?.('plans')}><Bug size={16} /><span>失败未建缺陷</span><strong>{failedWithoutBug.length}</strong></button>
           <button type="button" onClick={() => props.onJump?.('reports')}><FileText size={16} /><span>准入阻塞</span><strong>{props.data.report?.qualityGate?.issues.length || 0}</strong></button>
         </div>
-        {blockerRows.length ? <DataTable headers={['阻塞', '对象', '原因', '修复动作']} rows={blockerRows.slice(0, 7)} /> : <EmptyState text="闭环健康" detail="需求、用例、执行和 Bug 当前没有明显断点。" />}
+        {blockerRows.length ? <DataTable headers={['阻塞', '对象', '原因', '修复动作']} rows={blockerRows.slice(0, 7)} /> : <EmptyState text="闭环健康" detail="需求、用例、执行和缺陷当前没有明显断点。" />}
       </article>
       <article className="command-card risk-command">
         <div className="section-heading compact">
           <span>最近风险</span>
           <strong>影响验收判断的事项</strong>
         </div>
-        {riskRows.length ? <DataTable headers={['类型', '事项', '原因', '下一步']} rows={riskRows} /> : <EmptyState text="暂无报告风险" detail="失败执行项、高危 Bug 和准入问题会汇总到这里。" />}
+        {riskRows.length ? <DataTable headers={['类型', '事项', '原因', '下一步']} rows={riskRows} /> : <EmptyState text="暂无报告风险" detail="失败执行项、高危缺陷和准入问题会汇总到这里。" />}
       </article>
     </section>
+    </>
   );
+}
+
+function roleFocusFor(role: UserProfile['role'], counts: {
+  myUntested: number;
+  failedWithoutBug: number;
+  retestBugs: number;
+  assignedBugs: number;
+  triageBugs: number;
+  uncoveredRequirements: number;
+  signoffBlockers: number;
+  activeSevereBugs: number;
+  activeBugs: number;
+  passRate: number;
+}) {
+  const managerItems = [
+    { label: '发布阻塞', value: counts.signoffBlockers, detail: '影响验收签核', tab: 'reports' as Tab, icon: FileText, tone: counts.signoffBlockers ? 'risk' : 'good' },
+    { label: '质量风险', value: counts.activeSevereBugs + counts.failedWithoutBug, detail: '高危缺陷与失败执行', tab: 'reports' as Tab, icon: ShieldAlert, tone: counts.activeSevereBugs + counts.failedWithoutBug ? 'risk' : 'good' },
+    { label: '执行通过率', value: `${counts.passRate}%`, detail: '本项目执行健康度', tab: 'plans' as Tab, icon: Activity, tone: counts.passRate >= 90 ? 'good' : 'info' }
+  ];
+  if (role === 'developer') {
+    return {
+      label: '开发视角',
+      title: '先处理分配给你的缺陷，再回看验证反馈',
+      items: [
+        { label: '指派给我', value: counts.assignedBugs, detail: '仍处于活跃状态', tab: 'bugs' as Tab, icon: Bug, tone: counts.assignedBugs ? 'risk' : 'good' },
+        { label: '待复测反馈', value: counts.retestBugs, detail: '已解决，等待验证', tab: 'bugs' as Tab, icon: RotateCcw, tone: counts.retestBugs ? 'info' : 'good' },
+        { label: '待补来源', value: counts.triageBugs, detail: '需补充信息或分诊', tab: 'bugs' as Tab, icon: ShieldAlert, tone: counts.triageBugs ? 'risk' : 'good' }
+      ]
+    };
+  }
+  if (role === 'tester') {
+    return {
+      label: '测试视角',
+      title: '先执行、再补缺陷、最后复测关闭',
+      items: [
+        { label: '我的待执行', value: counts.myUntested, detail: '等待记录结果', tab: 'plans' as Tab, icon: Activity, tone: counts.myUntested ? 'info' : 'good' },
+        { label: '失败待建缺陷', value: counts.failedWithoutBug, detail: '失败/阻塞但未建缺陷', tab: 'plans' as Tab, icon: Bug, tone: counts.failedWithoutBug ? 'risk' : 'good' },
+        { label: '待复测', value: counts.retestBugs, detail: '已解决缺陷待验证', tab: 'bugs' as Tab, icon: RotateCcw, tone: counts.retestBugs ? 'info' : 'good' }
+      ]
+    };
+  }
+  if (role === 'viewer') {
+    return {
+      label: '观察者视角',
+      title: '快速判断当前项目能否进入验收',
+      items: managerItems
+    };
+  }
+  return {
+    label: role === 'project_owner' ? '负责人视角' : '管理视角',
+    title: '看风险、看进度、看发布结论',
+    items: [
+      { label: '覆盖缺口', value: counts.uncoveredRequirements, detail: '需求无用例或用例孤立', tab: 'cases' as Tab, icon: ClipboardCheck, tone: counts.uncoveredRequirements ? 'risk' : 'good' },
+      ...managerItems.slice(0, 2)
+    ]
+  };
 }
 
 export function ProjectOnboarding(props: { data: WorkspaceData; currentProject?: Project; onJump?: (tab: Tab) => void }) {
@@ -255,9 +341,9 @@ export function QualityHealthCenter(props: { data: WorkspaceData; onJump?: (tab:
   const rows = [
     ...uncoveredRequirements.slice(0, 4).map((item) => ['未覆盖需求', item.title, '缺少可执行用例', <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('requirement', item.id)}>补用例</button>]),
     ...orphanCases.slice(0, 4).map((item) => ['孤立用例', item.title, '未绑定有效需求', <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('test_case', item.id)}>绑定需求</button>]),
-    ...orphanBugs.slice(0, 4).map((item) => ['孤立 Bug', item.title, '缺少需求/用例/计划来源', <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('bug', item.id)}>补来源</button>]),
-    ...failedItems.slice(0, 4).map(({ plan, item }) => ['失败执行项', item.caseTitle, plan.name, <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('run_item', item.id)}>{item.bugIds.length ? '进入执行' : '建 Bug'}</button>]),
-    ...severeActiveBugs.slice(0, 4).map((item) => ['严重活跃 Bug', item.title, labelOf(item.severity), <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('bug', item.id)}>分诊</button>])
+    ...orphanBugs.slice(0, 4).map((item) => ['孤立缺陷', item.title, '缺少需求/用例/计划来源', <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('bug', item.id)}>补来源</button>]),
+    ...failedItems.slice(0, 4).map(({ plan, item }) => ['失败执行项', item.caseTitle, plan.name, <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('run_item', item.id)}>{item.bugIds.length ? '进入执行' : '建缺陷'}</button>]),
+    ...severeActiveBugs.slice(0, 4).map((item) => ['严重活跃缺陷', item.title, labelOf(item.severity), <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('bug', item.id)}>分诊</button>])
   ];
   return (
     <section className="panel wide health-center">
@@ -265,10 +351,10 @@ export function QualityHealthCenter(props: { data: WorkspaceData; onJump?: (tab:
       <div className="health-metrics">
         <button type="button" onClick={() => props.onJump?.('requirements')}><Flag size={16} /><span>未覆盖需求</span><strong>{uncoveredRequirements.length}</strong></button>
         <button type="button" onClick={() => props.onJump?.('cases')}><ClipboardCheck size={16} /><span>孤立用例</span><strong>{orphanCases.length}</strong></button>
-        <button type="button" onClick={() => props.onJump?.('bugs')}><Bug size={16} /><span>孤立 Bug</span><strong>{orphanBugs.length}</strong></button>
+        <button type="button" onClick={() => props.onJump?.('bugs')}><Bug size={16} /><span>孤立缺陷</span><strong>{orphanBugs.length}</strong></button>
         <button type="button" onClick={() => props.onJump?.('plans')}><Activity size={16} /><span>失败/阻塞执行</span><strong>{failedItems.length}</strong></button>
       </div>
-      {rows.length > 0 ? <DataTable headers={['风险类型', '对象', '原因', '下一步']} rows={rows} /> : <EmptyState text="追踪链路健康" detail="需求、用例、执行和 Bug 当前没有明显断点。" />}
+      {rows.length > 0 ? <DataTable headers={['风险类型', '对象', '原因', '下一步']} rows={rows} /> : <EmptyState text="追踪链路健康" detail="需求、用例、执行和缺陷当前没有明显断点。" />}
     </section>
   );
 }
@@ -281,7 +367,7 @@ export function RecentWork(props: { data: WorkspaceData }) {
         headers={['类型', '标题', '状态']}
         rows={[
           ...props.data.requirements.slice(0, 5).map((item) => ['需求', item.title, labelOf(item.status)]),
-          ...props.data.bugs.slice(0, 5).map((item) => ['Bug', item.title, labelOf(item.status)])
+          ...props.data.bugs.slice(0, 5).map((item) => ['缺陷', item.title, labelOf(item.status)])
         ]}
       />
     </section>
@@ -307,7 +393,7 @@ export function RiskBoard(props: { report: ReportSummary | null; onOpenEntity?: 
   const items = [
     report.execution.failed > 0 ? `存在 ${report.execution.failed} 条失败执行项` : '暂无失败执行项',
     report.execution.blocked > 0 ? `存在 ${report.execution.blocked} 条阻塞执行项` : '暂无阻塞执行项',
-    report.bugs.active > 0 ? `还有 ${report.bugs.active} 个活跃 Bug，其中 ${report.bugs.overdue || 0} 个逾期` : '暂无活跃 Bug',
+    report.bugs.active > 0 ? `还有 ${report.bugs.active} 个活跃缺陷，其中 ${report.bugs.overdue || 0} 个逾期` : '暂无活跃缺陷',
     report.requirements.blocked > 0 ? `有 ${report.requirements.blocked} 个阻塞需求` : '暂无阻塞需求'
   ];
   return <div className="risk-list">{items.map((item) => <span key={item}>{item}</span>)}</div>;
@@ -327,7 +413,7 @@ export function MyTodo(props: { data: WorkspaceData; user: UserProfile }) {
   return (
     <section className="panel wide">
       <h2>我的待办</h2>
-      {rows.length > 0 ? <DataTable headers={['类型', '对象', '上下文', '状态']} rows={rows} /> : <EmptyState text="暂无待办" detail="失败执行项、指派 Bug 和阻塞需求会聚合到这里。" />}
+      {rows.length > 0 ? <DataTable headers={['类型', '对象', '上下文', '状态']} rows={rows} /> : <EmptyState text="暂无待办" detail="失败执行项、指派缺陷和阻塞需求会聚合到这里。" />}
     </section>
   );
 }
@@ -344,7 +430,7 @@ export function TraceabilityMatrix(props: { data: WorkspaceData }) {
       <StatusBadge value={requirement.status} dictionaryType="requirementStatus" />,
       `${cases.length} 条`,
       runItems.length ? `${passed}/${runItems.length} 通过` : '未执行',
-      activeBugs.length ? `${activeBugs.length} 活跃` : (requirement.dueDate ? `截止 ${requirement.dueDate.slice(0, 10)}` : '无活跃 Bug')
+      activeBugs.length ? `${activeBugs.length} 活跃` : (requirement.dueDate ? `截止 ${requirement.dueDate.slice(0, 10)}` : '无活跃缺陷')
     ];
   });
   return (
@@ -374,7 +460,7 @@ export function PageInsights(props: {
     overview: [
       { label: '项目资产', value: allItems.length },
       { label: '通过率', value: `${report?.execution.passRate || 0}%`, tone: 'good' },
-      { label: '活跃 Bug', value: report?.bugs.active || 0, tone: (report?.bugs.active || 0) > 0 ? 'risk' : 'good' }
+      { label: '活跃缺陷', value: report?.bugs.active || 0, tone: (report?.bugs.active || 0) > 0 ? 'risk' : 'good' }
     ],
     projects: [
       { label: '项目数', value: props.projectCount },
@@ -402,7 +488,7 @@ export function PageInsights(props: {
       { label: '失败项', value: report?.execution.failed || 0, tone: 'risk' }
     ],
     bugs: [
-      { label: 'Bug', value: props.data.bugs.length },
+      { label: '缺陷', value: props.data.bugs.length },
       { label: '活跃', value: report?.bugs.active || 0, tone: 'risk' },
       { label: '已解决', value: report?.bugs.resolved || 0, tone: 'good' }
     ],

@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, SchemaTypes, Types } from 'mongoose';
-import type { ProjectCategory, ProjectRole, ProjectStatus } from '@buggy/shared-types';
+import type { ProjectCategory, ProjectQualitySettings, ProjectRole, ProjectStatus } from '@buggy/shared-types';
 
 export type ProjectDocument = HydratedDocument<ProjectEntity>;
 
@@ -43,6 +43,9 @@ export class ProjectEntity {
 
   @Prop({ type: [ProjectMemberSchema], default: [] })
   members!: ProjectMemberEntity[];
+
+  @Prop({ type: SchemaTypes.Mixed, default: {} })
+  qualitySettings!: ProjectQualitySettings;
 }
 
 export const ProjectSchema = SchemaFactory.createForClass(ProjectEntity);

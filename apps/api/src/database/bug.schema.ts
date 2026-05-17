@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, SchemaTypes, Types } from 'mongoose';
-import type { BugStatus, BugTriageStatus, Priority, Severity } from '@buggy/shared-types';
+import type { BugStatus, BugTriageStatus, Priority, Severity, SlaLevel } from '@buggy/shared-types';
 
 export type BugDocument = HydratedDocument<BugEntity>;
 
@@ -76,7 +76,7 @@ export class BugEntity {
   verifyResult!: string;
 
   @Prop({ type: String, default: 'normal' })
-  slaLevel!: 'critical' | 'high' | 'normal' | 'low';
+  slaLevel!: SlaLevel;
 
   @Prop({ type: [SchemaTypes.ObjectId], ref: 'UserEntity', default: [] })
   watcherIds!: Types.ObjectId[];

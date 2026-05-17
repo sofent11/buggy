@@ -1,8 +1,9 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import type { Bug, BugAttachment, BugComment, BugStatusHistory, PageResult } from '@buggy/shared-types';
+import type { Bug, BugAttachment, BugComment, BugStatusHistory, PageResult, ProjectSlaPolicy, SlaLevel } from '@buggy/shared-types';
 import { BugEntity } from '../database/bug.schema.js';
+import { ProjectEntity } from '../database/project.schema.js';
 import { TestPlanEntity } from '../database/test-plan.schema.js';
 import type { AddBugAttachmentDto, AddBugCommentDto, CreateBugDto, CreateBugFromRunDto, MarkDuplicateBugDto, TransitionBugDto, UpdateBugDto } from '../dto/bug.dto.js';
 import type { ListQueryDto } from '../dto/common.dto.js';
@@ -10,12 +11,14 @@ import { idOf, toObjectId } from '../shared/mongo.js';
 import { ActivityService } from './activity.service.js';
 import type { SessionUser } from './auth.service.js';
 import { NotificationService } from './notification.service.js';
+import { normalizeProjectQualitySettings } from './project.service.js';
 import { TestPlanService } from './test-plan.service.js';
 
 @Injectable()
 export class BugService {
   constructor(
     @InjectModel(BugEntity.name) private readonly bugs: Model<BugEntity>,
+    @InjectModel(ProjectEntity.name) private readonly projects: Model<ProjectEntity>,
     @InjectModel(TestPlanEntity.name) private readonly plans: Model<TestPlanEntity>,
     private readonly testPlanService: TestPlanService,
     private readonly activities: ActivityService,
@@ -52,6 +55,8 @@ export class BugService {
 
   async create(dto: CreateBugDto, user: SessionUser): Promise<Bug> {
     const status = dto.status || 'open';
+    const qualitySettings = await this.projectQualitySettings(dto.projectId);
+    const slaLevel = dto.slaLevel || slaLevelOf(dto.severity || 'S2');
     const row = await this.bugs.create({
       projectId: new Types.ObjectId(dto.projectId),
       iterationId: toObjectId(dto.iterationId),
@@ -69,14 +74,14 @@ export class BugService {
       assigneeId: toObjectId(dto.assigneeId),
       reporterId: new Types.ObjectId(user.id),
       duplicateOfId: toObjectId(dto.duplicateOfId),
-      dueAt: dto.dueAt ? new Date(dto.dueAt) : defaultDueAt(dto.severity || 'S2'),
+      dueAt: dto.dueAt ? new Date(dto.dueAt) : defaultDueAt(slaLevel, qualitySettings.slaPolicy),
       environment: dto.environment || '',
       foundVersion: dto.foundVersion || '',
       fixVersion: dto.fixVersion || '',
       rootCause: dto.rootCause || '',
       resolution: dto.resolution || '',
       verifyResult: dto.verifyResult || '',
-      slaLevel: dto.slaLevel || slaLevelOf(dto.severity || 'S2'),
+      slaLevel,
       watcherIds: (dto.watcherIds || []).map((id) => new Types.ObjectId(id)),
       triageStatus: dto.triageStatus || 'new',
       comments: [],
@@ -426,6 +431,11 @@ export class BugService {
     return { [sortBy]: sortOrder === 'asc' ? 1 : -1 };
   }
 
+  private async projectQualitySettings(projectId: string) {
+    const project = await this.projects.findById(projectId).select('qualitySettings');
+    return normalizeProjectQualitySettings(project?.qualitySettings);
+  }
+
   private assertTransition(from: Bug['status'], to: Bug['status']) {
     if (from === to) return;
     const allowed: Record<Bug['status'], Bug['status'][]> = {
@@ -495,14 +505,20 @@ export class BugService {
   }
 }
 
-function defaultDueAt(severity: Bug['severity']) {
-  const days: Record<Bug['severity'], number> = { S0: 1, S1: 2, S2: 5, S3: 10 };
+function defaultDueAt(level: SlaLevel, policy?: ProjectSlaPolicy) {
+  if (policy?.enabled === false) return undefined;
+  const hours: Record<SlaLevel, number> = {
+    critical: policy?.criticalHours || 24,
+    high: policy?.highHours || 48,
+    normal: policy?.normalHours || 120,
+    low: policy?.lowHours || 240
+  };
   const date = new Date();
-  date.setDate(date.getDate() + days[severity]);
+  date.setHours(date.getHours() + hours[level]);
   return date;
 }
 
-function slaLevelOf(severity: Bug['severity']): Bug['slaLevel'] {
+function slaLevelOf(severity: Bug['severity']): SlaLevel {
   if (severity === 'S0') return 'critical';
   if (severity === 'S1') return 'high';
   if (severity === 'S3') return 'low';

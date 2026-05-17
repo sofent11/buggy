@@ -1,7 +1,18 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import type { PageResult, Project, ProjectCategory, ProjectMember, ProjectRole, ProjectStatus } from '@buggy/shared-types';
+import {
+  DEFAULT_PROJECT_GATE_RULES,
+  DEFAULT_PROJECT_SLA_POLICY,
+  type PageResult,
+  type Project,
+  type ProjectCategory,
+  type ProjectMember,
+  type ProjectQualitySettings,
+  type ProjectRole,
+  type ProjectStatus,
+  type QualityGateRule
+} from '@buggy/shared-types';
 import { ProjectEntity } from '../database/project.schema.js';
 import { UserEntity } from '../database/user.schema.js';
 import type { CreateProjectDto, UpdateProjectDto, UpsertProjectMemberDto } from '../dto/project.dto.js';
@@ -62,7 +73,8 @@ export class ProjectService {
       status: dto.status || 'active',
       category: dto.category || inferProjectCategory(dto.name, dto.code, dto.description),
       ownerId,
-      members: [{ userId: ownerId, username: user.username, email: user.email, role: 'owner' }]
+      members: [{ userId: ownerId, username: user.username, email: user.email, role: 'owner' }],
+      qualitySettings: normalizeProjectQualitySettings(dto.qualitySettings)
     });
     return this.toDto(project);
   }
@@ -84,7 +96,8 @@ export class ProjectService {
           ...(dto.code !== undefined ? { code: dto.code } : {}),
           ...(dto.description !== undefined ? { description: dto.description } : {}),
           ...(dto.status !== undefined ? { status: dto.status } : {}),
-          ...(dto.category !== undefined ? { category: dto.category } : {})
+          ...(dto.category !== undefined ? { category: dto.category } : {}),
+          ...(dto.qualitySettings !== undefined ? { qualitySettings: normalizeProjectQualitySettings(dto.qualitySettings) } : {})
         }
       },
       { new: true }
@@ -197,10 +210,60 @@ export class ProjectService {
           role: member.role as ProjectRole
         })
       ),
+      qualitySettings: normalizeProjectQualitySettings(project.qualitySettings),
       createdAt: project.createdAt?.toISOString(),
       updatedAt: project.updatedAt?.toISOString()
     };
   }
+}
+
+export function normalizeProjectQualitySettings(settings?: Partial<ProjectQualitySettings>): ProjectQualitySettings {
+  const input = settings || {};
+  return {
+    slaPolicy: {
+      ...DEFAULT_PROJECT_SLA_POLICY,
+      ...(input.slaPolicy || {}),
+      criticalHours: positiveHours(input.slaPolicy?.criticalHours, DEFAULT_PROJECT_SLA_POLICY.criticalHours),
+      highHours: positiveHours(input.slaPolicy?.highHours, DEFAULT_PROJECT_SLA_POLICY.highHours),
+      normalHours: positiveHours(input.slaPolicy?.normalHours, DEFAULT_PROJECT_SLA_POLICY.normalHours),
+      lowHours: positiveHours(input.slaPolicy?.lowHours, DEFAULT_PROJECT_SLA_POLICY.lowHours),
+      enabled: input.slaPolicy?.enabled !== false
+    },
+    defaultGateRules: normalizeGateRules(input.defaultGateRules),
+    integrations: {
+      larkWebhook: trimOptional(input.integrations?.larkWebhook),
+      jiraBaseUrl: trimOptional(input.integrations?.jiraBaseUrl),
+      jiraProjectKey: trimOptional(input.integrations?.jiraProjectKey),
+      ciDashboardUrl: trimOptional(input.integrations?.ciDashboardUrl),
+      externalWebhookUrl: trimOptional(input.integrations?.externalWebhookUrl)
+    }
+  };
+}
+
+function normalizeGateRules(rules?: QualityGateRule[]) {
+  const byId = new Map((rules || []).map((rule) => [rule.id, rule]));
+  return DEFAULT_PROJECT_GATE_RULES.map((rule) => {
+    const override = byId.get(rule.id);
+    return override
+      ? {
+          ...rule,
+          enabled: override.enabled !== false,
+          blocking: override.blocking !== false,
+          threshold: Number.isFinite(override.threshold) ? Math.max(0, Number(override.threshold)) : rule.threshold,
+          description: override.description || rule.description
+        }
+      : rule;
+  });
+}
+
+function positiveHours(value: unknown, fallback: number) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? Math.round(number) : fallback;
+}
+
+function trimOptional(value?: string) {
+  const trimmed = value?.trim();
+  return trimmed || undefined;
 }
 
 function inferProjectCategory(name?: string, code?: string, description?: string): ProjectCategory {

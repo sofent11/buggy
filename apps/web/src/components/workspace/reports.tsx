@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { CheckCircle2, FileText, MoreHorizontal, Plus, Save, ShieldAlert, XCircle } from 'lucide-react';
-import type { AcceptanceScope, Bug, Iteration, QualityGateRule, ReportSummary, Requirement, TestPlan, UserProfile } from '@buggy/shared-types';
+import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { DEFAULT_PROJECT_GATE_RULES, type AcceptanceScope, type Bug, type Iteration, type Project, type QualityGateRule, type ReportSummary, type Requirement, type TestPlan, type UserProfile } from '@buggy/shared-types';
 import { api, downloadUrl } from '../../api.js';
 import { Button } from '../ui/button.js';
 import { Field, FieldLabel, FormActions } from '../ui/form.js';
@@ -11,17 +12,11 @@ import { DataPage, DataTable, DangerButton, Drawer, EmptyState, HookForm, Metric
 
 type OpenEntity = (entityType: string, entityId?: string) => void;
 
-const DEFAULT_GATE_RULES: QualityGateRule[] = [
-  { id: 'case_coverage', label: '必须存在覆盖用例', metric: 'case_coverage', enabled: true, blocking: true, description: '验收范围内至少有一条可追踪用例' },
-  { id: 'plan_coverage', label: '用例必须纳入测试计划', metric: 'plan_coverage', enabled: true, blocking: true, description: '覆盖用例需要进入本次执行范围' },
-  { id: 'untested_runs', label: '不允许未测执行项', metric: 'untested_runs', enabled: true, blocking: true },
-  { id: 'failed_runs', label: '不允许失败执行项', metric: 'failed_runs', enabled: true, blocking: true },
-  { id: 'blocked_runs', label: '不允许阻塞执行项', metric: 'blocked_runs', enabled: true, blocking: true },
-  { id: 'active_s01_bugs', label: '不允许 S0/S1 活跃缺陷', metric: 'active_s01_bugs', enabled: true, blocking: true }
-];
+const chartColors = ['#1d4ed8', '#15803d', '#b45309', '#b91c1c', '#6d28d9', '#475569'];
 
 export function ReportSection(props: {
   projectId: string;
+  currentProject?: Project;
   scopes: AcceptanceScope[];
   iterations: Iteration[];
   requirements: Requirement[];
@@ -41,6 +36,7 @@ export function ReportSection(props: {
   const [loadingReport, setLoadingReport] = useState(false);
   const [signoff, setSignoff] = useState<'signed' | 'rejected' | null>(null);
   const [waiverOpen, setWaiverOpen] = useState(false);
+  const [reportView, setReportView] = useState<'decision' | 'trend' | 'rootCause'>('decision');
 
   useEffect(() => {
     if (!selectedId && props.scopes[0]) setSelectedId(props.scopes[0].id);
@@ -79,7 +75,7 @@ export function ReportSection(props: {
           <MetricCard label="验收范围" value={props.scopes.length} detail={`${activeScopes} 个处理中`} tone="info" />
           <MetricCard label="准入阻塞" value={blockers.length} detail={report?.qualityGate?.summary || '待检查'} tone={blockers.length ? 'risk' : 'good'} />
           <MetricCard label="执行通过率" value={`${report?.execution.passRate || 0}%`} detail={`${report?.execution.passed || 0}/${report?.execution.total || 0}`} />
-          <MetricCard label="活跃 Bug" value={report?.bugs.active || 0} detail={`${report?.bugs.overdue || 0} 个逾期`} tone={report?.bugs.active ? 'risk' : 'good'} />
+          <MetricCard label="活跃缺陷" value={report?.bugs.active || 0} detail={`${report?.bugs.overdue || 0} 个逾期`} tone={report?.bugs.active ? 'risk' : 'good'} />
         </section>
       }
     >
@@ -93,15 +89,27 @@ export function ReportSection(props: {
         <span className="toolbar-summary">{loadingReport ? '报告生成中...' : selectedScope ? `当前范围：${selectedScope.name}` : '项目整体范围'}</span>
         {props.canWrite && <button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建验收范围</button>}
       </Toolbar>
+      <section className="report-mode-tabs" role="tablist" aria-label="验收报表视图">
+        <button type="button" className={reportView === 'decision' ? 'active' : ''} onClick={() => setReportView('decision')}>发布决策</button>
+        <button type="button" className={reportView === 'trend' ? 'active' : ''} onClick={() => setReportView('trend')}>历史趋势</button>
+        <button type="button" className={reportView === 'rootCause' ? 'active' : ''} onClick={() => setReportView('rootCause')}>根因分析</button>
+      </section>
 
-      {props.scopes.length === 0 ? (
-        <AcceptanceScopeGuide
-          requirements={props.requirements.length}
-          plans={props.plans.length}
-          activeBugs={props.bugs.filter((bug) => !['verified', 'closed'].includes(bug.status)).length}
-          canWrite={props.canWrite}
-          onCreate={() => setCreating(true)}
-        />
+      {reportView === 'trend' ? (
+        <ReportTrendPanel report={report} />
+      ) : reportView === 'rootCause' ? (
+        <RootCauseAnalysisPanel report={report} onOpenEntity={props.onOpenEntity} />
+      ) : props.scopes.length === 0 ? (
+        <div className="report-workspace solo-report">
+          <ReportDecision report={report} onOpenEntity={props.onOpenEntity} />
+          <AcceptanceScopeGuide
+            requirements={props.requirements.length}
+            plans={props.plans.length}
+            activeBugs={props.bugs.filter((bug) => !['verified', 'closed'].includes(bug.status)).length}
+            canWrite={props.canWrite}
+            onCreate={() => setCreating(true)}
+          />
+        </div>
       ) : (
       <div className="report-workspace">
         <section className="report-scope-list">
@@ -115,7 +123,7 @@ export function ReportSection(props: {
             rows={props.scopes.map((scope) => [
               <div className="cell-main"><strong>{scope.name}</strong><span>{scope.description || '未填写交付说明'}</span></div>,
               <StatusBadge value={scope.status} />,
-              `${scope.requirementIds.length} 需求 · ${scope.testPlanIds.length} 计划 · ${scope.bugIds.length} 保留 Bug`,
+              `${scope.requirementIds.length} 需求 · ${scope.testPlanIds.length} 计划 · ${scope.bugIds.length} 保留缺陷`,
               scope.targetDate ? scope.targetDate.slice(0, 10) : '-',
               scope.reportSignoff?.status ? labelOf(scope.reportSignoff.status) : '未签核',
               <div className="row-actions">
@@ -137,7 +145,7 @@ export function ReportSection(props: {
           {props.scopes.length === 0 && (
             <EmptyState
               text="还没有验收范围"
-              detail="为一次发布或交付选择需求、测试计划和保留 Bug 后，报告页会给出准入结论和签核记录。"
+              detail="为一次发布或交付选择需求、测试计划和保留缺陷后，报告页会给出准入结论和签核记录。"
               action={props.canWrite ? <button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建验收范围</button> : undefined}
             />
           )}
@@ -168,6 +176,7 @@ export function ReportSection(props: {
         title="新建验收范围"
         open={creating}
         projectId={props.projectId}
+        defaultGateRules={props.currentProject?.qualitySettings?.defaultGateRules}
         iterations={props.iterations}
         requirements={props.requirements}
         plans={props.plans}
@@ -185,6 +194,7 @@ export function ReportSection(props: {
         row={editing || undefined}
         open={Boolean(editing)}
         projectId={props.projectId}
+        defaultGateRules={props.currentProject?.qualitySettings?.defaultGateRules}
         iterations={props.iterations}
         requirements={props.requirements}
         plans={props.plans}
@@ -237,12 +247,12 @@ function AcceptanceScopeGuide(props: { requirements: number; plans: number; acti
       <div>
         <span>发布验收向导</span>
         <strong>先定义验收范围，再生成正式结论。</strong>
-        <p>选择本次交付涉及的需求、测试计划和保留 Bug，系统会基于范围计算准入阻塞、风险豁免和签核记录。</p>
+        <p>选择本次交付涉及的需求、测试计划和保留缺陷，系统会基于范围计算准入阻塞、风险豁免和签核记录。</p>
       </div>
       <div className="acceptance-guide-steps">
         <article><span>1</span><strong>选需求</strong><small>{props.requirements} 个可选需求</small></article>
         <article><span>2</span><strong>选计划</strong><small>{props.plans} 个测试计划</small></article>
-        <article><span>3</span><strong>留风险</strong><small>{props.activeBugs} 个活跃 Bug</small></article>
+        <article><span>3</span><strong>留风险</strong><small>{props.activeBugs} 个活跃缺陷</small></article>
       </div>
       {props.canWrite && <button className="primary" type="button" onClick={props.onCreate}><Plus size={16} /> 创建验收范围</button>}
     </section>
@@ -265,12 +275,34 @@ function ReportDecision(props: { report: ReportSummary | null; onOpenEntity?: Op
         <strong>{gateStatus === 'pass' ? '建议通过验收' : gateStatus === 'risk' ? '带风险验收' : '暂缓验收'}</strong>
         <p>{props.report.qualityGate?.summary || '报告已生成，请复核执行明细和缺陷风险。'}</p>
       </div>
+      <div className="release-decision-strip" aria-label="发布决策摘要">
+        <article>
+          <span>准入阻塞</span>
+          <strong>{blockers.length}</strong>
+          <small>{blockers.length ? '需处理后签核' : '无阻塞'}</small>
+        </article>
+        <article>
+          <span>风险豁免</span>
+          <strong>{waived.length}</strong>
+          <small>{waived.length ? '已记录保留风险' : '无豁免'}</small>
+        </article>
+        <article>
+          <span>执行通过率</span>
+          <strong>{props.report.execution.passRate}%</strong>
+          <small>{props.report.execution.passed}/{props.report.execution.total}</small>
+        </article>
+        <article>
+          <span>活跃缺陷</span>
+          <strong>{props.report.bugs.active}</strong>
+          <small>{props.report.bugs.overdue || 0} 个逾期</small>
+        </article>
+      </div>
       <div className="report-risk-links">
         {blockers.length === 0 ? <span>没有准入阻塞项</span> : blockers.map((item) => <b key={item}>{item}</b>)}
         {waived.map((item) => <em key={item}>已豁免：{item}</em>)}
       </div>
       <div className="gate-rule-strip" aria-label="质量门禁规则">
-        {(props.report.qualityGate?.rules || DEFAULT_GATE_RULES).map((rule) => (
+        {(props.report.qualityGate?.rules || DEFAULT_PROJECT_GATE_RULES).map((rule) => (
           <span key={rule.id} className={rule.enabled ? 'is-enabled' : 'is-disabled'}>
             {rule.label}{rule.blocking ? ' · 阻断' : ' · 提醒'}
           </span>
@@ -295,11 +327,187 @@ function ReportDecision(props: { report: ReportSummary | null; onOpenEntity?: Op
   );
 }
 
+function ReportTrendPanel(props: { report: ReportSummary | null }) {
+  if (!props.report) return <EmptyState text="暂无趋势数据" detail="报告生成后会展示执行轮次趋势、缺陷流入流出和迭代质量排名。" />;
+  const executionTrend = props.report.charts?.executionTrend || [];
+  const bugTrend = props.report.charts?.bugTrend || [];
+  const iterationRank = props.report.charts?.iterationRank || [];
+  return (
+    <section className="report-analysis-view" aria-label="历史趋势">
+      <div className="section-heading">
+        <span>历史趋势</span>
+        <strong>从执行轮次和缺陷流动判断发布稳定性</strong>
+      </div>
+      <div className="trend-summary-strip">
+        <article>
+          <span>当前通过率</span>
+          <strong>{props.report.execution.passRate}%</strong>
+          <small>{props.report.execution.passed}/{props.report.execution.total} 已通过</small>
+        </article>
+        <article>
+          <span>缺陷流入</span>
+          <strong>{bugTrend.reduce((sum, item) => sum + item.created, 0)}</strong>
+          <small>近 8 周创建</small>
+        </article>
+        <article>
+          <span>缺陷关闭</span>
+          <strong>{bugTrend.reduce((sum, item) => sum + item.closed, 0)}</strong>
+          <small>近 8 周验证关闭</small>
+        </article>
+        <article>
+          <span>风险迭代</span>
+          <strong>{iterationRank.filter((item) => item.activeBugs > 0 || item.passRate < 80).length}</strong>
+          <small>低通过率或活跃缺陷</small>
+        </article>
+      </div>
+      <div className="chart-grid">
+        <article className="chart-panel">
+          <h3>执行通过率趋势</h3>
+          <ResponsiveContainer width="100%" height={260}>
+            <LineChart data={executionTrend}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+              <YAxis />
+              <Tooltip />
+              <Line type="monotone" dataKey="passRate" name="通过率" stroke="#1d4ed8" strokeWidth={3} dot={false} />
+              <Line type="monotone" dataKey="failed" name="失败" stroke="#b91c1c" strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="blocked" name="阻塞" stroke="#b45309" strokeWidth={2} dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </article>
+        <article className="chart-panel">
+          <h3>缺陷流入流出</h3>
+          <ResponsiveContainer width="100%" height={260}>
+            <LineChart data={bugTrend}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+              <YAxis />
+              <Tooltip />
+              <Line type="monotone" dataKey="created" name="创建" stroke="#b91c1c" strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="resolved" name="解决" stroke="#1d4ed8" strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="closed" name="关闭" stroke="#15803d" strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="overdue" name="逾期" stroke="#b45309" strokeWidth={2} dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </article>
+      </div>
+      <DataTable
+        headers={['迭代', '需求', '用例', '执行项', '通过率', '活跃缺陷']}
+        emptyText="暂无迭代趋势"
+        rows={iterationRank.map((item) => [
+          item.name,
+          item.requirements,
+          item.cases,
+          item.executionTotal,
+          `${item.passRate}%`,
+          item.activeBugs
+        ])}
+      />
+    </section>
+  );
+}
+
+function RootCauseAnalysisPanel(props: { report: ReportSummary | null; onOpenEntity?: OpenEntity }) {
+  if (!props.report) return <EmptyState text="暂无根因数据" detail="缺陷记录根因后会自动汇总为根因分布、未分类缺口和高风险明细。" />;
+  const bugs = props.report.details?.bugs || [];
+  const rootCauses = props.report.charts?.bugRootCause || [];
+  const unclassified = bugs.filter((bug) => !bug.rootCause?.trim()).length;
+  const active = bugs.filter((bug) => !['verified', 'closed'].includes(bug.status));
+  const highRiskByCause = rootCauses.map((cause) => ({
+    ...cause,
+    highRisk: bugs.filter((bug) => (bug.rootCause || '未分类').trim() === cause.label && ['S0', 'S1'].includes(bug.severity)).length,
+    active: active.filter((bug) => (bug.rootCause || '未分类').trim() === cause.label).length
+  }));
+  const topCause = rootCauses[0]?.label || '暂无';
+  return (
+    <section className="report-analysis-view" aria-label="根因分析">
+      <div className="section-heading">
+        <span>根因分析</span>
+        <strong>把缺陷关闭从处理单点问题升级为改进系统原因</strong>
+      </div>
+      <div className="trend-summary-strip root-cause-summary">
+        <article>
+          <span>主要根因</span>
+          <strong>{topCause}</strong>
+          <small>{rootCauses[0]?.value || 0} 个缺陷</small>
+        </article>
+        <article>
+          <span>未分类缺陷</span>
+          <strong>{unclassified}</strong>
+          <small>{bugs.length ? `${Math.round((unclassified / bugs.length) * 100)}% 待补根因` : '无缺陷'}</small>
+        </article>
+        <article>
+          <span>S0/S1 根因项</span>
+          <strong>{highRiskByCause.filter((item) => item.highRisk > 0).length}</strong>
+          <small>需进入复盘</small>
+        </article>
+        <article>
+          <span>活跃根因项</span>
+          <strong>{highRiskByCause.filter((item) => item.active > 0).length}</strong>
+          <small>仍有未关闭缺陷</small>
+        </article>
+      </div>
+      <div className="chart-grid">
+        <article className="chart-panel">
+          <h3>根因分布</h3>
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={rootCauses}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+              <YAxis />
+              <Tooltip />
+              <Bar dataKey="value" name="数量" radius={[6, 6, 0, 0]} fill="#1d4ed8" />
+            </BarChart>
+          </ResponsiveContainer>
+        </article>
+        <article className="chart-panel">
+          <h3>严重级别分布</h3>
+          <ResponsiveContainer width="100%" height={260}>
+            <PieChart>
+              <Pie data={props.report.charts?.bugSeverity || []} dataKey="value" nameKey="label" innerRadius={56} outerRadius={90} paddingAngle={2}>
+                {(props.report.charts?.bugSeverity || []).map((entry, index) => <Cell key={entry.key} fill={chartColors[index % chartColors.length]} />)}
+              </Pie>
+              <Tooltip />
+            </PieChart>
+          </ResponsiveContainer>
+        </article>
+      </div>
+      <DataTable
+        headers={['根因', '缺陷数', 'S0/S1', '活跃', '处理建议']}
+        emptyText="暂无根因分类"
+        rows={highRiskByCause.map((item) => [
+          item.label,
+          item.value,
+          item.highRisk,
+          item.active,
+          item.highRisk ? '进入发布复盘并补预防动作' : item.active ? '跟进关闭并确认复测' : '沉淀为回归关注项'
+        ])}
+      />
+      <DataTable
+        headers={['未分类缺陷', '严重级别', '状态', '发现环境', '发现版本', '操作']}
+        emptyText="暂无未分类缺陷"
+        rows={bugs
+          .filter((bug) => !bug.rootCause?.trim())
+          .slice(0, 10)
+          .map((bug) => [
+            bug.title,
+            <StatusBadge value={bug.severity} dictionaryType="severity" />,
+            <StatusBadge value={bug.status} dictionaryType="bugStatus" />,
+            bug.environment || '-',
+            bug.foundVersion || '-',
+            <Button type="button" size="sm" onClick={() => props.onOpenEntity?.('bug', bug.id)}>补根因</Button>
+          ])}
+      />
+    </section>
+  );
+}
+
 function AcceptanceScopeDrawer(props: {
   title: string;
   row?: AcceptanceScope;
   open: boolean;
   projectId: string;
+  defaultGateRules?: QualityGateRule[];
   iterations: Iteration[];
   requirements: Requirement[];
   plans: TestPlan[];
@@ -330,25 +538,25 @@ function AcceptanceScopeDrawer(props: {
           requirementIds: form.getAll('requirementIds').map(String).filter(Boolean),
           testPlanIds: form.getAll('testPlanIds').map(String).filter(Boolean),
           bugIds: form.getAll('bugIds').map(String).filter(Boolean),
-          qualityGateRules: collectGateRules(form, props.row?.qualityGateRules)
+          qualityGateRules: collectGateRules(form, props.row?.qualityGateRules, props.defaultGateRules)
         })}
       >
         {(register) => (
           <>
             <div className="field-grid">
-              <Field className="span-two"><FieldLabel>范围名称</FieldLabel><Input {...register('name')} required /></Field>
-              <Field><FieldLabel>负责人</FieldLabel><select {...register('ownerId')}><option value="">当前用户</option>{props.users.map((user) => <option key={user.id} value={user.id}>{user.username}</option>)}</select></Field>
-              <Field><FieldLabel>目标日期</FieldLabel><Input type="date" {...register('targetDate')} /></Field>
-              <Field><FieldLabel>状态</FieldLabel><select {...register('status')}><option value="draft">草稿</option><option value="reviewing">评审中</option><option value="signed">已签核</option><option value="rejected">已驳回</option><option value="archived">已归档</option></select></Field>
-              <Field className="span-four"><FieldLabel>交付说明</FieldLabel><Textarea {...register('description')} /></Field>
+              <Field className="span-two"><FieldLabel required>范围名称</FieldLabel><Input {...register('name')} required /></Field>
+              <Field><FieldLabel hint="用于签核责任归属">负责人</FieldLabel><select {...register('ownerId')}><option value="">当前用户</option>{props.users.map((user) => <option key={user.id} value={user.id}>{user.username}</option>)}</select></Field>
+              <Field><FieldLabel hint="发布或验收目标日期">目标日期</FieldLabel><Input type="date" {...register('targetDate')} /></Field>
+              <Field><FieldLabel required>状态</FieldLabel><select {...register('status')}><option value="draft">草稿</option><option value="reviewing">评审中</option><option value="signed">已签核</option><option value="rejected">已驳回</option><option value="archived">已归档</option></select></Field>
+              <Field className="span-four"><FieldLabel hint="说明交付边界、保留风险和回滚策略">交付说明</FieldLabel><Textarea {...register('description')} /></Field>
             </div>
             <div className="scope-picker-grid">
               <MultiPick name="iterationIds" title="迭代" rows={props.iterations.map((item) => ({ id: item.id, label: item.name, detail: labelOf(item.status) }))} selected={props.row?.iterationIds || []} />
               <MultiPick name="requirementIds" title="需求" rows={props.requirements.map((item) => ({ id: item.id, label: item.title, detail: labelOf(item.status) }))} selected={props.row?.requirementIds || []} />
               <MultiPick name="testPlanIds" title="测试计划" rows={props.plans.map((item) => ({ id: item.id, label: item.name, detail: `${item.round} · ${labelOf(item.status)}` }))} selected={props.row?.testPlanIds || []} />
-              <MultiPick name="bugIds" title="保留 Bug" rows={props.bugs.filter((bug) => !['verified', 'closed'].includes(bug.status)).map((item) => ({ id: item.id, label: item.title, detail: `${labelOf(item.severity)} · ${labelOf(item.status)}` }))} selected={props.row?.bugIds || []} />
+              <MultiPick name="bugIds" title="保留缺陷" rows={props.bugs.filter((bug) => !['verified', 'closed'].includes(bug.status)).map((item) => ({ id: item.id, label: item.title, detail: `${labelOf(item.severity)} · ${labelOf(item.status)}` }))} selected={props.row?.bugIds || []} />
             </div>
-            <GateRulePicker rules={props.row?.qualityGateRules} />
+            <GateRulePicker rules={props.row?.qualityGateRules} defaultRules={props.defaultGateRules} />
             <FormActions><Button type="button" onClick={props.onClose}>取消</Button>{props.canWrite && <Button variant="primary"><Save size={15} /> 保存范围</Button>}</FormActions>
           </>
         )}
@@ -357,13 +565,13 @@ function AcceptanceScopeDrawer(props: {
   );
 }
 
-function GateRulePicker(props: { rules?: QualityGateRule[] }) {
-  const rules = mergeGateRules(props.rules);
+function GateRulePicker(props: { rules?: QualityGateRule[]; defaultRules?: QualityGateRule[] }) {
+  const rules = mergeGateRules(props.rules, props.defaultRules);
   return (
     <section className="gate-rule-picker">
       <div className="section-heading compact">
         <span>质量门禁规则</span>
-        <strong>定义本次验收准入项和阻断等级</strong>
+        <strong>定义本次验收准入项、阈值和阻断等级</strong>
       </div>
       <div>
         {rules.map((rule) => (
@@ -372,6 +580,10 @@ function GateRulePicker(props: { rules?: QualityGateRule[] }) {
               <input type="checkbox" name="qualityGateRuleIds" value={rule.id} defaultChecked={rule.enabled} />
               <span>{rule.label}</span>
               <small>{rule.description || rule.metric}</small>
+            </label>
+            <label className="gate-threshold-field">
+              <span>允许阈值</span>
+              <Input type="number" min={0} name={`qualityGateThreshold_${rule.id}`} defaultValue={rule.threshold ?? 0} aria-label={`${rule.label}允许阈值`} />
             </label>
             <label className="check-row compact-check-row">
               <input type="checkbox" name="qualityGateBlockingIds" value={rule.id} defaultChecked={rule.blocking} />
@@ -384,19 +596,25 @@ function GateRulePicker(props: { rules?: QualityGateRule[] }) {
   );
 }
 
-function mergeGateRules(rules?: QualityGateRule[]) {
+function mergeGateRules(rules?: QualityGateRule[], defaultRules: QualityGateRule[] = DEFAULT_PROJECT_GATE_RULES) {
   const byId = new Map((rules || []).map((rule) => [rule.id, rule]));
-  return DEFAULT_GATE_RULES.map((rule) => ({ ...rule, ...byId.get(rule.id) }));
+  return defaultRules.map((rule) => ({ ...rule, ...byId.get(rule.id) }));
 }
 
-function collectGateRules(form: FormData, existing?: QualityGateRule[]) {
+function collectGateRules(form: FormData, existing?: QualityGateRule[], defaultRules?: QualityGateRule[]) {
   const enabledIds = new Set(form.getAll('qualityGateRuleIds').map(String));
   const blockingIds = new Set(form.getAll('qualityGateBlockingIds').map(String));
-  return mergeGateRules(existing).map((rule) => ({
+  return mergeGateRules(existing, defaultRules).map((rule) => ({
     ...rule,
     enabled: enabledIds.has(rule.id),
-    blocking: blockingIds.has(rule.id)
+    blocking: blockingIds.has(rule.id),
+    threshold: nonNegativeNumber(form.get(`qualityGateThreshold_${rule.id}`), rule.threshold || 0)
   }));
+}
+
+function nonNegativeNumber(value: FormDataEntryValue | null, fallback: number) {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? number : fallback;
 }
 
 function MultiPick(props: { name: string; title: string; rows: Array<{ id: string; label: string; detail: string }>; selected: string[] }) {
@@ -436,7 +654,7 @@ function RiskWaiverDrawer(props: {
         {(register) => (
           <>
             <Field><FieldLabel>豁免对象</FieldLabel><select {...register('targetId')}><option value="">整体准入风险</option>{risks.map((risk) => <option key={`${risk.type}-${risk.id}`} value={risk.id}>{risk.title} · {risk.reason}</option>)}</select></Field>
-            <Field><FieldLabel>对象类型</FieldLabel><select {...register('targetType')}><option value="quality_gate">质量门禁</option><option value="requirement">需求</option><option value="run_item">执行项</option><option value="bug">Bug</option></select></Field>
+            <Field><FieldLabel>对象类型</FieldLabel><select {...register('targetType')}><option value="quality_gate">质量门禁</option><option value="requirement">需求</option><option value="run_item">执行项</option><option value="bug">缺陷</option></select></Field>
             <Field><FieldLabel>豁免到期</FieldLabel><Input type="date" {...register('expiresAt')} /></Field>
             <Field><FieldLabel>豁免原因</FieldLabel><Textarea {...register('reason')} required placeholder="说明保留风险、影响范围、回滚方案或后续责任人" /></Field>
             <FormActions><Button type="button" onClick={props.onClose}>取消</Button><Button variant="primary"><ShieldAlert size={15} /> 记录豁免</Button></FormActions>

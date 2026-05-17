@@ -98,7 +98,7 @@ export function ProjectSection(props: {
                 {project.category !== 'test' && <Button type="button" size="sm" onClick={() => props.mutate(() => api.updateProject(project.id, { category: 'test' }), '项目已标记为测试数据', { reloadProjects: true })}>标记测试数据</Button>}
                 <DangerButton
                   title={`删除项目「${project.name}」？`}
-                  description="项目下的迭代、需求、用例、执行计划、Bug 和报告数据都会被删除。"
+                  description="项目下的迭代、需求、用例、执行计划、缺陷和报告数据都会被删除。"
                   onConfirm={() => props.mutate(() => api.deleteProject(project.id), '项目已删除', { reloadProjects: true })}
                 />
               </div>

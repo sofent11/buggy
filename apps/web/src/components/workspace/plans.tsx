@@ -59,7 +59,7 @@ export function PlanSection(props: {
           <MetricCard label="测试计划" value={props.rows.length} detail={`${props.rows.filter((row) => row.status === 'active').length} 进行中`} tone="info" />
           <MetricCard label="执行项" value={runItems.length} detail={`${passed} 已通过`} />
           <MetricCard label="失败/阻塞" value={runItems.filter((item) => ['failed', 'blocked'].includes(item.status)).length} detail="需要跟进" tone="risk" />
-          <MetricCard label="关联 Bug" value={props.bugs.length} detail="当前项目缺陷" />
+          <MetricCard label="关联缺陷" value={props.bugs.length} detail="当前项目缺陷" />
         </section>
       }
     >
@@ -101,8 +101,8 @@ function ExecutionWorkbench(props: { rows: TestPlan[]; bugs: Bug[]; users: UserP
   const retestQueue = props.bugs.filter((bug) => bug.status === 'resolved');
   const groups = [
     { label: '我的待执行', status: 'untested', detail: '等待记录结果', value: myQueue.length },
-    { label: '失败待建 Bug', status: 'failed', detail: '优先补齐缺陷来源', value: failedQueue.length },
-    { label: '待复测', status: 'resolved', detail: '已解决 Bug 待验证', value: props.bugs.filter((bug) => bug.status === 'resolved').length }
+    { label: '失败待建缺陷', status: 'failed', detail: '优先补齐缺陷来源', value: failedQueue.length },
+    { label: '待复测', status: 'resolved', detail: '已解决缺陷待验证', value: props.bugs.filter((bug) => bug.status === 'resolved').length }
   ];
   return (
     <section className="execution-workbench">
@@ -144,7 +144,7 @@ function ExecutionWorkbench(props: { rows: TestPlan[]; bugs: Bug[]; users: UserP
         />
         <QueueTable
           title="已解决待复测"
-          empty="暂无待复测 Bug"
+          empty="暂无待复测缺陷"
           rows={retestQueue.slice(0, 5).map((bug) => [
             bug.title,
             bug.resolution || bug.actualResult || '暂无修复说明',
@@ -199,8 +199,8 @@ function PlanCreateDrawer(props: {
       }}>
         {(register) => (
           <>
-            <Field><FieldLabel>计划名称</FieldLabel><Input {...register('name')} required /></Field>
-            <Field><FieldLabel>需求范围</FieldLabel><select {...register('requirementId')} onChange={(event) => setRequirementFilter(event.target.value)}><option value="">全部需求</option>{props.requirements.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></Field>
+            <Field><FieldLabel required>计划名称</FieldLabel><Input {...register('name')} required /></Field>
+            <Field><FieldLabel hint="选择需求后只展示该需求下用例">需求范围</FieldLabel><select {...register('requirementId')} onChange={(event) => setRequirementFilter(event.target.value)}><option value="">全部需求</option>{props.requirements.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></Field>
             <div className="case-picker">
               {visibleCases.map((testCase) => (
                 <label key={testCase.id} className="check-row">
@@ -267,13 +267,13 @@ export function PlanCard(props: { plan: TestPlan; iterations: Iteration[]; requi
               <MoreHorizontal size={15} />
             </summary>
             <div>
-              <DangerButton title={`删除测试计划「${props.plan.name}」？`} description={`关联 ${props.bugs.filter((bug) => bug.testPlanId === props.plan.id).length} 个 Bug。有关联缺陷时系统会阻止删除，请先迁移或关闭。`} onConfirm={() => props.mutate(() => api.deleteTestPlan(props.plan.id), '测试计划已删除')} />
+              <DangerButton title={`删除测试计划「${props.plan.name}」？`} description={`关联 ${props.bugs.filter((bug) => bug.testPlanId === props.plan.id).length} 个缺陷。有关联缺陷时系统会阻止删除，请先迁移或关闭。`} onConfirm={() => props.mutate(() => api.deleteTestPlan(props.plan.id), '测试计划已删除')} />
             </div>
           </details>
         )}
       </header>
       <DataTable
-        headers={['选择', '执行项', '状态', '实际结果', '执行人/时间', '关联 Bug', '快捷操作']}
+        headers={['选择', '执行项', '状态', '实际结果', '执行人/时间', '关联缺陷', '快捷操作']}
         rows={props.plan.runItems.map((item) => {
           const currentCase = casesById.get(item.caseId);
           const snapshotChanged = Boolean(currentCase && item.caseVersion && item.caseVersion !== (currentCase.version || 'v1'));
@@ -360,8 +360,8 @@ function RunItemActions(props: { planId: string; item: TestRunItem; users: UserP
         <Button key={status} type="button" size="sm" onClick={() => setQuickStatus(status)}>{labelOf(status)}</Button>
       ))}
       {props.canWrite && <Button type="button" size="sm" onClick={() => setEditing(true)}><Pencil size={14} /> 记录</Button>}
-      {props.canWrite && <Button type="button" size="sm" onClick={() => setBugOpen(true)}><BugIcon size={14} /> 建 Bug</Button>}
-      <Drawer title="从执行项创建 Bug" subtitle={props.item.caseTitle} open={bugOpen} onClose={() => setBugOpen(false)}>
+      {props.canWrite && <Button type="button" size="sm" onClick={() => setBugOpen(true)}><BugIcon size={14} /> 建缺陷</Button>}
+      <Drawer title="从执行项创建缺陷" subtitle={props.item.caseTitle} open={bugOpen} onClose={() => setBugOpen(false)}>
         <HookForm
           defaultValues={{
             title: `${props.item.caseTitle} 执行失败`,
@@ -389,25 +389,25 @@ function RunItemActions(props: { planId: string; item: TestRunItem; users: UserP
                 environment: text(form, 'environment'),
                 foundVersion: text(form, 'foundVersion')
               }),
-              'Bug 已从执行项创建'
+              '缺陷已从执行项创建'
             );
             setBugOpen(false);
           }}
         >
           {(register) => (
             <>
-              <Field><FieldLabel>Bug 标题</FieldLabel><Input {...register('title')} required /></Field>
-              <Field><FieldLabel>负责人</FieldLabel><select {...register('assigneeId')}><option value="">未指派</option>{props.users.map((user) => <option key={user.id} value={user.id}>{user.username}</option>)}</select></Field>
+              <Field><FieldLabel required>缺陷标题</FieldLabel><Input {...register('title')} required /></Field>
+              <Field><FieldLabel hint="指派后进入负责人处理队列">负责人</FieldLabel><select {...register('assigneeId')}><option value="">未指派</option>{props.users.map((user) => <option key={user.id} value={user.id}>{user.username}</option>)}</select></Field>
               <div className="field-grid two">
-                <Field><FieldLabel>严重级别</FieldLabel><Select name="severity" register={register} values={severities} dictionaryType="severity" defaultValue="S2" /></Field>
-                <Field><FieldLabel>优先级</FieldLabel><Select name="priority" register={register} values={priorities} dictionaryType="priority" defaultValue="P2" /></Field>
+                <Field><FieldLabel required>严重级别</FieldLabel><Select name="severity" register={register} values={severities} dictionaryType="severity" defaultValue="S2" /></Field>
+                <Field><FieldLabel required>优先级</FieldLabel><Select name="priority" register={register} values={priorities} dictionaryType="priority" defaultValue="P2" /></Field>
                 <Field><FieldLabel>SLA 截止</FieldLabel><Input type="date" {...register('dueAt')} /></Field>
                 <Field><FieldLabel>发现版本</FieldLabel><Input {...register('foundVersion')} /></Field>
               </div>
               <Field><FieldLabel>发现环境</FieldLabel><Input {...register('environment')} placeholder="测试环境、浏览器或设备" /></Field>
-              <Field><FieldLabel>复现步骤</FieldLabel><Textarea {...register('reproduceSteps')} /></Field>
-              <Field><FieldLabel>实际结果</FieldLabel><Textarea {...register('actualResult')} /></Field>
-              <FormActions><Button type="button" onClick={() => setBugOpen(false)}>取消</Button><Button variant="primary"><BugIcon size={15} /> 创建 Bug</Button></FormActions>
+              <Field><FieldLabel required>复现步骤</FieldLabel><Textarea {...register('reproduceSteps')} required /></Field>
+              <Field><FieldLabel hint="执行失败时已自动带入">实际结果</FieldLabel><Textarea {...register('actualResult')} /></Field>
+              <FormActions><Button type="button" onClick={() => setBugOpen(false)}>取消</Button><Button variant="primary"><BugIcon size={15} /> 创建缺陷</Button></FormActions>
             </>
           )}
         </HookForm>
@@ -419,9 +419,9 @@ function RunItemActions(props: { planId: string; item: TestRunItem; users: UserP
         }}>
           {(register) => (
             <>
-              <Field><FieldLabel>执行状态</FieldLabel><Select name="status" register={register} values={runStatuses} dictionaryType="testRunStatus" defaultValue={props.item.status} /></Field>
-              <Field><FieldLabel>执行人</FieldLabel><select {...register('executorId')} defaultValue={props.item.executorId || ''}><option value="">当前用户</option>{props.users.map((user) => <option key={user.id} value={user.id}>{user.username}</option>)}</select></Field>
-              <Field><FieldLabel>实际结果</FieldLabel><Textarea {...register('actualResult')} /></Field>
+              <Field><FieldLabel required>执行状态</FieldLabel><Select name="status" register={register} values={runStatuses} dictionaryType="testRunStatus" defaultValue={props.item.status} /></Field>
+              <Field><FieldLabel hint="用于生成个人执行队列">执行人</FieldLabel><select {...register('executorId')} defaultValue={props.item.executorId || ''}><option value="">当前用户</option>{props.users.map((user) => <option key={user.id} value={user.id}>{user.username}</option>)}</select></Field>
+              <Field><FieldLabel hint="失败/阻塞时会作为建缺陷证据">实际结果</FieldLabel><Textarea {...register('actualResult')} /></Field>
               <div className="step-result-editor">
                 <input type="hidden" name="stepResultsJson" value={JSON.stringify(stepResults)} readOnly />
                 <div className="sub-title">步骤级结果</div>
@@ -459,7 +459,7 @@ function RunItemActions(props: { planId: string; item: TestRunItem; users: UserP
         description={props.item.caseTitle}
         label={quickStatus === 'failed' || quickStatus === 'blocked' ? '问题说明' : '验证说明'}
         placeholder={quickStatus === 'failed' || quickStatus === 'blocked' ? '说明失败/阻塞现象、环境或依赖' : '说明通过依据、验证环境或数据范围'}
-        confirmText={quickStatus === 'failed' || quickStatus === 'blocked' ? (props.item.bugIds.length ? '确认记录' : '确认并补 Bug') : '确认记录'}
+        confirmText={quickStatus === 'failed' || quickStatus === 'blocked' ? (props.item.bugIds.length ? '确认记录' : '确认并补缺陷') : '确认记录'}
         destructive={quickStatus === 'failed' || quickStatus === 'blocked'}
         onCancel={() => setQuickStatus(null)}
         onConfirm={async (note) => {

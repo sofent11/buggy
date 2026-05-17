@@ -412,13 +412,13 @@ export function StepEditor(props: { name?: string; initialSteps?: TestCaseStep[]
             onChange={(event) => setSteps((current) => current.map((item, itemIndex) => (itemIndex === index ? { ...item, expected: event.target.value } : item)))}
             placeholder="步骤预期"
           />
-          <Button type="button" size="icon" variant="ghost" onClick={() => setSteps((current) => current.filter((_, itemIndex) => itemIndex !== index))}>
+          <Button type="button" size="icon" variant="ghost" aria-label={`删除第 ${index + 1} 步`} title={`删除第 ${index + 1} 步`} onClick={() => setSteps((current) => current.filter((_, itemIndex) => itemIndex !== index))}>
             <Trash2 size={14} />
           </Button>
-          <Button type="button" size="icon" variant="ghost" disabled={index === 0} onClick={() => setSteps((current) => moveStep(current, index, index - 1))}>
+          <Button type="button" size="icon" variant="ghost" aria-label={`上移第 ${index + 1} 步`} title={`上移第 ${index + 1} 步`} disabled={index === 0} onClick={() => setSteps((current) => moveStep(current, index, index - 1))}>
             <ChevronUp size={14} />
           </Button>
-          <Button type="button" size="icon" variant="ghost" disabled={index === ordered.length - 1} onClick={() => setSteps((current) => moveStep(current, index, index + 1))}>
+          <Button type="button" size="icon" variant="ghost" aria-label={`下移第 ${index + 1} 步`} title={`下移第 ${index + 1} 步`} disabled={index === ordered.length - 1} onClick={() => setSteps((current) => moveStep(current, index, index + 1))}>
             <ChevronDown size={14} />
           </Button>
         </div>

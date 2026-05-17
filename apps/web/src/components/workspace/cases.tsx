@@ -18,7 +18,7 @@ const caseColumns = [
   { key: 'module', label: '模块' },
   { key: 'steps', label: '步骤' },
   { key: 'coverage', label: '执行覆盖' },
-  { key: 'bugs', label: '关联 Bug' },
+  { key: 'bugs', label: '关联缺陷' },
   { key: 'version', label: '版本' },
   { key: 'review', label: '评审' },
   { key: 'automation', label: '自动化' },
@@ -244,7 +244,7 @@ export function CaseSection(props: {
             <span className="toolbar-summary">{loadingPage ? '加载中...' : `${rows.length}/${pageResult.total} 条用例`}</span>
             {props.canWrite && <button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建用例</button>}
           </Toolbar>
-          {props.canWrite && (
+          {props.canWrite && props.rows.length > 0 && (
             <div className="bulk-action-bar" aria-label="用例批量操作">
               <strong>{hasSelectedCases ? `已选 ${selectedCaseIds.length} 条` : '未选择用例'}</strong>
               <select value={bulkReviewStatus || 'in_review'} onChange={(event) => setBulkReviewStatus(event.target.value as TestCase['reviewStatus'])}>
@@ -428,7 +428,7 @@ function CaseGovernanceBoard(props: {
       <button type="button" className={`${casesWithActiveBugs.length ? 'tone-risk' : ''} ${props.activeQueue === 'activeBugs' ? 'active' : ''}`} onClick={() => props.onQueue('activeBugs')}>
         <span>缺陷关联</span>
         <strong>{casesWithActiveBugs.length}</strong>
-        <small>仍有活跃 Bug</small>
+        <small>仍有活跃缺陷</small>
       </button>
       <button type="button" className={props.activeQueue === 'all' ? 'active' : ''} onClick={() => props.onQueue('all')}>
         <span>全部用例</span>
@@ -483,7 +483,7 @@ function CaseRowActions(props: {
           {props.canManage && (
             <DangerButton
               title={`删除用例「${props.row.title}」？`}
-              description={`关联 ${props.runCount} 个执行项、${props.bugCount} 个 Bug。有关联数据时系统会阻止删除，请先迁移或清理。`}
+              description={`关联 ${props.runCount} 个执行项、${props.bugCount} 个缺陷。有关联数据时系统会阻止删除，请先迁移或清理。`}
               onConfirm={() => { void props.onDelete(); }}
             />
           )}
@@ -536,16 +536,17 @@ function caseReviewActions(status: TestCase['reviewStatus']) {
 }
 
 export function TestCaseFields(props: { row?: TestCase; requirements: Requirement[]; users?: UserProfile[]; defaultRequirementId?: string; register?: UseFormRegister<StringFormValues> }) {
+  const defaultRequirementId = props.row?.requirementId || props.defaultRequirementId || (props.requirements.length === 1 ? props.requirements[0]?.id : '') || '';
   return (
     <div className="field-grid">
-      <Field className="span-two"><FieldLabel>用例标题</FieldLabel><Input {...registerField(props.register, 'title')} defaultValue={props.row?.title} required /></Field>
-      <Field><FieldLabel>绑定需求</FieldLabel><select {...registerField(props.register, 'requirementId')} defaultValue={props.row?.requirementId || props.defaultRequirementId || ''}><option value="">不绑定需求</option>{props.requirements.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></Field>
-      <Field><FieldLabel>优先级</FieldLabel><Select name="priority" register={props.register} values={priorities} dictionaryType="priority" defaultValue={props.row?.priority || 'P2'} /></Field>
-      <Field><FieldLabel>状态</FieldLabel><Select name="status" register={props.register} values={caseStatuses} dictionaryType="testCaseStatus" defaultValue={props.row?.status || 'ready'} /></Field>
-      <Field><FieldLabel>负责人</FieldLabel><select {...registerField(props.register, 'ownerId')} defaultValue={props.row?.ownerId || ''}><option value="">未指派</option>{(props.users || []).map((item) => <option key={item.id} value={item.id}>{item.username}</option>)}</select></Field>
-      <Field className="span-two"><FieldLabel>前置条件</FieldLabel><Input {...registerField(props.register, 'preconditions')} defaultValue={props.row?.preconditions} /></Field>
+      <Field className="span-two"><FieldLabel required>用例标题</FieldLabel><Input {...registerField(props.register, 'title')} defaultValue={props.row?.title} required /></Field>
+      <Field><FieldLabel hint="建议绑定，保证需求覆盖链路">绑定需求</FieldLabel><select {...registerField(props.register, 'requirementId')} defaultValue={defaultRequirementId}><option value="">不绑定需求</option>{props.requirements.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></Field>
+      <Field><FieldLabel required>优先级</FieldLabel><Select name="priority" register={props.register} values={priorities} dictionaryType="priority" defaultValue={props.row?.priority || 'P2'} /></Field>
+      <Field><FieldLabel required>状态</FieldLabel><Select name="status" register={props.register} values={caseStatuses} dictionaryType="testCaseStatus" defaultValue={props.row?.status || 'ready'} /></Field>
+      <Field><FieldLabel hint="用于执行队列归属">负责人</FieldLabel><select {...registerField(props.register, 'ownerId')} defaultValue={props.row?.ownerId || ''}><option value="">未指派</option>{(props.users || []).map((item) => <option key={item.id} value={item.id}>{item.username}</option>)}</select></Field>
+      <Field className="span-two"><FieldLabel hint="环境、账号、数据等前置条件">前置条件</FieldLabel><Input {...registerField(props.register, 'preconditions')} defaultValue={props.row?.preconditions} /></Field>
       <div className="span-four"><StepEditor initialSteps={props.row?.steps} /></div>
-      <Field className="span-four"><FieldLabel>最终预期结果</FieldLabel><Textarea {...registerField(props.register, 'expectedResult')} defaultValue={props.row?.expectedResult} /></Field>
+      <Field className="span-four"><FieldLabel hint="用于执行失败时快速带入缺陷证据">最终预期结果</FieldLabel><Textarea {...registerField(props.register, 'expectedResult')} defaultValue={props.row?.expectedResult} /></Field>
       <details className="advanced-fields span-four" open={Boolean(props.row)}>
         <summary>高级信息</summary>
         <div className="field-grid">
@@ -614,7 +615,7 @@ function CaseOverview(props: { row: TestCase; requirements: Requirement[]; users
       <article>
         <span>执行/缺陷</span>
         <strong>{executions.length} 次执行</strong>
-        <small>{activeBugs.length} 个活跃 Bug</small>
+        <small>{activeBugs.length} 个活跃缺陷</small>
       </article>
       <section className="evidence-block">
         <strong>测试步骤</strong>
@@ -735,10 +736,10 @@ function CaseEvidence(props: { row: TestCase; plans: TestPlan[]; bugs: Bug[] }) 
         />
       </section>
       <section>
-        <div className="sub-title">关联 Bug</div>
+        <div className="sub-title">关联缺陷</div>
         <DataTable
-          headers={['Bug', '严重级别', '状态']}
-          emptyText="暂无关联 Bug"
+          headers={['缺陷', '严重级别', '状态']}
+          emptyText="暂无关联缺陷"
           rows={caseBugs.slice(0, 5).map((bug) => [
             bug.title,
             <StatusBadge value={bug.severity} dictionaryType="severity" />,

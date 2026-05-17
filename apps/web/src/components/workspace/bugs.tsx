@@ -14,7 +14,7 @@ import { bugPayload, matchKeyword, requirementTitle, shortDate, userName } from 
 import { ColumnChooser, DataPage, DataTable, DangerButton, Drawer, EmptyState, FilterChips, HookForm, MetricCard, Pagination, registerField, SearchBox, Select, StatusBadge, TextConfirmDialog, Toolbar } from './common.js';
 
 const bugColumns = [
-  { key: 'bug', label: 'Bug', locked: true, sortKey: 'title' },
+  { key: 'bug', label: '缺陷', locked: true, sortKey: 'title' },
   { key: 'source', label: '来源' },
   { key: 'triage', label: '分诊' },
   { key: 'assignee', label: '负责人' },
@@ -145,11 +145,11 @@ export function BugSection(props: {
 
   return (
     <DataPage
-      title="Bug 管理"
+      title="缺陷管理"
       icon={BugIcon}
       metrics={
         <section className="insight-strip">
-          <MetricCard label="Bug 总数" value={props.rows.length} detail={`${props.rows.filter((row) => !['verified', 'closed'].includes(row.status)).length} 活跃`} tone="info" />
+          <MetricCard label="缺陷总数" value={props.rows.length} detail={`${props.rows.filter((row) => !['verified', 'closed'].includes(row.status)).length} 活跃`} tone="info" />
           <MetricCard label="严重缺陷" value={props.rows.filter((row) => ['S0', 'S1'].includes(row.severity)).length} detail="S0/S1" tone="risk" />
           <MetricCard label="已解决" value={props.rows.filter((row) => row.status === 'resolved').length} detail="待验证" />
           <MetricCard label="关闭率" value={`${props.rows.length ? Math.round((props.rows.filter((row) => row.status === 'closed').length / props.rows.length) * 100) : 0}%`} detail="已关闭 / 总数" tone="good" />
@@ -157,7 +157,7 @@ export function BugSection(props: {
       }
     >
       <Toolbar>
-        <SearchBox value={keyword} onChange={setKeyword} placeholder="搜索 Bug、复现、实际结果" />
+        <SearchBox value={keyword} onChange={setKeyword} placeholder="搜索缺陷、复现、实际结果" />
         <Select value={status} onChange={setStatus} values={bugStatuses} dictionaryType="bugStatus" emptyLabel="全部状态" />
         <Select value={severity} onChange={setSeverity} values={severities} dictionaryType="severity" emptyLabel="全部严重级别" />
         <Select value={triageStatus} onChange={setTriageStatus} values={triageStatuses} emptyLabel="全部分诊" />
@@ -171,8 +171,8 @@ export function BugSection(props: {
           <option value={50}>50 / 页</option>
         </select>
         <ColumnChooser columns={bugColumns} visible={visibleColumns} onChange={setVisibleColumns} />
-        <span className="toolbar-summary">{loadingPage ? '加载中...' : `${pageResult.total} 个 Bug`}</span>
-        {props.canWrite && <button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建 Bug</button>}
+        <span className="toolbar-summary">{loadingPage ? '加载中...' : `${pageResult.total} 个缺陷`}</span>
+        {props.canWrite && <button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建缺陷</button>}
       </Toolbar>
       <FilterChips filters={[
         { label: '状态', value: status, onClear: () => setStatus('') },
@@ -187,7 +187,7 @@ export function BugSection(props: {
         sortBy={sortBy}
         sortOrder={sortOrder}
         onSort={sorted}
-        emptyText="暂无 Bug"
+        emptyText="暂无缺陷"
         rows={rows.map((row) => {
           const cells: Record<string, ReactNode> = {
             bug: <div className="cell-main"><strong>{row.title}</strong><span>{row.actualResult || row.reproduceSteps || '未填写问题详情'}</span></div>,
@@ -207,7 +207,7 @@ export function BugSection(props: {
               onTransition={(action) => setTransition({ bug: row, status: action.status, label: action.label })}
               onEdit={() => setEditing(row)}
               onDuplicate={() => setDuplicate(row)}
-              onDelete={() => props.mutate(() => api.deleteBug(row.id), 'Bug 已删除')}
+              onDelete={() => props.mutate(() => api.deleteBug(row.id), '缺陷已删除')}
             />
           };
           return visibleDefinitions.map((column) => cells[column.key]);
@@ -216,18 +216,18 @@ export function BugSection(props: {
       <Pagination page={pageResult.page} pageSize={pageResult.pageSize} total={pageResult.total} onPage={setPage} />
       {rows.length === 0 && (
         <EmptyState
-          text="暂无 Bug"
+          text="暂无缺陷"
           detail="执行失败或线上问题都可以在这里沉淀，并关联到需求、用例和测试计划。"
-          action={props.canWrite ? <button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建 Bug</button> : undefined}
+          action={props.canWrite ? <button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建缺陷</button> : undefined}
         />
       )}
-      <BugDrawer title="新建 Bug" open={creating} requirements={props.requirements} cases={props.cases} plans={props.plans} bugs={props.rows} users={memberUsers} canWrite={props.canWrite} onClose={() => setCreating(false)} onSubmit={async (form) => {
-        await props.mutate(() => api.createBug(bugPayload(form, props.projectId)), 'Bug 已创建');
+      <BugDrawer title="新建缺陷" open={creating} requirements={props.requirements} cases={props.cases} plans={props.plans} bugs={props.rows} users={memberUsers} canWrite={props.canWrite} onClose={() => setCreating(false)} onSubmit={async (form) => {
+        await props.mutate(() => api.createBug(bugPayload(form, props.projectId)), '缺陷已创建');
         setCreating(false);
       }} />
-      <BugDrawer title="编辑 Bug" row={editingRow || undefined} open={Boolean(editing)} requirements={props.requirements} cases={props.cases} plans={props.plans} bugs={props.rows} users={memberUsers} canWrite={props.canWrite} onClose={() => setEditing(null)} onSubmit={async (form) => {
+      <BugDrawer title="编辑缺陷" row={editingRow || undefined} open={Boolean(editing)} requirements={props.requirements} cases={props.cases} plans={props.plans} bugs={props.rows} users={memberUsers} canWrite={props.canWrite} onClose={() => setEditing(null)} onSubmit={async (form) => {
         if (!editingRow) return;
-        await props.mutate(() => api.updateBug(editingRow.id, bugPayload(form, props.projectId)), 'Bug 已保存');
+        await props.mutate(() => api.updateBug(editingRow.id, bugPayload(form, props.projectId)), '缺陷已保存');
         setEditing(null);
       }} onComment={async (body) => {
         if (!editingRow) return;
@@ -246,13 +246,13 @@ export function BugSection(props: {
         onClose={() => setDuplicate(null)}
         onSubmit={async (duplicateOfId, reason) => {
           if (!duplicate) return;
-          await props.mutate(() => api.markDuplicateBug(duplicate.id, { duplicateOfId, reason }), 'Bug 已标记为重复并关闭');
+          await props.mutate(() => api.markDuplicateBug(duplicate.id, { duplicateOfId, reason }), '缺陷已标记为重复并关闭');
           setDuplicate(null);
         }}
       />
       <TextConfirmDialog
         open={Boolean(transition)}
-        title={transition ? `确认${transition.label} Bug？` : '确认流转 Bug？'}
+        title={transition ? `确认${transition.label}缺陷？` : '确认流转缺陷？'}
         description={transition ? `${transition.bug.title} · ${labelOf(transition.bug.status)} -> ${labelOf(transition.status)}。${bugTransitionImpact(transition.status)}` : undefined}
         label={transition?.status === 'resolved' ? '修复说明' : transition?.status === 'verified' ? '验证结论' : '流转原因'}
         placeholder={transition?.status === 'resolved' ? '说明根因、修复版本和修复范围' : transition?.status === 'verified' ? '说明复测环境、数据和验证结论' : '填写处理说明或重开原因'}
@@ -266,7 +266,7 @@ export function BugSection(props: {
             reason,
             resolution: transition.status === 'resolved' ? reason : undefined,
             verifyResult: ['verified', 'closed'].includes(transition.status) ? reason : undefined
-          }), 'Bug 状态已流转');
+          }), '缺陷状态已流转');
           setTransition(null);
         }}
       />
@@ -314,7 +314,7 @@ function BugRowActions(props: {
               <action.icon size={14} /> {action.label}
             </Button>
           ))}
-          {props.canManage && <DangerButton title={`删除 Bug「${props.row.title}」？`} onConfirm={() => { void props.onDelete(); }} />}
+          {props.canManage && <DangerButton title={`删除缺陷「${props.row.title}」？`} onConfirm={() => { void props.onDelete(); }} />}
         </div>
       </details>
     </div>
@@ -327,7 +327,7 @@ function BugTriageBoard(props: { rows: Bug[]; onTriage: (value: string) => void;
   const overdue = activeRows.filter((row) => isOverdue(row));
   const readyForRetest = props.rows.filter((row) => row.status === 'resolved');
   return (
-    <section className="workflow-lanes" aria-label="Bug 分诊工作台">
+    <section className="workflow-lanes" aria-label="缺陷分诊工作台">
       <button type="button" onClick={() => props.onTriage('new')}>
         <span>待分诊</span>
         <strong>{needTriage.length}</strong>
@@ -378,19 +378,22 @@ function slaLevelLabel(value?: Bug['slaLevel']) {
 }
 
 export function BugFields(props: { row?: Bug; requirements: Requirement[]; cases: TestCase[]; plans: TestPlan[]; bugs: Bug[]; users: UserProfile[]; register?: UseFormRegister<StringFormValues> }) {
+  const defaultRequirementId = props.row?.requirementId || (props.requirements.length === 1 ? props.requirements[0]?.id : '') || '';
+  const defaultCaseId = props.row?.testCaseId || (props.cases.length === 1 ? props.cases[0]?.id : '') || '';
+  const defaultPlanId = props.row?.testPlanId || (props.plans.length === 1 ? props.plans[0]?.id : '') || '';
   return (
     <div className="bug-progressive-form">
       <div className="field-grid">
-        <Field className="span-two"><FieldLabel>Bug 标题</FieldLabel><Input {...registerField(props.register, 'title')} defaultValue={props.row?.title} required /></Field>
-        <Field><FieldLabel>严重级别</FieldLabel><Select name="severity" register={props.register} values={severities} dictionaryType="severity" defaultValue={props.row?.severity || 'S2'} /></Field>
-        <Field><FieldLabel>优先级</FieldLabel><Select name="priority" register={props.register} values={priorities} dictionaryType="priority" defaultValue={props.row?.priority || 'P2'} /></Field>
-        <Field><FieldLabel>关联需求</FieldLabel><select {...registerField(props.register, 'requirementId')} defaultValue={props.row?.requirementId || ''}><option value="">不绑定需求</option>{props.requirements.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></Field>
-        <Field><FieldLabel>关联用例</FieldLabel><select {...registerField(props.register, 'testCaseId')} defaultValue={props.row?.testCaseId || ''}><option value="">不绑定用例</option>{props.cases.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></Field>
-        <Field><FieldLabel>关联计划</FieldLabel><select {...registerField(props.register, 'testPlanId')} defaultValue={props.row?.testPlanId || ''}><option value="">不绑定计划</option>{props.plans.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
-        <Field><FieldLabel>负责人</FieldLabel><select {...registerField(props.register, 'assigneeId')} defaultValue={props.row?.assigneeId || ''}><option value="">未指派</option>{props.users.map((item) => <option key={item.id} value={item.id}>{item.username}</option>)}</select></Field>
-        <Field className="span-four"><FieldLabel>复现步骤</FieldLabel><Textarea {...registerField(props.register, 'reproduceSteps')} defaultValue={props.row?.reproduceSteps} placeholder="建议写清环境、入口、操作路径和稳定复现条件" /></Field>
-        <Field className="span-two"><FieldLabel>实际结果</FieldLabel><Textarea {...registerField(props.register, 'actualResult')} defaultValue={props.row?.actualResult} /></Field>
-        <Field className="span-two"><FieldLabel>期望结果</FieldLabel><Textarea {...registerField(props.register, 'expectedResult')} defaultValue={props.row?.expectedResult} /></Field>
+        <Field className="span-two"><FieldLabel required>缺陷标题</FieldLabel><Input {...registerField(props.register, 'title')} defaultValue={props.row?.title} required /></Field>
+        <Field><FieldLabel required>严重级别</FieldLabel><Select name="severity" register={props.register} values={severities} dictionaryType="severity" defaultValue={props.row?.severity || 'S2'} /></Field>
+        <Field><FieldLabel required>优先级</FieldLabel><Select name="priority" register={props.register} values={priorities} dictionaryType="priority" defaultValue={props.row?.priority || 'P2'} /></Field>
+        <Field><FieldLabel hint="建议绑定，保证验收追踪">关联需求</FieldLabel><select {...registerField(props.register, 'requirementId')} defaultValue={defaultRequirementId}><option value="">不绑定需求</option>{props.requirements.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></Field>
+        <Field><FieldLabel hint="从执行项创建时会自动带入">关联用例</FieldLabel><select {...registerField(props.register, 'testCaseId')} defaultValue={defaultCaseId}><option value="">不绑定用例</option>{props.cases.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></Field>
+        <Field><FieldLabel hint="定位到测试轮次">关联计划</FieldLabel><select {...registerField(props.register, 'testPlanId')} defaultValue={defaultPlanId}><option value="">不绑定计划</option>{props.plans.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
+        <Field><FieldLabel hint="用于处理队列和 SLA">负责人</FieldLabel><select {...registerField(props.register, 'assigneeId')} defaultValue={props.row?.assigneeId || ''}><option value="">未指派</option>{props.users.map((item) => <option key={item.id} value={item.id}>{item.username}</option>)}</select></Field>
+        <Field className="span-four"><FieldLabel required hint="写清环境、入口、操作路径和稳定复现条件">复现步骤</FieldLabel><Textarea {...registerField(props.register, 'reproduceSteps')} defaultValue={props.row?.reproduceSteps} placeholder="建议写清环境、入口、操作路径和稳定复现条件" required /></Field>
+        <Field className="span-two"><FieldLabel hint="实际看到的页面、接口或数据现象">实际结果</FieldLabel><Textarea {...registerField(props.register, 'actualResult')} defaultValue={props.row?.actualResult} /></Field>
+        <Field className="span-two"><FieldLabel hint="期望业务结果或验收标准">期望结果</FieldLabel><Textarea {...registerField(props.register, 'expectedResult')} defaultValue={props.row?.expectedResult} /></Field>
       </div>
       <details className="advanced-fields" open={Boolean(props.row)}>
         <summary>高级信息</summary>
@@ -455,7 +458,7 @@ export function BugDrawer(props: {
         {(register) => (
           <>
             {props.row && (
-              <div className="drawer-tabs" role="tablist" aria-label="Bug 详情视图">
+              <div className="drawer-tabs" role="tablist" aria-label="缺陷详情视图">
                 <button type="button" className={activePanel === 'overview' ? 'active' : ''} onClick={() => setActivePanel('overview')}>概览</button>
                 <button type="button" className={activePanel === 'edit' ? 'active' : ''} onClick={() => setActivePanel('edit')}>编辑</button>
                 <button type="button" className={activePanel === 'collab' ? 'active' : ''} onClick={() => setActivePanel('collab')}>协作</button>
@@ -468,7 +471,7 @@ export function BugDrawer(props: {
             {props.row && activePanel === 'history' && <BugStatusTimeline row={props.row} />}
             <FormActions>
               <Button type="button" onClick={props.onClose}>取消</Button>
-              {props.canWrite && activePanel === 'edit' && <Button variant="primary"><Save size={15} /> 保存 Bug</Button>}
+              {props.canWrite && activePanel === 'edit' && <Button variant="primary"><Save size={15} /> 保存缺陷</Button>}
             </FormActions>
           </>
         )}
@@ -530,7 +533,7 @@ function DuplicateBugDrawer(props: {
             <Field>
               <FieldLabel>源缺陷</FieldLabel>
               <select {...register('duplicateOfId')} required>
-                <option value="">选择保留的源 Bug</option>
+                <option value="">选择保留的源缺陷</option>
                 {candidates.map((bug) => <option key={bug.id} value={bug.id}>{bug.title} · {labelOf(bug.status)}</option>)}
               </select>
             </Field>
@@ -624,21 +627,21 @@ function BugStatusTimeline(props: { row: Bug }) {
 }
 
 function nextBugActions(status: BugStatus): Array<{ status: BugStatus; label: string; message: string; icon: typeof CheckCircle2 }> {
-  if (status === 'open' || status === 'reopened') return [{ status: 'in_progress', label: '处理', message: 'Bug 已进入处理', icon: Pencil }];
-  if (status === 'in_progress') return [{ status: 'resolved', label: '解决', message: 'Bug 已标记解决', icon: CheckCircle2 }];
+  if (status === 'open' || status === 'reopened') return [{ status: 'in_progress', label: '处理', message: '缺陷已进入处理', icon: Pencil }];
+  if (status === 'in_progress') return [{ status: 'resolved', label: '解决', message: '缺陷已标记解决', icon: CheckCircle2 }];
   if (status === 'resolved') return [
-    { status: 'verified', label: '验证', message: 'Bug 已验证', icon: CheckCircle2 },
-    { status: 'reopened', label: '重开', message: 'Bug 已重新打开', icon: RotateCcw }
+    { status: 'verified', label: '验证', message: '缺陷已验证', icon: CheckCircle2 },
+    { status: 'reopened', label: '重开', message: '缺陷已重新打开', icon: RotateCcw }
   ];
-  if (status === 'verified') return [{ status: 'closed', label: '关闭', message: 'Bug 已关闭', icon: CheckCircle2 }];
+  if (status === 'verified') return [{ status: 'closed', label: '关闭', message: '缺陷已关闭', icon: CheckCircle2 }];
   return [];
 }
 
 function bugTransitionImpact(status: BugStatus) {
-  if (status === 'in_progress') return '进入处理中后会继续计入活跃 Bug 和验收风险。';
+  if (status === 'in_progress') return '进入处理中后会继续计入活跃缺陷和验收风险。';
   if (status === 'resolved') return '解决后会进入待复测队列，仍会提醒验证负责人。';
   if (status === 'verified') return '验证后不再作为待复测项，但关闭前仍保留历史证据。';
-  if (status === 'closed') return '关闭后不再计入活跃 Bug 和验收阻塞。';
-  if (status === 'reopened') return '重开后会重新计入活跃 Bug 和质量风险。';
+  if (status === 'closed') return '关闭后不再计入活跃缺陷和验收阻塞。';
+  if (status === 'reopened') return '重开后会重新计入活跃缺陷和质量风险。';
   return '状态变更会记录到历史并通知相关成员。';
 }

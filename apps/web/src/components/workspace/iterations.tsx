@@ -39,7 +39,7 @@ export function IterationSection(props: {
           <MetricCard label="迭代总数" value={props.rows.length} detail={`${active} 个进行中`} tone="info" />
           <MetricCard label="需求" value={props.requirements?.length || 0} detail="已纳入当前项目" />
           <MetricCard label="执行计划" value={props.plans?.length || 0} detail="跨迭代测试轮次" />
-          <MetricCard label="活跃 Bug" value={(props.bugs || []).filter((bug) => !['verified', 'closed'].includes(bug.status)).length} detail="未验证或关闭" tone="risk" />
+          <MetricCard label="活跃缺陷" value={(props.bugs || []).filter((bug) => !['verified', 'closed'].includes(bug.status)).length} detail="未验证或关闭" tone="risk" />
         </section>
       }
     >
@@ -51,7 +51,7 @@ export function IterationSection(props: {
       </Toolbar>
       <div className="split-layout">
         <DataTable
-          headers={['迭代', '周期', '状态', '需求', '用例', '执行', '活跃 Bug', '更新时间', '操作']}
+          headers={['迭代', '周期', '状态', '需求', '用例', '执行', '活跃缺陷', '更新时间', '操作']}
           emptyText="暂无迭代"
           rows={rows.map((row) => {
             const iterationRequirements = (props.requirements || []).filter((item) => item.iterationId === row.id);

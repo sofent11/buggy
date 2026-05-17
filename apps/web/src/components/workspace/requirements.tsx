@@ -100,7 +100,7 @@ export function RequirementSection(props: {
         { label: '负责人', value: ownerId ? userName(props.users, ownerId) : '', onClear: () => setOwnerId('') }
       ]} />
       <DataTable
-        headers={['需求', '迭代', '负责人', '准入', '风险', '优先级', '状态', '用例', 'Bug', '更新时间', '操作']}
+        headers={['需求', '迭代', '负责人', '准入', '风险', '优先级', '状态', '用例', '缺陷', '更新时间', '操作']}
         emptyText="暂无需求"
         rows={rows.map((row) => [
           <div className="cell-main"><strong>{row.title}</strong><span>{row.description || '未填写描述'}</span></div>,
@@ -136,7 +136,7 @@ export function RequirementSection(props: {
                   </Button>
                 ))}
                 {props.canWrite && <Button type="button" size="sm" onClick={() => props.mutate(() => api.sendLark(row.id), 'Lark 日报已发送')}><Send size={14} /> Lark</Button>}
-                {props.canManage && <DangerButton title={`删除需求「${row.title}」？`} description={`关联 ${(props.cases || []).filter((item) => item.requirementId === row.id).length} 条用例、${(props.bugs || []).filter((item) => item.requirementId === row.id).length} 个 Bug。有关联数据时系统会阻止删除，请先迁移或清理。`} onConfirm={() => props.mutate(() => api.deleteRequirement(row.id), '需求已删除')} />}
+                {props.canManage && <DangerButton title={`删除需求「${row.title}」？`} description={`关联 ${(props.cases || []).filter((item) => item.requirementId === row.id).length} 条用例、${(props.bugs || []).filter((item) => item.requirementId === row.id).length} 个缺陷。有关联数据时系统会阻止删除，请先迁移或清理。`} onConfirm={() => props.mutate(() => api.deleteRequirement(row.id), '需求已删除')} />}
               </div>
             </details>
           </div>
@@ -145,7 +145,7 @@ export function RequirementSection(props: {
       {rows.length === 0 && (
         <EmptyState
           text="暂无需求"
-          detail="先创建需求，再从需求行直接生成覆盖用例。"
+          detail="先创建需求，再从需求行直接生成覆盖用例，保证后续执行和缺陷能追溯到业务范围。"
           action={props.canWrite ? <button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建需求</button> : undefined}
         />
       )}
@@ -234,12 +234,12 @@ function requirementAcceptanceActions(status: Requirement['acceptanceStatus']) {
 export function RequirementFields(props: { row?: Requirement; iterations: Iteration[]; users: UserProfile[]; register?: UseFormRegister<StringFormValues> }) {
   return (
     <div className="field-grid">
-      <Field className="span-two"><FieldLabel>需求标题</FieldLabel><Input {...registerField(props.register, 'title')} defaultValue={props.row?.title} required /></Field>
-      <Field><FieldLabel>绑定迭代</FieldLabel><select {...registerField(props.register, 'iterationId')} defaultValue={props.row?.iterationId || ''}><option value="">不绑定迭代</option>{props.iterations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
-      <Field><FieldLabel>负责人</FieldLabel><select {...registerField(props.register, 'ownerId')} defaultValue={props.row?.ownerId || ''}><option value="">未指派负责人</option>{props.users.map((item) => <option key={item.id} value={item.id}>{item.username}</option>)}</select></Field>
-      <Field><FieldLabel>优先级</FieldLabel><Select name="priority" register={props.register} values={priorities} dictionaryType="priority" defaultValue={props.row?.priority || 'P2'} /></Field>
-      <Field><FieldLabel>状态</FieldLabel><Select name="status" register={props.register} values={requirementStatuses} dictionaryType="requirementStatus" defaultValue={props.row?.status || 'ready'} /></Field>
-      <Field className="span-four"><FieldLabel>需求描述</FieldLabel><Textarea {...registerField(props.register, 'description')} defaultValue={props.row?.description} /></Field>
+      <Field className="span-two"><FieldLabel required>需求标题</FieldLabel><Input {...registerField(props.register, 'title')} defaultValue={props.row?.title} required /></Field>
+      <Field><FieldLabel hint="用于迭代维度汇总">绑定迭代</FieldLabel><select {...registerField(props.register, 'iterationId')} defaultValue={props.row?.iterationId || ''}><option value="">不绑定迭代</option>{props.iterations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
+      <Field><FieldLabel hint="用于准入和验收责任">负责人</FieldLabel><select {...registerField(props.register, 'ownerId')} defaultValue={props.row?.ownerId || ''}><option value="">未指派负责人</option>{props.users.map((item) => <option key={item.id} value={item.id}>{item.username}</option>)}</select></Field>
+      <Field><FieldLabel required>优先级</FieldLabel><Select name="priority" register={props.register} values={priorities} dictionaryType="priority" defaultValue={props.row?.priority || 'P2'} /></Field>
+      <Field><FieldLabel required>状态</FieldLabel><Select name="status" register={props.register} values={requirementStatuses} dictionaryType="requirementStatus" defaultValue={props.row?.status || 'ready'} /></Field>
+      <Field className="span-four"><FieldLabel hint="补充验收口径、范围边界和关键规则">需求描述</FieldLabel><Textarea {...registerField(props.register, 'description')} defaultValue={props.row?.description} /></Field>
       <details className="advanced-fields span-four" open={Boolean(props.row)}>
         <summary>高级信息</summary>
         <div className="field-grid">

@@ -26,6 +26,7 @@ export type TestRunStatus = 'untested' | 'passed' | 'failed' | 'blocked' | 'skip
 export type BugStatus = 'open' | 'in_progress' | 'resolved' | 'verified' | 'closed' | 'reopened';
 export type Priority = 'P0' | 'P1' | 'P2' | 'P3';
 export type Severity = 'S0' | 'S1' | 'S2' | 'S3';
+export type SlaLevel = 'critical' | 'high' | 'normal' | 'low';
 export type RequirementAcceptanceStatus = 'not_ready' | 'ready' | 'approved' | 'rejected';
 export type TestCaseReviewStatus = 'draft' | 'in_review' | 'approved' | 'changes_requested';
 export type TestCaseAutomationStatus = 'manual' | 'candidate' | 'automated';
@@ -83,6 +84,51 @@ export interface RiskWaiver {
   createdAt: string;
 }
 
+export interface ProjectSlaPolicy {
+  enabled: boolean;
+  criticalHours: number;
+  highHours: number;
+  normalHours: number;
+  lowHours: number;
+}
+
+export interface ProjectIntegrationSettings {
+  larkWebhook?: string;
+  jiraBaseUrl?: string;
+  jiraProjectKey?: string;
+  ciDashboardUrl?: string;
+  externalWebhookUrl?: string;
+}
+
+export interface ProjectQualitySettings {
+  slaPolicy: ProjectSlaPolicy;
+  defaultGateRules: QualityGateRule[];
+  integrations: ProjectIntegrationSettings;
+}
+
+export const DEFAULT_PROJECT_SLA_POLICY: ProjectSlaPolicy = {
+  enabled: true,
+  criticalHours: 24,
+  highHours: 48,
+  normalHours: 120,
+  lowHours: 240
+};
+
+export const DEFAULT_PROJECT_GATE_RULES: QualityGateRule[] = [
+  { id: 'case_coverage', label: '必须存在覆盖用例', metric: 'case_coverage', enabled: true, blocking: true, threshold: 0, description: '验收范围内至少有一条可追踪用例' },
+  { id: 'plan_coverage', label: '用例必须纳入测试计划', metric: 'plan_coverage', enabled: true, blocking: true, threshold: 0, description: '覆盖用例需要进入本次执行范围' },
+  { id: 'untested_runs', label: '不允许未测执行项', metric: 'untested_runs', enabled: true, blocking: true, threshold: 0 },
+  { id: 'failed_runs', label: '不允许失败执行项', metric: 'failed_runs', enabled: true, blocking: true, threshold: 0 },
+  { id: 'blocked_runs', label: '不允许阻塞执行项', metric: 'blocked_runs', enabled: true, blocking: true, threshold: 0 },
+  { id: 'active_s01_bugs', label: '不允许 S0/S1 活跃缺陷', metric: 'active_s01_bugs', enabled: true, blocking: true, threshold: 0 }
+];
+
+export const DEFAULT_PROJECT_QUALITY_SETTINGS: ProjectQualitySettings = {
+  slaPolicy: DEFAULT_PROJECT_SLA_POLICY,
+  defaultGateRules: DEFAULT_PROJECT_GATE_RULES,
+  integrations: {}
+};
+
 export type Id = string;
 
 export interface UserProfile {
@@ -111,6 +157,7 @@ export interface Project {
   category?: ProjectCategory;
   ownerId: Id;
   members: ProjectMember[];
+  qualitySettings?: ProjectQualitySettings;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -350,7 +397,7 @@ export interface Bug {
   rootCause?: string;
   resolution?: string;
   verifyResult?: string;
-  slaLevel?: 'critical' | 'high' | 'normal' | 'low';
+  slaLevel?: SlaLevel;
   watcherIds?: Id[];
   triageStatus?: BugTriageStatus;
   resolvedAt?: string;
@@ -481,6 +528,7 @@ export interface ReportSummary {
     bugStatus: Array<{ key: BugStatus; label: string; value: number }>;
     bugSeverity: Array<{ key: Severity; label: string; value: number }>;
     bugRootCause: Array<{ key: string; label: string; value: number }>;
+    bugTrend: Array<{ label: string; created: number; resolved: number; closed: number; overdue: number }>;
     priority: Array<{ key: Priority; label: string; value: number }>;
     iterationRank: Array<{ id: Id; name: string; requirements: number; cases: number; executionTotal: number; passRate: number; activeBugs: number }>;
     requirementCoverage: Array<{ id: Id; title: string; caseCount: number; bugCount: number; status: RequirementStatus; riskOwnerId?: Id; dueDate?: string; riskNote?: string }>;
@@ -503,7 +551,7 @@ export interface ReportSummary {
       executedAt?: string;
       bugIds: Id[];
     }>;
-    bugs: Array<{ id: Id; title: string; requirementId?: Id; testPlanId?: Id; runItemId?: Id; severity: Severity; priority: Priority; status: BugStatus; assigneeId?: Id; dueAt?: string }>;
+    bugs: Array<{ id: Id; title: string; requirementId?: Id; testPlanId?: Id; runItemId?: Id; severity: Severity; priority: Priority; status: BugStatus; assigneeId?: Id; dueAt?: string; rootCause?: string; slaLevel?: SlaLevel; environment?: string; foundVersion?: string; fixVersion?: string }>;
   };
 }
 

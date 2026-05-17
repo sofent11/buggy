@@ -174,6 +174,11 @@ export function App() {
     if (projectId) localStorage.setItem(LAST_PROJECT_KEY, projectId);
   }, []);
 
+  const changeTab = useCallback((nextTab: Tab) => {
+    setTab(nextTab);
+    window.setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 0);
+  }, []);
+
   useEffect(() => {
     if (localStorage.getItem(LOGGED_OUT_KEY) === '1') {
       setLoading(false);
@@ -246,7 +251,7 @@ export function App() {
       { label: '需求', value: report?.requirements.total || 0, detail: `${report?.requirements.done || 0} 已完成`, icon: Flag },
       { label: '用例', value: report?.cases.total || 0, detail: `${report?.cases.ready || 0} 可执行`, icon: ClipboardCheck },
       { label: '通过率', value: `${report?.execution.passRate || 0}%`, detail: `${report?.execution.passed || 0}/${report?.execution.total || 0}`, icon: Activity },
-      { label: '活跃 Bug', value: report?.bugs.active || 0, detail: `${report?.bugs.total || 0} 总数`, icon: BugIcon }
+      { label: '活跃缺陷', value: report?.bugs.active || 0, detail: `${report?.bugs.total || 0} 总数`, icon: BugIcon }
     ];
   }, [data.report]);
   const visibleData = useMemo(() => filterWorkspaceData(data, deferredGlobalKeyword), [data, deferredGlobalKeyword]);
@@ -258,12 +263,12 @@ export function App() {
   const unreadCount = data.notifications.filter((item) => item.status === 'unread').length;
   const openEntity = useCallback((entityType: string, entityId?: string) => {
     const nextTab = tabOfEntity(entityType);
-    if (nextTab) setTab(nextTab);
+    if (nextTab) changeTab(nextTab);
     if (!entityId) return;
     window.setTimeout(() => {
       window.dispatchEvent(new CustomEvent('buggy:open-entity', { detail: { entityType, entityId } }));
     }, 80);
-  }, []);
+  }, [changeTab]);
 
   if (loading) return <div className="boot">正在启动 Buggy...</div>;
 
@@ -320,15 +325,15 @@ export function App() {
           </div>
         </div>
         <nav>
-          <NavButton tab="overview" current={tab} icon={BarChart3} index={1} label="工作台" onClick={setTab} />
-          <NavButton tab="projects" current={tab} icon={FolderKanban} index={2} label="项目" onClick={setTab} />
-          <NavButton tab="iterations" current={tab} icon={CalendarRange} index={3} label="迭代" onClick={setTab} />
-          <NavButton tab="requirements" current={tab} icon={Flag} index={4} label="需求" onClick={setTab} />
-          <NavButton tab="cases" current={tab} icon={ClipboardCheck} index={5} label="用例库" onClick={setTab} />
-          <NavButton tab="plans" current={tab} icon={Activity} index={6} label="测试执行" onClick={setTab} />
-          <NavButton tab="bugs" current={tab} icon={BugIcon} index={7} label="缺陷" onClick={setTab} />
-          <NavButton tab="reports" current={tab} icon={FileText} index={8} label="报表" onClick={setTab} />
-          <NavButton tab="settings" current={tab} icon={Settings} index={9} label="配置" onClick={setTab} />
+          <NavButton tab="overview" current={tab} icon={BarChart3} index={1} label="工作台" onClick={changeTab} />
+          <NavButton tab="projects" current={tab} icon={FolderKanban} index={2} label="项目" onClick={changeTab} />
+          <NavButton tab="iterations" current={tab} icon={CalendarRange} index={3} label="迭代" onClick={changeTab} />
+          <NavButton tab="requirements" current={tab} icon={Flag} index={4} label="需求" onClick={changeTab} />
+          <NavButton tab="cases" current={tab} icon={ClipboardCheck} index={5} label="用例库" onClick={changeTab} />
+          <NavButton tab="plans" current={tab} icon={Activity} index={6} label="测试执行" onClick={changeTab} />
+          <NavButton tab="bugs" current={tab} icon={BugIcon} index={7} label="缺陷" onClick={changeTab} />
+          <NavButton tab="reports" current={tab} icon={FileText} index={8} label="报表" onClick={changeTab} />
+          <NavButton tab="settings" current={tab} icon={Settings} index={9} label="配置" onClick={changeTab} />
         </nav>
         <div className="sidebar-footer">
           <button type="button" className="ghost" onClick={() => setHelpOpen(true)}>
@@ -456,7 +461,7 @@ export function App() {
           <>
             {tab === 'overview' && currentProject && (
               <section className="grid">
-                <QualityCommandCenter data={data} user={user} onJump={setTab} onOpenEntity={openEntity} />
+                <QualityCommandCenter data={data} user={user} onJump={changeTab} onOpenEntity={openEntity} />
                 {dashboard.map((item) => (
                   <article key={item.label} className="metric">
                     <item.icon size={22} />
@@ -465,9 +470,9 @@ export function App() {
                     <small>{item.detail}</small>
                   </article>
                 ))}
-                <QualityWorkflowNavigator data={data} onJump={setTab} />
-                <QualityHealthCenter data={data} onJump={setTab} onOpenEntity={openEntity} />
-                <ProjectOnboarding data={data} currentProject={currentProject} onJump={setTab} />
+                <QualityWorkflowNavigator data={data} onJump={changeTab} />
+                <QualityHealthCenter data={data} onJump={changeTab} onOpenEntity={openEntity} />
+                <ProjectOnboarding data={data} currentProject={currentProject} onJump={changeTab} />
                 <RecentWork data={visibleData} />
                 <section className="panel">
                   <h2>消息通知</h2>
@@ -588,6 +593,7 @@ export function App() {
             {tab === 'reports' && currentProject && (
               <ReportSection
                 projectId={currentProject.id}
+                currentProject={currentProject}
                 scopes={visibleData.acceptanceScopes}
                 iterations={data.iterations}
                 requirements={data.requirements}
@@ -603,7 +609,9 @@ export function App() {
             {tab === 'settings' && currentProject && (
               <SettingsSection
                 projectId={currentProject.id}
+                currentProject={currentProject}
                 currentUser={user}
+                canManage={canManageProject}
                 dictionaries={data.dictionaries}
                 users={data.users}
                 onNotice={setNotice}
@@ -632,7 +640,7 @@ export function App() {
           if (notification.status === 'unread') void mutate(() => api.markNotificationRead(notification.id), '通知已标记已读');
           const nextTab = tabOfNotification(notification);
           if (nextTab) {
-            setTab(nextTab);
+            changeTab(nextTab);
             setNotificationOpen(false);
             window.setTimeout(() => {
               window.dispatchEvent(new CustomEvent('buggy:open-entity', { detail: { entityType: notification.entityType, entityId: notification.entityId } }));
