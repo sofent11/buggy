@@ -77,6 +77,10 @@ export class ListQueryDto {
   assigneeId?: string;
 
   @IsOptional()
+  @IsString()
+  team?: string;
+
+  @IsOptional()
   @IsMongoId()
   ownerId?: string;
 

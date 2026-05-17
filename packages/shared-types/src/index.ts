@@ -31,6 +31,7 @@ export type RequirementAcceptanceStatus = 'not_ready' | 'ready' | 'approved' | '
 export type TestCaseReviewStatus = 'draft' | 'in_review' | 'approved' | 'changes_requested';
 export type TestCaseAutomationStatus = 'manual' | 'candidate' | 'automated';
 export type BugTriageStatus = 'new' | 'triaged' | 'needs_info' | 'duplicate' | 'accepted';
+export type BugTeam = 'web' | 'android' | 'ios' | 'development' | 'product' | 'design' | 'qa' | 'operations' | 'pm' | 'other';
 export type SavedViewVisibility = 'private' | 'project';
 
 export interface QualityGateResult {
@@ -388,6 +389,7 @@ export interface Bug {
   priority: Priority;
   status: BugStatus;
   assigneeId?: Id;
+  team?: BugTeam;
   reporterId?: Id;
   duplicateOfId?: Id;
   dueAt?: string;
@@ -551,7 +553,7 @@ export interface ReportSummary {
       executedAt?: string;
       bugIds: Id[];
     }>;
-    bugs: Array<{ id: Id; title: string; requirementId?: Id; testPlanId?: Id; runItemId?: Id; severity: Severity; priority: Priority; status: BugStatus; assigneeId?: Id; dueAt?: string; rootCause?: string; slaLevel?: SlaLevel; environment?: string; foundVersion?: string; fixVersion?: string }>;
+    bugs: Array<{ id: Id; title: string; requirementId?: Id; testPlanId?: Id; runItemId?: Id; severity: Severity; priority: Priority; status: BugStatus; assigneeId?: Id; team?: BugTeam; dueAt?: string; rootCause?: string; slaLevel?: SlaLevel; environment?: string; foundVersion?: string; fixVersion?: string }>;
   };
 }
 

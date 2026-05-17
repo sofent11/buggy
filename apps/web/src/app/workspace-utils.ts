@@ -32,7 +32,7 @@ export function filterWorkspaceData(data: WorkspaceData, keyword: string): Works
     ),
     plans: data.plans.filter((item) => matchKeyword([item.name, item.round, item.status], normalized)),
     bugs: data.bugs.filter((item) =>
-      matchKeyword([item.title, item.actualResult || '', item.expectedResult || '', item.reproduceSteps || '', item.priority, item.severity, item.status], normalized)
+      matchKeyword([item.title, item.actualResult || '', item.expectedResult || '', item.reproduceSteps || '', item.priority, item.severity, item.status, item.team || '', item.team ? labelOf(item.team) : ''], normalized)
     ),
     acceptanceScopes: data.acceptanceScopes.filter((item) => matchKeyword([item.name, item.description || '', item.status], normalized))
   };
@@ -174,6 +174,7 @@ export function bugPayload(form: FormData, projectId: string): Partial<Bug> {
     severity: text(form, 'severity') as never,
     priority: text(form, 'priority') as never,
     status: text(form, 'status') as never,
+    team: text(form, 'team') as never,
     environment: text(form, 'environment'),
     foundVersion: text(form, 'foundVersion'),
     fixVersion: text(form, 'fixVersion'),

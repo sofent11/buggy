@@ -25,6 +25,7 @@ export const runStatuses = ['untested', 'passed', 'failed', 'blocked', 'skipped'
 export const bugStatuses = ['open', 'in_progress', 'resolved', 'verified', 'closed', 'reopened'] as const;
 export const priorities = ['P0', 'P1', 'P2', 'P3'] as const;
 export const severities = ['S0', 'S1', 'S2', 'S3'] as const;
+export const bugTeams = ['web', 'android', 'ios', 'development', 'product', 'design', 'qa', 'operations', 'pm', 'other'] as const;
 export const acceptanceStatuses = ['not_ready', 'ready', 'approved', 'rejected'] as const;
 export const caseReviewStatuses = ['draft', 'in_review', 'approved', 'changes_requested'] as const;
 export const automationStatuses = ['manual', 'candidate', 'automated'] as const;

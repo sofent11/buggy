@@ -8,7 +8,7 @@ import { Field, FieldLabel, FormActions } from '../ui/form.js';
 import { Input } from '../ui/input.js';
 import { Textarea } from '../ui/textarea.js';
 import { labelOf } from '../../labels.js';
-import { bugStatuses, priorities, severities, triageStatuses } from '../../app/constants.js';
+import { bugStatuses, bugTeams, priorities, severities, triageStatuses } from '../../app/constants.js';
 import type { StringFormValues } from '../../app/types.js';
 import { bugPayload, matchKeyword, requirementTitle, shortDate, userName } from '../../app/workspace-utils.js';
 import { ColumnChooser, DataPage, DataTable, DangerButton, Drawer, EmptyState, FilterChips, HookForm, MetricCard, Pagination, registerField, SearchBox, Select, StatusBadge, TextConfirmDialog, Toolbar, RowMoreMenu } from './common.js';
@@ -17,6 +17,7 @@ const bugColumns = [
   { key: 'bug', label: '缺陷', locked: true, sortKey: 'title' },
   { key: 'source', label: '来源' },
   { key: 'triage', label: '分诊' },
+  { key: 'team', label: '团队', sortKey: 'team' },
   { key: 'assignee', label: '负责人' },
   { key: 'collab', label: '协作' },
   { key: 'sla', label: 'SLA' },
@@ -28,6 +29,7 @@ const bugColumns = [
 ];
 
 const defaultBugColumns = bugColumns.map((column) => column.key);
+const unassignedTeamKey = '__unassigned';
 
 export function BugSection(props: {
   projectId: string;
@@ -47,6 +49,7 @@ export function BugSection(props: {
   const [status, setStatus] = useState('');
   const [severity, setSeverity] = useState('');
   const [triageStatus, setTriageStatus] = useState('');
+  const [team, setTeam] = useState('');
   const [assigneeId, setAssigneeId] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
@@ -70,13 +73,13 @@ export function BugSection(props: {
 
   useEffect(() => {
     setPage(1);
-  }, [effectiveKeyword, status, severity, assigneeId, pageSize]);
+  }, [effectiveKeyword, status, severity, triageStatus, team, assigneeId, pageSize]);
 
   useEffect(() => {
     let active = true;
     setLoadingPage(true);
     api
-      .bugPage(props.projectId, { page, pageSize, keyword: effectiveKeyword, status, severity, triageStatus, assigneeId, sortBy, sortOrder })
+      .bugPage(props.projectId, { page, pageSize, keyword: effectiveKeyword, status, severity, triageStatus, team, assigneeId, sortBy, sortOrder })
       .then((result) => {
         if (active) setPageResult(result);
       })
@@ -86,8 +89,9 @@ export function BugSection(props: {
           (!status || row.status === status) &&
           (!severity || row.severity === severity) &&
           (!triageStatus || row.triageStatus === triageStatus) &&
+          matchesTeam(row, team) &&
           (!assigneeId || row.assigneeId === assigneeId) &&
-          matchKeyword([row.title, row.actualResult || '', row.reproduceSteps || '', row.severity, row.environment || '', row.foundVersion || '', row.rootCause || ''], effectiveKeyword)
+          matchKeyword([row.title, row.actualResult || '', row.reproduceSteps || '', row.severity, row.team || '', row.team ? labelOf(row.team) : '', row.environment || '', row.foundVersion || '', row.rootCause || ''], effectiveKeyword)
         );
         setPageResult({ total: fallback.length, page, pageSize, items: fallback.slice((page - 1) * pageSize, page * pageSize) });
       })
@@ -97,12 +101,12 @@ export function BugSection(props: {
     return () => {
       active = false;
     };
-  }, [props.projectId, props.rows, page, pageSize, effectiveKeyword, status, severity, triageStatus, assigneeId, sortBy, sortOrder]);
+  }, [props.projectId, props.rows, page, pageSize, effectiveKeyword, status, severity, triageStatus, team, assigneeId, sortBy, sortOrder]);
 
   useEffect(() => {
-    const filters = { keyword, status, severity, triageStatus, assigneeId, pageSize, sortBy, sortOrder, columns: visibleColumns };
+    const filters = { keyword, status, severity, triageStatus, team, assigneeId, pageSize, sortBy, sortOrder, columns: visibleColumns };
     window.dispatchEvent(new CustomEvent('buggy:filters-change', { detail: { tab: 'bugs', filters } }));
-  }, [keyword, status, severity, triageStatus, assigneeId, pageSize, sortBy, sortOrder, visibleColumns]);
+  }, [keyword, status, severity, triageStatus, team, assigneeId, pageSize, sortBy, sortOrder, visibleColumns]);
 
   useEffect(() => {
     const apply = (event: Event) => {
@@ -113,6 +117,7 @@ export function BugSection(props: {
       setStatus(typeof filters.status === 'string' ? filters.status : '');
       setSeverity(typeof filters.severity === 'string' ? filters.severity : '');
       setTriageStatus(typeof filters.triageStatus === 'string' ? filters.triageStatus : '');
+      setTeam(typeof filters.team === 'string' ? filters.team : '');
       setAssigneeId(typeof filters.assigneeId === 'string' ? filters.assigneeId : '');
       setPageSize(typeof filters.pageSize === 'number' ? filters.pageSize : 20);
       setSortBy(typeof filters.sortBy === 'string' ? filters.sortBy : 'updatedAt');
@@ -142,6 +147,9 @@ export function BugSection(props: {
     }
   };
   const visibleDefinitions = bugColumns.filter((column) => visibleColumns.includes(column.key));
+  const activeRows = props.rows.filter((row) => !['verified', 'closed'].includes(row.status));
+  const teamGroups = useMemo(() => bugTeamGroups(props.rows), [props.rows]);
+  const selectedTeamLabel = teamLabel(team);
 
   return (
     <DataPage
@@ -152,7 +160,7 @@ export function BugSection(props: {
           <MetricCard label="缺陷总数" value={props.rows.length} detail={`${props.rows.filter((row) => !['verified', 'closed'].includes(row.status)).length} 活跃`} tone="info" />
           <MetricCard label="严重缺陷" value={props.rows.filter((row) => ['S0', 'S1'].includes(row.severity)).length} detail="S0/S1" tone="risk" />
           <MetricCard label="已解决" value={props.rows.filter((row) => row.status === 'resolved').length} detail="待验证" />
-          <MetricCard label="关闭率" value={`${props.rows.length ? Math.round((props.rows.filter((row) => row.status === 'closed').length / props.rows.length) * 100) : 0}%`} detail="已关闭 / 总数" tone="good" />
+          <MetricCard label="团队视图" value={selectedTeamLabel} detail={`${activeRows.filter((row) => matchesTeam(row, team)).length} 活跃`} tone={team ? 'info' : 'neutral'} />
         </section>
       }
     >
@@ -161,6 +169,7 @@ export function BugSection(props: {
         <Select value={status} onChange={setStatus} values={bugStatuses} dictionaryType="bugStatus" emptyLabel="全部状态" />
         <Select value={severity} onChange={setSeverity} values={severities} dictionaryType="severity" emptyLabel="全部严重级别" />
         <Select value={triageStatus} onChange={setTriageStatus} values={triageStatuses} emptyLabel="全部分诊" />
+        <Select value={team} onChange={setTeam} values={bugTeams} emptyLabel="全部团队" />
         <select value={assigneeId} onChange={(event) => setAssigneeId(event.target.value)}>
           <option value="">全部负责人</option>
           {memberUsers.map((user) => <option key={user.id} value={user.id}>{user.username}</option>)}
@@ -178,9 +187,11 @@ export function BugSection(props: {
         { label: '状态', value: status, onClear: () => setStatus('') },
         { label: '严重级别', value: severity, onClear: () => setSeverity('') },
         { label: '分诊', value: triageStatus, onClear: () => setTriageStatus('') },
+        { label: '团队', value: team ? teamLabel(team) : '', onClear: () => setTeam('') },
         { label: '负责人', value: assigneeId ? userName(props.users, assigneeId) : '', onClear: () => setAssigneeId('') }
       ]} />
       <BugTriageBoard rows={props.rows} onTriage={setTriageStatus} onStatus={setStatus} />
+      <BugTeamBoard groups={teamGroups} selectedTeam={team} onTeam={setTeam} />
       <DataTable
         headers={visibleDefinitions.map((column) => column.label)}
         sortKeys={visibleDefinitions.map((column) => column.sortKey || '')}
@@ -193,6 +204,7 @@ export function BugSection(props: {
             bug: <div className="cell-main"><strong>{row.title}</strong><span>{row.actualResult || row.reproduceSteps || '未填写问题详情'}</span></div>,
             source: bugSource(row, props.requirements, props.cases, props.plans),
             triage: <StatusBadge value={row.triageStatus || 'new'} />,
+            team: row.team ? <StatusBadge value={row.team} /> : '-',
             assignee: row.assigneeId ? userName(props.users, row.assigneeId) : '-',
             collab: `${row.comments?.length || 0} 评论 · ${row.attachments?.length || 0} 附件${row.duplicateOfId ? ' · 重复' : ''}`,
             sla: <SlaCell row={row} />,
@@ -272,6 +284,54 @@ export function BugSection(props: {
       />
     </DataPage>
   );
+}
+
+function BugTeamBoard(props: { groups: BugTeamGroup[]; selectedTeam: string; onTeam: (value: string) => void }) {
+  if (props.groups.length === 0) return null;
+  return (
+    <section className="workflow-lanes" aria-label="按团队查看缺陷">
+      <button type="button" className={!props.selectedTeam ? 'active' : ''} onClick={() => props.onTeam('')}>
+        <span>全部团队</span>
+        <strong>{props.groups.reduce((sum, group) => sum + group.total, 0)}</strong>
+        <small>{props.groups.reduce((sum, group) => sum + group.active, 0)} 活跃</small>
+      </button>
+      {props.groups.map((group) => (
+        <button key={group.key} type="button" className={`${props.selectedTeam === group.key ? 'active' : ''} ${group.severe ? 'tone-risk' : ''}`} onClick={() => props.onTeam(group.key)}>
+          <span>{group.label}</span>
+          <strong>{group.total}</strong>
+          <small>{group.active} 活跃 · {group.severe} 严重</small>
+        </button>
+      ))}
+    </section>
+  );
+}
+
+type BugTeamGroup = { key: string; label: string; total: number; active: number; severe: number };
+
+function bugTeamGroups(rows: Bug[]): BugTeamGroup[] {
+  const counts = new Map<string, BugTeamGroup>();
+  for (const row of rows) {
+    const key = row.team || unassignedTeamKey;
+    const label = teamLabel(key);
+    const current = counts.get(key) || { key, label, total: 0, active: 0, severe: 0 };
+    current.total += 1;
+    if (!['verified', 'closed'].includes(row.status)) current.active += 1;
+    if (['S0', 'S1'].includes(row.severity)) current.severe += 1;
+    counts.set(key, current);
+  }
+  return [...counts.values()].sort((a, b) => b.active - a.active || b.total - a.total || a.label.localeCompare(b.label));
+}
+
+function matchesTeam(row: Bug, selectedTeam: string) {
+  if (!selectedTeam) return true;
+  if (selectedTeam === unassignedTeamKey) return !row.team;
+  return row.team === selectedTeam;
+}
+
+function teamLabel(value: string) {
+  if (!value) return '全部团队';
+  if (value === unassignedTeamKey) return '未分配团队';
+  return labelOf(value);
 }
 
 function bugSource(row: Bug, requirements: Requirement[], cases: TestCase[], plans: TestPlan[]) {
@@ -385,6 +445,7 @@ export function BugFields(props: { row?: Bug; requirements: Requirement[]; cases
         <Field><FieldLabel hint="建议绑定，保证验收追踪">关联需求</FieldLabel><select {...registerField(props.register, 'requirementId')} defaultValue={defaultRequirementId}><option value="">不绑定需求</option>{props.requirements.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></Field>
         <Field><FieldLabel hint="从执行项创建时会自动带入">关联用例</FieldLabel><select {...registerField(props.register, 'testCaseId')} defaultValue={defaultCaseId}><option value="">不绑定用例</option>{props.cases.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></Field>
         <Field><FieldLabel hint="定位到测试轮次">关联计划</FieldLabel><select {...registerField(props.register, 'testPlanId')} defaultValue={defaultPlanId}><option value="">不绑定计划</option>{props.plans.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
+        <Field><FieldLabel hint="用于按协作团队聚合缺陷">团队</FieldLabel><Select name="team" register={props.register} values={bugTeams} defaultValue={props.row?.team || ''} emptyLabel="未分配团队" /></Field>
         <Field><FieldLabel hint="用于处理队列和 SLA">负责人</FieldLabel><select {...registerField(props.register, 'assigneeId')} defaultValue={props.row?.assigneeId || ''}><option value="">未指派</option>{props.users.map((item) => <option key={item.id} value={item.id}>{item.username}</option>)}</select></Field>
         <Field className="span-four"><FieldLabel required hint="写清环境、入口、操作路径和稳定复现条件">复现步骤</FieldLabel><Textarea {...registerField(props.register, 'reproduceSteps')} defaultValue={props.row?.reproduceSteps} placeholder="建议写清环境、入口、操作路径和稳定复现条件" required /></Field>
         <Field className="span-two"><FieldLabel hint="实际看到的页面、接口或数据现象">实际结果</FieldLabel><Textarea {...registerField(props.register, 'actualResult')} defaultValue={props.row?.actualResult} /></Field>
@@ -483,6 +544,11 @@ function BugOverview(props: { row: Bug; requirements: Requirement[]; cases: Test
         <span>来源链路</span>
         <strong>{bugSource(props.row, props.requirements, props.cases, props.plans)}</strong>
         {props.row.runItemId && <button type="button" className="linkish" onClick={() => props.onOpenEntity?.('run_item', props.row.runItemId)}><PlayCircle size={14} /> 打开复测执行项</button>}
+      </article>
+      <article>
+        <span>团队</span>
+        <strong>{props.row.team ? labelOf(props.row.team) : '未分配团队'}</strong>
+        <small>{props.row.assigneeId ? `负责人：${userName(props.users, props.row.assigneeId)}` : '暂无负责人'}</small>
       </article>
       <article>
         <span>负责人 / 关注人</span>

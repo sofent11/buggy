@@ -857,6 +857,7 @@ function savedViewFilterLabel(key: string) {
     status: '状态',
     severity: '严重级别',
     triageStatus: '分诊',
+    team: '团队',
     assigneeId: '负责人',
     ownerId: '负责人',
     requirementId: '需求',

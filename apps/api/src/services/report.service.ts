@@ -368,6 +368,7 @@ export class ReportService {
           priority: bug.priority,
           status: bug.status,
           assigneeId: bug.assigneeId ? idOf(bug.assigneeId) : undefined,
+          team: bug.team || undefined,
           dueAt: bug.dueAt?.toISOString(),
           rootCause: bug.rootCause,
           slaLevel: bug.slaLevel,

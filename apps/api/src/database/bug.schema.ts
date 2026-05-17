@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, SchemaTypes, Types } from 'mongoose';
-import type { BugStatus, BugTriageStatus, Priority, Severity, SlaLevel } from '@buggy/shared-types';
+import type { BugStatus, BugTeam, BugTriageStatus, Priority, Severity, SlaLevel } from '@buggy/shared-types';
 
 export type BugDocument = HydratedDocument<BugEntity>;
 
@@ -47,6 +47,9 @@ export class BugEntity {
 
   @Prop({ type: SchemaTypes.ObjectId, ref: 'UserEntity' })
   assigneeId?: Types.ObjectId;
+
+  @Prop({ type: String, trim: true, default: '', index: true })
+  team!: BugTeam | '';
 
   @Prop({ type: SchemaTypes.ObjectId, ref: 'UserEntity' })
   reporterId?: Types.ObjectId;
@@ -102,3 +105,4 @@ export class BugEntity {
 
 export const BugSchema = SchemaFactory.createForClass(BugEntity);
 BugSchema.index({ projectId: 1, requirementId: 1, status: 1 });
+BugSchema.index({ projectId: 1, team: 1, status: 1 });

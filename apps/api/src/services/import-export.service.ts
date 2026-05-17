@@ -98,6 +98,7 @@ export class ImportExportService {
               severity: (row.severity || row['严重级别'] || 'S2') as never,
               priority: (row.priority || row['优先级'] || 'P2') as never,
               status: (row.status || row['状态'] || 'open') as never,
+              team: (row.team || row['团队'] || undefined) as never,
               assigneeId: typeof row.assigneeId === 'string' ? row.assigneeId : typeof row['负责人ID'] === 'string' ? row['负责人ID'] : undefined,
               requirementId: typeof row.requirementId === 'string' ? row.requirementId : typeof row['需求ID'] === 'string' ? row['需求ID'] : undefined,
               testCaseId: typeof row.testCaseId === 'string' ? row.testCaseId : typeof row['用例ID'] === 'string' ? row['用例ID'] : undefined,
@@ -221,7 +222,7 @@ export class ImportExportService {
   private headers(type: ImportRowsDto['type']): string[] {
     if (type === 'requirements') return ['标题', '描述', '优先级', '状态', 'riskOwnerId', '截止时间', '风险说明'];
     if (type === 'test-cases') return ['标题', '模块', '用例集', '版本', '评审状态', '自动化状态', '前置条件', '步骤', '预期', '步骤JSON', '预期结果', '优先级', '状态', 'requirementId'];
-    if (type === 'bugs') return ['标题', '复现步骤', '实际结果', '期望结果', '严重级别', '优先级', '状态', '分诊状态', '负责人ID', '需求ID', '用例ID', '计划ID', '截止时间', '发现环境', '发现版本', '修复版本', '根因分析'];
+    if (type === 'bugs') return ['标题', '复现步骤', '实际结果', '期望结果', '严重级别', '优先级', '状态', '分诊状态', '团队', '负责人ID', '需求ID', '用例ID', '计划ID', '截止时间', '发现环境', '发现版本', '修复版本', '根因分析'];
     return ['计划名称', '计划ID', '执行项ID', '用例标题', '需求ID', '执行状态', '实际结果', '关联Bug', '步骤结果'];
   }
 
@@ -255,7 +256,7 @@ export class ImportExportService {
       return [item.planName || '', item.testPlanId || '', item.runItemId || '', item.caseTitle || '', item.requirementId || '', item.status || '', item.actualResult || '', item.bugIds || '', item.stepResults || ''];
     }
     const item = row as Bug;
-    return [item.title, item.reproduceSteps || '', item.actualResult || '', item.expectedResult || '', item.severity, item.priority, item.status, item.triageStatus || 'new', item.assigneeId || '', item.requirementId || '', item.testCaseId || '', item.testPlanId || '', item.dueAt || '', item.environment || '', item.foundVersion || '', item.fixVersion || '', item.rootCause || ''];
+    return [item.title, item.reproduceSteps || '', item.actualResult || '', item.expectedResult || '', item.severity, item.priority, item.status, item.triageStatus || 'new', item.team || '', item.assigneeId || '', item.requirementId || '', item.testCaseId || '', item.testPlanId || '', item.dueAt || '', item.environment || '', item.foundVersion || '', item.fixVersion || '', item.rootCause || ''];
   }
 
   private expectedFields(type: ImportRowsDto['type']): Array<{ field: string; label: string; required?: boolean }> {
@@ -293,6 +294,7 @@ export class ImportExportService {
       { field: 'priority', label: '优先级' },
       { field: 'status', label: '状态' },
       { field: 'triageStatus', label: '分诊状态' },
+      { field: 'team', label: '团队' },
       { field: 'environment', label: '发现环境' },
       { field: 'foundVersion', label: '发现版本' },
       { field: 'fixVersion', label: '修复版本' },

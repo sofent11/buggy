@@ -1,5 +1,8 @@
 import { IsArray, IsIn, IsMongoId, IsOptional, IsString, MinLength } from 'class-validator';
-import type { BugStatus, BugTriageStatus, Priority, Severity } from '@buggy/shared-types';
+import type { BugStatus, BugTeam, BugTriageStatus, Priority, Severity } from '@buggy/shared-types';
+
+const bugTeams = ['web', 'android', 'ios', 'development', 'product', 'design', 'qa', 'operations', 'pm', 'other'] as const;
+const bugTeamValues = [...bugTeams, ''] as const;
 
 export class CreateBugDto {
   @IsMongoId()
@@ -56,6 +59,10 @@ export class CreateBugDto {
   @IsOptional()
   @IsMongoId()
   assigneeId?: string;
+
+  @IsOptional()
+  @IsIn(bugTeamValues)
+  team?: BugTeam;
 
   @IsOptional()
   @IsMongoId()
@@ -159,6 +166,10 @@ export class UpdateBugDto {
   @IsOptional()
   @IsMongoId()
   assigneeId?: string;
+
+  @IsOptional()
+  @IsIn(bugTeamValues)
+  team?: BugTeam;
 
   @IsOptional()
   @IsMongoId()

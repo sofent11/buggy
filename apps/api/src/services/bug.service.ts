@@ -35,12 +35,15 @@ export class BugService {
     if (query.severity) filter.severity = query.severity;
     if (query.triageStatus) filter.triageStatus = query.triageStatus;
     if (query.assigneeId) filter.assigneeId = new Types.ObjectId(query.assigneeId);
+    if (query.team === '__unassigned') filter.team = { $in: ['', null] };
+    else if (query.team) filter.team = query.team;
     if (query.keyword) {
       filter.$or = [
         { title: { $regex: query.keyword, $options: 'i' } },
         { reproduceSteps: { $regex: query.keyword, $options: 'i' } },
         { actualResult: { $regex: query.keyword, $options: 'i' } },
-        { expectedResult: { $regex: query.keyword, $options: 'i' } }
+        { expectedResult: { $regex: query.keyword, $options: 'i' } },
+        { team: { $regex: query.keyword, $options: 'i' } }
       ];
     }
     const page = query.page || 1;
@@ -72,6 +75,7 @@ export class BugService {
       priority: dto.priority || 'P2',
       status,
       assigneeId: toObjectId(dto.assigneeId),
+      team: dto.team || '',
       reporterId: new Types.ObjectId(user.id),
       duplicateOfId: toObjectId(dto.duplicateOfId),
       dueAt: dto.dueAt ? new Date(dto.dueAt) : defaultDueAt(slaLevel, qualitySettings.slaPolicy),
@@ -157,6 +161,7 @@ export class BugService {
       }
     }
     if (dto.assigneeId !== undefined) row.assigneeId = toObjectId(dto.assigneeId);
+    if (dto.team !== undefined) row.team = dto.team || '';
     if (dto.duplicateOfId !== undefined) row.duplicateOfId = toObjectId(dto.duplicateOfId);
     if (dto.dueAt !== undefined) row.dueAt = dto.dueAt ? new Date(dto.dueAt) : undefined;
     if (dto.environment !== undefined) row.environment = dto.environment;
@@ -343,6 +348,7 @@ export class BugService {
       priority: row.priority,
       status: row.status,
       assigneeId: row.assigneeId ? idOf(row.assigneeId) : undefined,
+      team: row.team || undefined,
       reporterId: row.reporterId ? idOf(row.reporterId) : undefined,
       duplicateOfId: row.duplicateOfId ? idOf(row.duplicateOfId) : undefined,
       dueAt: row.dueAt?.toISOString(),
@@ -426,7 +432,7 @@ export class BugService {
   }
 
   private sortOf(sortBy?: string, sortOrder?: 'asc' | 'desc'): Record<string, 1 | -1> {
-    const allowed = new Set(['title', 'status', 'priority', 'severity', 'triageStatus', 'createdAt', 'updatedAt']);
+    const allowed = new Set(['title', 'status', 'priority', 'severity', 'triageStatus', 'team', 'createdAt', 'updatedAt']);
     if (!sortBy || !allowed.has(sortBy)) return { updatedAt: -1 };
     return { [sortBy]: sortOrder === 'asc' ? 1 : -1 };
   }
