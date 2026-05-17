@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Check, FolderKanban, Pencil, Plus, Save, Trash2, Users } from 'lucide-react';
+import { Check, FolderKanban, MoreHorizontal, Pencil, Plus, Save, Trash2, Users } from 'lucide-react';
 import type { Project, ProjectMember, UserProfile } from '@buggy/shared-types';
 import { api } from '../../api.js';
 import { Button } from '../ui/button.js';
@@ -9,6 +9,9 @@ import { Textarea } from '../ui/textarea.js';
 import { labelOf } from '../../labels.js';
 import { matchKeyword, shortDate, text } from '../../app/workspace-utils.js';
 import { DataPage, DataTable, DangerButton, Drawer, EmptyState, HookForm, MetricCard, SearchBox, StatusBadge, Toolbar } from './common.js';
+
+const RECENT_PROJECTS_KEY = 'buggy_recent_project_ids';
+type ProjectScope = 'all' | 'mine' | 'recent' | 'sample';
 
 export function ProjectSection(props: {
   user: UserProfile;
@@ -21,13 +24,20 @@ export function ProjectSection(props: {
   mutate: (action: () => Promise<unknown>, message: string, options?: { reloadProjects?: boolean }) => Promise<void>;
 }) {
   const [keyword, setKeyword] = useState('');
+  const [scope, setScope] = useState<ProjectScope>('all');
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Project | null>(null);
   const [managingMembers, setManagingMembers] = useState<Project | null>(null);
+  const recentProjectIds = useMemo(() => readRecentProjectIds(), [props.currentProjectId]);
   const filtered = useMemo(
-    () => props.projects.filter((item) => matchKeyword([item.name, item.code || '', item.description || '', item.members.map((member) => member.username).join(' ')], keyword, props.searchKeyword)),
-    [props.projects, keyword, props.searchKeyword]
+    () => props.projects.filter((item) =>
+      projectInScope(item, scope, props.user.id, recentProjectIds) &&
+      matchKeyword([item.name, item.code || '', item.description || '', item.members.map((member) => member.username).join(' ')], keyword, props.searchKeyword)
+    ),
+    [props.projects, scope, props.user.id, recentProjectIds, keyword, props.searchKeyword]
   );
+  const sampleCount = useMemo(() => props.projects.filter(isSampleProject).length, [props.projects]);
+  const mineCount = useMemo(() => props.projects.filter((project) => project.members.some((member) => member.userId === props.user.id)).length, [props.projects, props.user.id]);
   const editingProject = editing ? props.projects.find((project) => project.id === editing.id) || editing : null;
   const memberProject = managingMembers ? props.projects.find((project) => project.id === managingMembers.id) || managingMembers : null;
 
@@ -38,14 +48,20 @@ export function ProjectSection(props: {
       metrics={
         <section className="insight-strip">
           <MetricCard label="项目总数" value={props.projects.length} detail="当前可访问项目" tone="info" />
-          <MetricCard label="成员覆盖" value={new Set(props.projects.flatMap((project) => project.members.map((member) => member.userId))).size} detail="去重成员数" />
+          <MetricCard label="我参与" value={mineCount} detail="负责人或成员项目" />
           <MetricCard label="当前项目" value={props.currentProjectId ? '已选择' : '未选择'} detail={props.projects.find((project) => project.id === props.currentProjectId)?.name || '请选择项目'} tone={props.currentProjectId ? 'good' : 'risk'} />
-          <MetricCard label="系统角色" value={labelOf(props.user.role)} detail={props.user.username} />
+          <MetricCard label="测试数据" value={sampleCount} detail="可单独查看清理" />
         </section>
       }
     >
       <Toolbar>
         <SearchBox value={keyword} onChange={setKeyword} placeholder="搜索项目、代号、成员" />
+        <select value={scope} onChange={(event) => setScope(event.target.value as ProjectScope)} aria-label="项目视图">
+          <option value="all">全部项目</option>
+          <option value="mine">我参与</option>
+          <option value="recent">最近访问</option>
+          <option value="sample">测试 / 验收数据</option>
+        </select>
         <span className="toolbar-summary">{filtered.length} / {props.projects.length} 个项目</span>
         <button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建项目</button>
       </Toolbar>
@@ -61,13 +77,20 @@ export function ProjectSection(props: {
           project.id === props.currentProjectId ? <StatusBadge value="当前项目" /> : <span className="muted">可选</span>,
           <div className="row-actions">
             <Button type="button" size="sm" onClick={() => props.onSelect(project.id)}><Check size={14} /> 选中</Button>
-            <Button type="button" size="sm" onClick={() => setEditing(project)}><Pencil size={14} /> 详情</Button>
             <Button type="button" size="sm" onClick={() => setManagingMembers(project)}><Users size={14} /> 成员</Button>
-            <DangerButton
-              title={`删除项目「${project.name}」？`}
-              description="项目下的迭代、需求、用例、执行计划、Bug 和报告数据都会被删除。"
-              onConfirm={() => props.mutate(() => api.deleteProject(project.id), '项目已删除', { reloadProjects: true })}
-            />
+            <details className="row-more-menu">
+              <summary aria-label={`更多操作：${project.name}`}>
+                <MoreHorizontal size={15} />
+              </summary>
+              <div>
+                <Button type="button" size="sm" onClick={() => setEditing(project)}><Pencil size={14} /> 编辑档案</Button>
+                <DangerButton
+                  title={`删除项目「${project.name}」？`}
+                  description="项目下的迭代、需求、用例、执行计划、Bug 和报告数据都会被删除。"
+                  onConfirm={() => props.mutate(() => api.deleteProject(project.id), '项目已删除', { reloadProjects: true })}
+                />
+              </div>
+            </details>
           </div>
         ])}
       />
@@ -115,6 +138,26 @@ export function ProjectSection(props: {
       />
     </DataPage>
   );
+}
+
+function readRecentProjectIds() {
+  try {
+    return JSON.parse(localStorage.getItem(RECENT_PROJECTS_KEY) || '[]') as string[];
+  } catch {
+    return [];
+  }
+}
+
+function isSampleProject(project: Project) {
+  const text = `${project.name} ${project.code || ''} ${project.description || ''}`.toLowerCase();
+  return /(test|api|html|验收|浏览器|完整|报告|\bqa\b|\be2e\b|\d{6,})/.test(text);
+}
+
+function projectInScope(project: Project, scope: ProjectScope, currentUserId: string, recentProjectIds: string[]) {
+  if (scope === 'mine') return project.members.some((member) => member.userId === currentUserId);
+  if (scope === 'recent') return recentProjectIds.includes(project.id);
+  if (scope === 'sample') return isSampleProject(project);
+  return true;
 }
 
 function ProjectDrawer(props: {

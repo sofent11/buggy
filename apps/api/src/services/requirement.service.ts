@@ -129,10 +129,10 @@ export class RequirementService {
     row.qualityGateResult = await this.qualityGate(id);
     const history: Array<{ id: string; action: string; fromStatus?: string; toStatus?: string; operatorId?: string; operatorName?: string; note?: string; createdAt: string }> = [];
     if (dto.status && dto.status !== previousStatus) {
-      history.push(this.workflowEntry('status_changed', previousStatus, dto.status, user, dto.riskNote || dto.description || '状态更新'));
+      history.push(this.workflowEntry('status_changed', previousStatus, dto.status, user, dto.statusReason || dto.riskNote || dto.description || '状态更新'));
     }
     if (dto.acceptanceStatus && dto.acceptanceStatus !== previousAcceptance) {
-      history.push(this.workflowEntry('acceptance_changed', previousAcceptance, dto.acceptanceStatus, user, dto.riskNote || '验收状态更新'));
+      history.push(this.workflowEntry('acceptance_changed', previousAcceptance, dto.acceptanceStatus, user, dto.acceptanceReason || dto.statusReason || dto.riskNote || '验收状态更新'));
     }
     if (dto.reportSignoffStatus !== undefined) {
       history.push(this.workflowEntry('report_signoff', previous.reportSignoff?.status, dto.reportSignoffStatus, user, dto.reportSignoffNote || '报告签核'));

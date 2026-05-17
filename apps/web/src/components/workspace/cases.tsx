@@ -10,7 +10,7 @@ import { Textarea } from '../ui/textarea.js';
 import { automationStatuses, caseReviewStatuses, caseStatuses, priorities } from '../../app/constants.js';
 import type { StringFormValues } from '../../app/types.js';
 import { matchKeyword, requirementTitle, shortDate, testCasePayload, userName } from '../../app/workspace-utils.js';
-import { ColumnChooser, DataPage, DataTable, DangerButton, Drawer, EmptyState, HookForm, MetricCard, Pagination, registerField, SearchBox, Select, StatusBadge, StepEditor, Toolbar } from './common.js';
+import { ColumnChooser, DataPage, DataTable, DangerButton, Drawer, EmptyState, HookForm, MetricCard, Pagination, registerField, SearchBox, Select, StatusBadge, StepEditor, TextConfirmDialog, Toolbar } from './common.js';
 
 const caseColumns = [
   { key: 'case', label: '用例', locked: true, sortKey: 'title' },
@@ -63,6 +63,8 @@ export function CaseSection(props: {
   const [selectedCaseIds, setSelectedCaseIds] = useState<string[]>([]);
   const [bulkReviewStatus, setBulkReviewStatus] = useState<TestCase['reviewStatus']>('in_review');
   const [bulkAutomationStatus, setBulkAutomationStatus] = useState<TestCase['automationStatus']>('manual');
+  const [caseStatusChange, setCaseStatusChange] = useState<{ row: TestCase; status: TestCase['status'] } | null>(null);
+  const [caseReviewChange, setCaseReviewChange] = useState<{ row: TestCase; action: ReturnType<typeof caseReviewActions>[number] } | null>(null);
   const effectiveKeyword = keyword || props.globalKeyword || '';
   const rows = useMemo(
     () => filterCaseRowsForQueue(pageResult.items, caseQueue, props.requirements, props.plans || [], props.bugs || []),
@@ -278,7 +280,7 @@ export function CaseSection(props: {
                 review: <div className="cell-main"><StatusBadge value={row.reviewStatus || 'draft'} /><span>{row.reviewedAt ? `评审于 ${shortDate(row.reviewedAt)}` : (row.reviewerId ? `评审人 ${userName(props.users, row.reviewerId)}` : '待评审')}</span></div>,
                 automation: <StatusBadge value={row.automationStatus || 'manual'} />,
                 priority: <StatusBadge value={row.priority} dictionaryType="priority" />,
-                status: props.canWrite ? <Select value={row.status} onChange={(value) => props.mutate(() => api.updateTestCase(row.id, { status: value as never }), '用例状态已更新')} values={caseStatuses} dictionaryType="testCaseStatus" /> : <StatusBadge value={row.status} dictionaryType="testCaseStatus" />,
+                status: <StatusBadge value={row.status} dictionaryType="testCaseStatus" />,
                 updatedAt: shortDate(row.updatedAt),
                 actions: <CaseRowActions
                   row={row}
@@ -286,7 +288,8 @@ export function CaseSection(props: {
                   bugCount={caseBugs.length}
                   canWrite={props.canWrite}
                   canManage={props.canManage}
-                  onReview={(action) => props.mutate(() => api.updateTestCase(row.id, { reviewStatus: action.status, changeSummary: action.note }), action.message)}
+                  onStatus={(nextStatus) => setCaseStatusChange({ row, status: nextStatus })}
+                  onReview={(action) => setCaseReviewChange({ row, action })}
                   onBaseline={() => props.mutate(() => api.updateTestCase(row.id, { baselineVersion: row.version || 'v1', changeSummary: `设置 ${row.version || 'v1'} 为基线` }), '用例基线已设置')}
                   onRestore={() => props.mutate(() => api.restoreTestCaseBaseline(row.id), '用例已恢复到基线')}
                   onEdit={() => setEditing(row)}
@@ -334,6 +337,36 @@ export function CaseSection(props: {
         await props.mutate(() => api.updateTestCase(editing.id, testCasePayload(form, props.projectId)), '用例已保存');
         setEditing(null);
       }} />
+      <TextConfirmDialog
+        open={Boolean(caseStatusChange)}
+        title={caseStatusChange ? `确认用例状态变更为「${userNameOrLabel(caseStatusChange.status)}」？` : '确认用例状态变更？'}
+        description={caseStatusChange?.row.title}
+        label="变更说明"
+        placeholder="说明用例状态变更依据、废弃原因或可执行条件"
+        confirmText="确认变更"
+        destructive={caseStatusChange?.status === 'deprecated'}
+        onCancel={() => setCaseStatusChange(null)}
+        onConfirm={async (note) => {
+          if (!caseStatusChange) return;
+          await props.mutate(() => api.updateTestCase(caseStatusChange.row.id, { status: caseStatusChange.status, changeSummary: note }), '用例状态已更新');
+          setCaseStatusChange(null);
+        }}
+      />
+      <TextConfirmDialog
+        open={Boolean(caseReviewChange)}
+        title={caseReviewChange ? `确认${caseReviewChange.action.label}用例评审？` : '确认用例评审？'}
+        description={caseReviewChange?.row.title}
+        label="评审说明"
+        placeholder="说明评审结论、补充修改点或通过依据"
+        confirmText={caseReviewChange?.action.label || '确认'}
+        destructive={caseReviewChange?.action.status === 'changes_requested'}
+        onCancel={() => setCaseReviewChange(null)}
+        onConfirm={async (note) => {
+          if (!caseReviewChange) return;
+          await props.mutate(() => api.updateTestCase(caseReviewChange.row.id, { reviewStatus: caseReviewChange.action.status, changeSummary: note || caseReviewChange.action.note }), caseReviewChange.action.message);
+          setCaseReviewChange(null);
+        }}
+      />
     </DataPage>
   );
 }
@@ -412,6 +445,7 @@ function CaseRowActions(props: {
   bugCount: number;
   canWrite?: boolean;
   canManage?: boolean;
+  onStatus: (status: TestCase['status']) => void;
   onReview: (action: ReturnType<typeof caseReviewActions>[number]) => void | Promise<void>;
   onBaseline: () => void | Promise<void>;
   onRestore: () => void | Promise<void>;
@@ -433,7 +467,12 @@ function CaseRowActions(props: {
           <MoreHorizontal size={15} />
         </summary>
         <div>
-          <Button type="button" size="sm" onClick={props.onEdit}><Pencil size={14} /> 详情</Button>
+          <Button type="button" size="sm" onClick={props.onEdit}><Pencil size={14} /> 编辑详情</Button>
+          {props.canWrite && caseStatuses.filter((status) => status !== props.row.status).map((status) => (
+            <Button key={status} type="button" size="sm" onClick={() => props.onStatus(status)}>
+              状态改为 {userNameOrLabel(status)}
+            </Button>
+          ))}
           {secondaryActions.map((action) => (
             <Button key={action.status} type="button" size="sm" onClick={() => { void props.onReview(action); }}>
               {action.label}
@@ -621,7 +660,13 @@ function CaseWorkflowHistory(props: { row: TestCase }) {
 }
 
 function userNameOrLabel(value: string) {
-  return value === 'in_review' ? '评审中' : value === 'changes_requested' ? '需修改' : value === 'approved' ? '已通过' : value === 'draft' ? '草稿' : value;
+  if (value === 'in_review') return '评审中';
+  if (value === 'changes_requested') return '需修改';
+  if (value === 'approved') return '已通过';
+  if (value === 'draft') return '草稿';
+  if (value === 'ready') return '就绪';
+  if (value === 'deprecated') return '已废弃';
+  return value;
 }
 
 function automationLabel(value: string) {

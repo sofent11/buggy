@@ -37,6 +37,8 @@ import { ReportSection } from './components/workspace/reports.js';
 
 const LAST_PROJECT_KEY = 'buggy_last_project_id';
 const RECENT_PROJECTS_KEY = 'buggy_recent_project_ids';
+const SAVED_VIEW_TABS: Tab[] = ['requirements', 'cases', 'plans', 'bugs'];
+type WorkspaceLoadIssue = { key: keyof WorkspaceData; label: string; message: string };
 
 export function App() {
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -49,6 +51,7 @@ export function App() {
   const [tab, setTab] = useState<Tab>('overview');
   const [globalKeyword, setGlobalKeyword] = useState('');
   const [data, setData] = useState<WorkspaceData>(emptyData);
+  const [workspaceIssues, setWorkspaceIssues] = useState<WorkspaceLoadIssue[]>([]);
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -75,59 +78,65 @@ export function App() {
   const loadWorkspace = useCallback(async (projectId = currentProjectId) => {
     if (!projectId) {
       setData(emptyData);
+      setWorkspaceIssues([]);
       return;
     }
     setBusy(true);
-    try {
-      const [iterations, requirements, cases, plans, bugs, acceptanceScopes, report, dictionaries, users, activities, notifications, savedViews] = await Promise.all([
-        api.iterations(projectId),
-        api.requirements(projectId),
-        api.testCases(projectId),
-        api.testPlans(projectId),
-        api.bugs(projectId),
-        api.acceptanceScopes(projectId),
-        api.reportSummary({ projectId }),
-        api.dictionaries(projectId),
-        api.users(),
-        api.activities(projectId),
-        api.notifications(projectId),
-        api.savedViews(projectId)
-      ]);
-      setData({ iterations, requirements, cases, plans, bugs, acceptanceScopes, report, dictionaries, users, activities, notifications, savedViews });
-    } catch (error) {
-      setNotice((error as Error).message);
-    } finally {
-      setBusy(false);
-    }
+    const tasks = [
+      { key: 'iterations', label: '迭代', load: () => api.iterations(projectId) },
+      { key: 'requirements', label: '需求', load: () => api.requirements(projectId) },
+      { key: 'cases', label: '用例', load: () => api.testCases(projectId) },
+      { key: 'plans', label: '测试执行', load: () => api.testPlans(projectId) },
+      { key: 'bugs', label: '缺陷', load: () => api.bugs(projectId) },
+      { key: 'acceptanceScopes', label: '验收范围', load: () => api.acceptanceScopes(projectId) },
+      { key: 'report', label: '质量报表', load: () => api.reportSummary({ projectId }) },
+      { key: 'dictionaries', label: '数据字典', load: () => api.dictionaries(projectId) },
+      { key: 'users', label: '账号', load: () => api.users() },
+      { key: 'activities', label: '项目动态', load: () => api.activities(projectId) },
+      { key: 'notifications', label: '通知', load: () => api.notifications(projectId) },
+      { key: 'savedViews', label: '保存视图', load: () => api.savedViews(projectId) }
+    ] satisfies Array<{ key: keyof WorkspaceData; label: string; load: () => Promise<WorkspaceData[keyof WorkspaceData]> }>;
+    const results = await Promise.allSettled(tasks.map((task) => task.load()));
+    const nextData = { ...emptyData } as WorkspaceData;
+    const issues: WorkspaceLoadIssue[] = [];
+    results.forEach((result, index) => {
+      const task = tasks[index];
+      if (result.status === 'fulfilled') {
+        nextData[task.key] = result.value as never;
+        return;
+      }
+      issues.push({ key: task.key, label: task.label, message: readableWorkspaceError(result.reason) });
+    });
+    setData(nextData);
+    setWorkspaceIssues(issues);
+    setBusy(false);
   }, [currentProjectId]);
 
-  const mutate = useCallback(async (action: () => Promise<unknown>, message: string, options?: { reloadProjects?: boolean }) => {
-    setBusy(true);
-    try {
-      await action();
-      if (options?.reloadProjects) await loadProjects();
-      await loadWorkspace();
-      setNotice(message);
-    } catch (error) {
-      setNotice((error as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }, [loadProjects, loadWorkspace]);
-
-  const mutateWithResult = useCallback(async <T,>(action: () => Promise<T>, resolveMessage: (result: T) => string, options?: { reloadProjects?: boolean }) => {
+  const runMutation = useCallback(async <T,>(
+    action: () => Promise<T>,
+    onSuccess: (result: T) => string | Promise<string>,
+    options?: { reloadProjects?: boolean }
+  ) => {
     setBusy(true);
     try {
       const result = await action();
       if (options?.reloadProjects) await loadProjects();
       await loadWorkspace();
-      setNotice(resolveMessage(result));
+      setNotice(await onSuccess(result));
     } catch (error) {
-      setNotice((error as Error).message);
+      setNotice(readableWorkspaceError(error));
     } finally {
       setBusy(false);
     }
   }, [loadProjects, loadWorkspace]);
+
+  const mutate = useCallback(async (action: () => Promise<unknown>, message: string, options?: { reloadProjects?: boolean }) => {
+    await runMutation(action, () => message, options);
+  }, [runMutation]);
+
+  const mutateWithResult = useCallback(async <T,>(action: () => Promise<T>, resolveMessage: (result: T) => string, options?: { reloadProjects?: boolean }) => {
+    await runMutation(action, resolveMessage, options);
+  }, [runMutation]);
 
   const submitAuth = useCallback(async (values: AuthFormValues) => {
     setBusy(true);
@@ -141,7 +150,7 @@ export function App() {
       setNotice(`欢迎，${profile.username}`);
       await loadProjects();
     } catch (error) {
-      setNotice((error as Error).message);
+      setNotice(readableWorkspaceError(error));
     } finally {
       setBusy(false);
     }
@@ -215,13 +224,14 @@ export function App() {
     if (!viewKey || !currentProject || data.savedViews.length === 0 || appliedUrlViewKey === viewKey) return;
     const view = data.savedViews.find((item) => item.id === viewKey || item.name === viewKey);
     if (!view) return;
+    if (!isSavedViewSupported(view.tab as Tab)) return;
     setAppliedUrlViewKey(viewKey);
     applySavedView(view);
   }, [appliedUrlViewKey, applySavedView, currentProject, data.savedViews]);
 
   useEffect(() => {
     const hasUrlView = Boolean(new URL(window.location.href).searchParams.get('view'));
-    if (hasUrlView || !currentProject || data.savedViews.length === 0) return;
+    if (hasUrlView || !isSavedViewSupported(tab) || !currentProject || data.savedViews.length === 0) return;
     const view = data.savedViews.find((item) => item.tab === tab && item.isDefault);
     if (!view) return;
     const key = `${currentProject.id}:${view.id}`;
@@ -306,18 +316,19 @@ export function App() {
           <div className="brand-mark"><BugIcon size={20} /></div>
           <div>
             <strong>Buggy</strong>
-            <span>Enterprise QA System</span>
+            <span>质量管理系统</span>
           </div>
         </div>
         <nav>
           <NavButton tab="overview" current={tab} icon={BarChart3} index={1} label="工作台" onClick={setTab} />
           <NavButton tab="projects" current={tab} icon={FolderKanban} index={2} label="项目" onClick={setTab} />
-          <NavButton tab="requirements" current={tab} icon={Flag} index={3} label="需求" onClick={setTab} />
-          <NavButton tab="cases" current={tab} icon={ClipboardCheck} index={4} label="用例库" onClick={setTab} />
-          <NavButton tab="plans" current={tab} icon={Activity} index={5} label="测试执行" onClick={setTab} />
-          <NavButton tab="bugs" current={tab} icon={BugIcon} index={6} label="缺陷" onClick={setTab} />
-          <NavButton tab="reports" current={tab} icon={FileText} index={7} label="报表" onClick={setTab} />
-          <NavButton tab="settings" current={tab} icon={Settings} index={8} label="配置" onClick={setTab} />
+          <NavButton tab="iterations" current={tab} icon={CalendarRange} index={3} label="迭代" onClick={setTab} />
+          <NavButton tab="requirements" current={tab} icon={Flag} index={4} label="需求" onClick={setTab} />
+          <NavButton tab="cases" current={tab} icon={ClipboardCheck} index={5} label="用例库" onClick={setTab} />
+          <NavButton tab="plans" current={tab} icon={Activity} index={6} label="测试执行" onClick={setTab} />
+          <NavButton tab="bugs" current={tab} icon={BugIcon} index={7} label="缺陷" onClick={setTab} />
+          <NavButton tab="reports" current={tab} icon={FileText} index={8} label="报表" onClick={setTab} />
+          <NavButton tab="settings" current={tab} icon={Settings} index={9} label="配置" onClick={setTab} />
         </nav>
         <div className="sidebar-footer">
           <button type="button" className="ghost" onClick={() => setHelpOpen(true)}>
@@ -367,7 +378,7 @@ export function App() {
             <h1>{page.title}</h1>
             <p>{page.description(currentProject?.name || '当前项目')}</p>
           </div>
-          {currentProject && (
+          {currentProject && isSavedViewSupported(tab) && (
             <div className="saved-view-tools">
               <select
                 aria-label="保存视图"
@@ -387,7 +398,7 @@ export function App() {
           )}
         </section>
 
-        <section className="workspace-context" aria-label="当前工作区">
+        <section className={tab === 'overview' ? 'workspace-context' : 'workspace-context compact-context'} aria-label="当前工作区">
           <div className="context-primary">
             <span>当前项目</span>
             <strong>{currentProject?.name || '尚未选择项目'}</strong>
@@ -410,6 +421,16 @@ export function App() {
           </div>
         </section>
 
+        {workspaceIssues.length > 0 && (
+          <section className="workspace-alert" aria-live="polite">
+            <ShieldCheck size={17} />
+            <div>
+              <strong>部分数据暂未同步</strong>
+              <span>{workspaceIssues.map((issue) => `${issue.label}：${issue.message}`).join('；')}。其他模块已正常显示。</span>
+            </div>
+          </section>
+        )}
+
         {globalKeyword && (
           <section className="active-filter-bar" aria-label="当前全局筛选">
             <span>全局条件</span>
@@ -418,7 +439,7 @@ export function App() {
           </section>
         )}
 
-        {notice && <div className="notice">{notice}</div>}
+        {notice && <div className={isBlockingNotice(notice) ? 'notice notice-warning' : 'notice'}>{notice}</div>}
 
         {!currentProject && tab !== 'projects' ? (
           <ProjectSection
@@ -619,7 +640,7 @@ export function App() {
           }
         }}
       />
-      {currentProject && (
+      {currentProject && isSavedViewSupported(tab) && (
         <SavedViewDialog
           open={savedViewOpen}
           tab={tab}
@@ -838,6 +859,22 @@ function savedViewFilterLabel(key: string) {
     columns: '列配置'
   };
   return labels[key] || key;
+}
+
+function isSavedViewSupported(tab: Tab) {
+  return SAVED_VIEW_TABS.includes(tab);
+}
+
+function readableWorkspaceError(error: unknown) {
+  const raw = error instanceof Error ? error.message : String(error || '');
+  if (/Cannot (GET|POST|PATCH|DELETE)/i.test(raw) || /404|Not Found/i.test(raw)) return '对应服务暂不可用，请刷新或联系管理员检查部署版本';
+  if (/401|Unauthorized|请先登录/i.test(raw)) return '登录状态已失效，请重新登录';
+  if (/Failed to fetch|NetworkError|fetch/i.test(raw)) return '网络连接异常，请检查服务是否可访问';
+  return raw || '操作失败，请稍后重试';
+}
+
+function isBlockingNotice(message: string) {
+  return /暂未同步|不可用|异常|失败|错误|失效/.test(message);
 }
 
 function NotificationCenter(props: {

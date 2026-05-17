@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { CalendarRange, FileText, Pencil, Plus, Save } from 'lucide-react';
+import { CalendarRange, FileText, MoreHorizontal, Pencil, Plus, Save } from 'lucide-react';
 import type { Bug, Iteration, Requirement, TestCase, TestPlan } from '@buggy/shared-types';
 import { api } from '../../api.js';
 import { Button } from '../ui/button.js';
@@ -70,9 +70,18 @@ export function IterationSection(props: {
               activeBugs,
               shortDate(row.updatedAt),
               <div className="row-actions">
-                <Button type="button" size="sm" onClick={() => setEditing(row)}><Pencil size={14} /> 详情</Button>
+                <Button type="button" size="sm" onClick={() => setEditing(row)}><Pencil size={14} /> 编辑</Button>
                 <Button type="button" size="sm" onClick={() => setReporting(row)}><FileText size={14} /> 报告</Button>
-                {props.canManage && <DangerButton title={`删除迭代「${row.name}」？`} onConfirm={() => props.mutate(() => api.deleteIteration(row.id), '迭代已删除')} />}
+                {props.canManage && (
+                  <details className="row-more-menu">
+                    <summary aria-label={`更多操作：${row.name}`}>
+                      <MoreHorizontal size={15} />
+                    </summary>
+                    <div>
+                      <DangerButton title={`删除迭代「${row.name}」？`} onConfirm={() => props.mutate(() => api.deleteIteration(row.id), '迭代已删除')} />
+                    </div>
+                  </details>
+                )}
               </div>
             ];
           })}

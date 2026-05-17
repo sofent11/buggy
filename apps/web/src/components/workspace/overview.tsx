@@ -1,5 +1,5 @@
 import type { Project, ReportSummary, UserProfile } from '@buggy/shared-types';
-import { Activity, Bug, ClipboardCheck, FileText, Flag, FolderKanban, GitPullRequestArrow, RotateCcw, ShieldAlert, Users } from 'lucide-react';
+import { Activity, Bug, CalendarRange, ClipboardCheck, FileText, Flag, FolderKanban, GitPullRequestArrow, RotateCcw, ShieldAlert, Users } from 'lucide-react';
 import { labelOf } from '../../labels.js';
 import type { Tab, WorkspaceData } from '../../app/types.js';
 import { DataTable, EmptyState, StatusBadge, Table } from './common.js';
@@ -49,7 +49,7 @@ export function QualityWorkflowNavigator(props: { data: WorkspaceData; onJump?: 
     {
       label: '报告签核',
       detail: signoffBlocked ? `${signoffBlocked} 项准入阻塞` : '可进入验收判断',
-      value: props.data.report?.qualityGate?.status === 'pass' ? 'PASS' : 'CHECK',
+      value: props.data.report?.qualityGate?.status === 'pass' ? '可签核' : '待复核',
       tone: signoffBlocked ? 'risk' : 'good',
       tab: 'reports' as Tab,
       icon: FileText
@@ -130,6 +130,7 @@ export function QualityWorkQueue(props: { data: WorkspaceData; user: UserProfile
 export function ProjectOnboarding(props: { data: WorkspaceData; currentProject?: Project; onJump?: (tab: Tab) => void }) {
   const hasProject = Boolean(props.currentProject);
   const hasMembers = (props.currentProject?.members.length || 0) > 1;
+  const hasIterations = props.data.iterations.length > 0;
   const hasRequirements = props.data.requirements.length > 0;
   const hasCases = props.data.cases.length > 0;
   const hasPlans = props.data.plans.length > 0;
@@ -137,6 +138,7 @@ export function ProjectOnboarding(props: { data: WorkspaceData; currentProject?:
   const steps: Array<{ label: string; done: boolean; tab: Tab; icon: typeof FolderKanban }> = [
     { label: '建立项目', done: hasProject, tab: 'projects', icon: FolderKanban },
     { label: '补充成员', done: hasMembers, tab: 'projects', icon: Users },
+    { label: '规划迭代', done: hasIterations, tab: 'iterations', icon: CalendarRange },
     { label: '创建需求', done: hasRequirements, tab: 'requirements', icon: Flag },
     { label: '沉淀用例', done: hasCases, tab: 'cases', icon: ClipboardCheck },
     { label: '组织执行', done: hasPlans, tab: 'plans', icon: Activity },
@@ -216,7 +218,7 @@ export function RiskBoard(props: { report: ReportSummary | null; onOpenEntity?: 
       <DataTable
         headers={['类型', '事项', '原因', '下一步']}
         rows={report.charts.riskList.slice(0, 8).map((item) => [
-          item.type,
+          riskTypeLabel(item.type),
           item.title,
           item.reason,
           <button className="linkish" type="button" onClick={() => props.onOpenEntity?.(riskEntity(item.type), item.id)}>{item.dueDate ? item.dueDate.slice(0, 10) : '定位处理'}</button>
@@ -360,4 +362,11 @@ function riskEntity(type: string) {
   if (type === 'bug') return 'bug';
   if (type === 'execution') return 'run_item';
   return 'requirement';
+}
+
+function riskTypeLabel(type: string) {
+  if (type === 'bug') return '缺陷';
+  if (type === 'requirement') return '需求';
+  if (type === 'execution') return '执行';
+  return type;
 }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { FileText, Flag, Pencil, Plus, Save, Send } from 'lucide-react';
+import { FileText, Flag, MoreHorizontal, Pencil, Plus, Save, Send } from 'lucide-react';
 import type { Bug, Iteration, Requirement, TestCase, UserProfile } from '@buggy/shared-types';
 import type { UseFormRegister } from 'react-hook-form';
 import { api } from '../../api.js';
@@ -11,7 +11,7 @@ import { labelOf } from '../../labels.js';
 import { acceptanceStatuses, priorities, requirementStatuses } from '../../app/constants.js';
 import type { StringFormValues } from '../../app/types.js';
 import { iterationName, matchKeyword, requirementPayload, shortDate, testCasePayload, userName } from '../../app/workspace-utils.js';
-import { DataPage, DataTable, DangerButton, Drawer, EmptyState, FilterChips, HookForm, MetricCard, registerField, SearchBox, Select, StatusBadge, Toolbar } from './common.js';
+import { DataPage, DataTable, DangerButton, Drawer, EmptyState, FilterChips, HookForm, MetricCard, registerField, SearchBox, Select, StatusBadge, TextConfirmDialog, Toolbar } from './common.js';
 import { TestCaseDrawer } from './cases.js';
 import { ScopedReportDrawer } from './reportsSettings.js';
 
@@ -33,6 +33,8 @@ export function RequirementSection(props: {
   const [editing, setEditing] = useState<Requirement | null>(null);
   const [caseRequirement, setCaseRequirement] = useState<Requirement | null>(null);
   const [reporting, setReporting] = useState<Requirement | null>(null);
+  const [statusChange, setStatusChange] = useState<{ row: Requirement; status: Requirement['status'] } | null>(null);
+  const [acceptanceChange, setAcceptanceChange] = useState<{ row: Requirement; action: ReturnType<typeof requirementAcceptanceActions>[number] } | null>(null);
   const rows = useMemo(
     () => props.rows.filter((row) => (!status || row.status === status) && (!ownerId || row.ownerId === ownerId) && matchKeyword([row.title, row.description || '', row.priority], keyword)),
     [props.rows, keyword, status, ownerId]
@@ -110,21 +112,33 @@ export function RequirementSection(props: {
           </div>,
           <div className="cell-main"><strong>{row.riskOwnerId ? userName(props.users, row.riskOwnerId) : '-'}</strong><span>{row.dueDate ? `截止 ${shortDate(row.dueDate)}` : row.riskNote || '暂无风险'}</span></div>,
           <StatusBadge value={row.priority} dictionaryType="priority" />,
-          props.canWrite ? <Select value={row.status} onChange={(value) => props.mutate(() => api.updateRequirement(row.id, { status: value as never }), '需求状态已更新')} values={requirementStatuses} dictionaryType="requirementStatus" /> : <StatusBadge value={row.status} dictionaryType="requirementStatus" />,
+          <StatusBadge value={row.status} dictionaryType="requirementStatus" />,
           (props.cases || []).filter((item) => item.requirementId === row.id).length,
           (props.bugs || []).filter((item) => item.requirementId === row.id).length,
           shortDate(row.updatedAt),
           <div className="row-actions">
-            <Button type="button" size="sm" onClick={() => setEditing(row)}><Pencil size={14} /> 详情</Button>
             <Button type="button" size="sm" onClick={() => setReporting(row)}><FileText size={14} /> 验收报告</Button>
-            {props.canWrite && requirementAcceptanceActions(row.acceptanceStatus || 'not_ready').map((action) => (
-              <Button key={action.status} type="button" size="sm" onClick={() => props.mutate(() => api.updateRequirement(row.id, { acceptanceStatus: action.status, ...(action.status === 'approved' ? { status: 'done' as never } : {}) }), action.message)}>
-                {action.label}
-              </Button>
-            ))}
             {props.canWrite && <Button type="button" size="sm" onClick={() => setCaseRequirement(row)}><Plus size={14} /> 建用例</Button>}
-            {props.canWrite && <Button type="button" size="sm" onClick={() => props.mutate(() => api.sendLark(row.id), 'Lark 日报已发送')}><Send size={14} /> Lark</Button>}
-            {props.canManage && <DangerButton title={`删除需求「${row.title}」？`} description={`关联 ${(props.cases || []).filter((item) => item.requirementId === row.id).length} 条用例、${(props.bugs || []).filter((item) => item.requirementId === row.id).length} 个 Bug。有关联数据时系统会阻止删除，请先迁移或清理。`} onConfirm={() => props.mutate(() => api.deleteRequirement(row.id), '需求已删除')} />}
+            <details className="row-more-menu">
+              <summary aria-label={`更多操作：${row.title}`}>
+                <MoreHorizontal size={15} />
+              </summary>
+              <div>
+                <Button type="button" size="sm" onClick={() => setEditing(row)}><Pencil size={14} /> 编辑需求</Button>
+                {props.canWrite && requirementStatuses.filter((item) => item !== row.status).map((nextStatus) => (
+                  <Button key={nextStatus} type="button" size="sm" onClick={() => setStatusChange({ row, status: nextStatus })}>
+                    流转为 {labelOf(nextStatus)}
+                  </Button>
+                ))}
+                {props.canWrite && requirementAcceptanceActions(row.acceptanceStatus || 'not_ready').map((action) => (
+                  <Button key={action.status} type="button" size="sm" onClick={() => setAcceptanceChange({ row, action })}>
+                    {action.label}
+                  </Button>
+                ))}
+                {props.canWrite && <Button type="button" size="sm" onClick={() => props.mutate(() => api.sendLark(row.id), 'Lark 日报已发送')}><Send size={14} /> Lark</Button>}
+                {props.canManage && <DangerButton title={`删除需求「${row.title}」？`} description={`关联 ${(props.cases || []).filter((item) => item.requirementId === row.id).length} 条用例、${(props.bugs || []).filter((item) => item.requirementId === row.id).length} 个 Bug。有关联数据时系统会阻止删除，请先迁移或清理。`} onConfirm={() => props.mutate(() => api.deleteRequirement(row.id), '需求已删除')} />}
+              </div>
+            </details>
           </div>
         ])}
       />
@@ -144,6 +158,43 @@ export function RequirementSection(props: {
         await props.mutate(() => api.updateRequirement(editing.id, requirementPayload(form, props.projectId)), '需求已保存');
         setEditing(null);
       }} />
+      <TextConfirmDialog
+        open={Boolean(statusChange)}
+        title={statusChange ? `确认流转需求状态为「${labelOf(statusChange.status)}」？` : '确认流转需求状态？'}
+        description={statusChange?.row.title}
+        label="流转原因"
+        placeholder="说明状态变更依据、阻塞原因或交付结论"
+        confirmText="确认流转"
+        destructive={statusChange?.status === 'blocked'}
+        onCancel={() => setStatusChange(null)}
+        onConfirm={async (note) => {
+          if (!statusChange) return;
+          await props.mutate(() => api.updateRequirement(statusChange.row.id, { status: statusChange.status, statusReason: note }), '需求状态已更新');
+          setStatusChange(null);
+        }}
+      />
+      <TextConfirmDialog
+        open={Boolean(acceptanceChange)}
+        title={acceptanceChange ? `确认${acceptanceChange.action.label}？` : '确认验收流转？'}
+        description={acceptanceChange?.row.title}
+        label="验收说明"
+        placeholder="说明验收依据、风险或驳回原因"
+        confirmText={acceptanceChange?.action.label || '确认'}
+        destructive={acceptanceChange?.action.status === 'rejected'}
+        onCancel={() => setAcceptanceChange(null)}
+        onConfirm={async (note) => {
+          if (!acceptanceChange) return;
+          await props.mutate(
+            () => api.updateRequirement(acceptanceChange.row.id, {
+              acceptanceStatus: acceptanceChange.action.status,
+              acceptanceReason: note,
+              ...(acceptanceChange.action.status === 'approved' ? { status: 'done' as const, statusReason: note } : {})
+            }),
+            acceptanceChange.action.message
+          );
+          setAcceptanceChange(null);
+        }}
+      />
       <TestCaseDrawer
         title="从需求新建用例"
         open={Boolean(caseRequirement)}

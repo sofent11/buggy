@@ -64,6 +64,14 @@ export class CreateRequirementDto {
   @IsOptional()
   @IsString()
   reportSignoffNote?: string;
+
+  @IsOptional()
+  @IsString()
+  statusReason?: string;
+
+  @IsOptional()
+  @IsString()
+  acceptanceReason?: string;
 }
 
 export class UpdateRequirementDto {
@@ -130,6 +138,14 @@ export class UpdateRequirementDto {
   @IsOptional()
   @IsString()
   reportSignoffNote?: string;
+
+  @IsOptional()
+  @IsString()
+  statusReason?: string;
+
+  @IsOptional()
+  @IsString()
+  acceptanceReason?: string;
 }
 
 export class BindLarkDto {

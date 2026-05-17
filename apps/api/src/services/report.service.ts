@@ -427,7 +427,7 @@ export class ReportService {
   <h2>风险清单</h2>
   <table>
     <tr><th>类型</th><th>事项</th><th>原因</th><th>截止时间</th></tr>
-    ${(summary.charts?.riskList || []).map((item) => `<tr><td>${item.type}</td><td>${escapeHtml(item.title)}</td><td>${escapeHtml(item.reason)}</td><td>${item.dueDate ? item.dueDate.slice(0, 10) : '-'}</td></tr>`).join('') || '<tr><td colspan="4">暂无风险</td></tr>'}
+    ${(summary.charts?.riskList || []).map((item) => `<tr><td>${escapeHtml(this.riskTypeLabel(item.type))}</td><td>${escapeHtml(item.title)}</td><td>${escapeHtml(item.reason)}</td><td>${item.dueDate ? item.dueDate.slice(0, 10) : '-'}</td></tr>`).join('') || '<tr><td colspan="4">暂无风险</td></tr>'}
   </table>
   <h2>验收审批历史</h2>
   <table>
@@ -469,7 +469,7 @@ export class ReportService {
       `报告签核：${this.reportSignoffLabel(summary.reportSignoff?.status)}${summary.reportSignoff?.signerName ? ` / ${summary.reportSignoff.signerName}` : ''}`,
       '',
       '风险清单：',
-      ...(summary.charts?.riskList || []).map((item) => `${item.type} | ${item.title} | ${item.reason}`),
+      ...(summary.charts?.riskList || []).map((item) => `${this.riskTypeLabel(item.type)} | ${item.title} | ${item.reason}`),
       '',
       'Bug 根因分类：',
       ...(summary.charts?.bugRootCause || []).map((item) => `${item.label} | ${item.value}`)
@@ -587,6 +587,13 @@ export class ReportService {
     if (status === 'rejected') return '已驳回';
     if (status === 'pending') return '待签核';
     return '未签核';
+  }
+
+  private riskTypeLabel(type: string) {
+    if (type === 'bug') return '缺陷';
+    if (type === 'requirement') return '需求';
+    if (type === 'execution') return '执行';
+    return type;
   }
 }
 

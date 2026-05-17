@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, FileText, Plus, Save, ShieldAlert, XCircle } from 'lucide-react';
+import { CheckCircle2, FileText, MoreHorizontal, Plus, Save, ShieldAlert, XCircle } from 'lucide-react';
 import type { AcceptanceScope, Bug, Iteration, QualityGateRule, ReportSummary, Requirement, TestPlan, UserProfile } from '@buggy/shared-types';
 import { api, downloadUrl } from '../../api.js';
 import { Button } from '../ui/button.js';
@@ -112,7 +112,16 @@ export function ReportSection(props: {
               <div className="row-actions">
                 <Button type="button" size="sm" onClick={() => setSelectedId(scope.id)}>查看报告</Button>
                 <Button type="button" size="sm" onClick={() => setEditing(scope)}>编辑</Button>
-                {props.canManage && <DangerButton title={`删除验收范围「${scope.name}」？`} onConfirm={() => props.mutate(() => api.deleteAcceptanceScope(scope.id), '验收范围已删除')} />}
+                {props.canManage && (
+                  <details className="row-more-menu">
+                    <summary aria-label={`更多操作：${scope.name}`}>
+                      <MoreHorizontal size={15} />
+                    </summary>
+                    <div>
+                      <DangerButton title={`删除验收范围「${scope.name}」？`} onConfirm={() => props.mutate(() => api.deleteAcceptanceScope(scope.id), '验收范围已删除')} />
+                    </div>
+                  </details>
+                )}
               </div>
             ])}
           />
@@ -243,7 +252,7 @@ function ReportDecision(props: { report: ReportSummary | null; onOpenEntity?: Op
         headers={['风险类型', '对象', '原因', '下一步']}
         emptyText="暂无风险"
         rows={riskRows.slice(0, 8).map((item) => [
-          item.type,
+          riskTypeLabel(item.type),
           item.title,
           item.reason,
           <Button type="button" size="sm" onClick={() => props.onOpenEntity?.(entityTypeOfRisk(item.type), item.id)}>定位处理</Button>
@@ -414,4 +423,11 @@ function entityTypeOfRisk(type: string) {
   if (type === 'bug') return 'bug';
   if (type === 'execution') return 'run_item';
   return 'requirement';
+}
+
+function riskTypeLabel(type: string) {
+  if (type === 'bug') return '缺陷';
+  if (type === 'requirement') return '需求';
+  if (type === 'execution') return '执行';
+  return type;
 }

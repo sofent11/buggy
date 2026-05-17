@@ -98,7 +98,7 @@ export const api = {
   requirements: async (projectId: string, params?: ListParams) => itemsOf(await request<PageResult<Requirement> | Requirement[]>(`/requirements${queryString({ projectId, pageSize: 500, ...params })}`)),
   createRequirement: (body: Partial<Requirement>) =>
     request<Requirement>('/requirements', { method: 'POST', body: JSON.stringify(body) }),
-  updateRequirement: (id: string, body: Partial<Requirement> & { reportSignoffStatus?: 'pending' | 'signed' | 'rejected'; reportSignoffNote?: string }) =>
+  updateRequirement: (id: string, body: Partial<Requirement> & { reportSignoffStatus?: 'pending' | 'signed' | 'rejected'; reportSignoffNote?: string; statusReason?: string; acceptanceReason?: string }) =>
     request<Requirement>(`/requirements/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteRequirement: (id: string) => request<{ deleted: true }>(`/requirements/${id}`, { method: 'DELETE' }),
   bindLark: (id: string, larkWebhook: string) =>

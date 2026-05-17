@@ -2014,6 +2014,11 @@ tr:last-child td {
   margin-bottom: 16px;
 }
 
+.workspace-context.compact-context {
+  grid-template-columns: minmax(260px, 1.3fr) repeat(3, minmax(120px, 0.8fr));
+  margin-bottom: 10px;
+}
+
 .workspace-context > div {
   min-width: 0;
   display: grid;
@@ -2023,6 +2028,11 @@ tr:last-child td {
   background: rgba(255, 255, 255, 0.82);
   padding: 12px 14px;
   box-shadow: 0 1px 0 rgba(16, 24, 40, 0.03);
+}
+
+.workspace-context.compact-context > div {
+  padding: 9px 12px;
+  min-height: 62px;
 }
 
 .workspace-context .context-primary {
@@ -2047,11 +2057,48 @@ tr:last-child td {
   overflow-wrap: anywhere;
 }
 
+.workspace-context.compact-context strong {
+  font-size: 15px;
+  line-height: 20px;
+}
+
 .workspace-context small,
 .member-context small {
   min-width: 0;
   color: var(--muted);
   overflow-wrap: anywhere;
+}
+
+.workspace-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0 0 14px;
+  border: 1px solid #e8c56b;
+  border-left: 4px solid var(--warning);
+  border-radius: 8px;
+  background: #fff9e8;
+  color: #574100;
+  padding: 11px 13px;
+}
+
+.workspace-alert svg {
+  flex: 0 0 auto;
+  color: var(--warning);
+  margin-top: 1px;
+}
+
+.workspace-alert div {
+  display: grid;
+  gap: 2px;
+}
+
+.workspace-alert strong {
+  color: var(--text);
+}
+
+.workspace-alert span {
+  color: #71550c;
 }
 
 .ui-sheet-content {

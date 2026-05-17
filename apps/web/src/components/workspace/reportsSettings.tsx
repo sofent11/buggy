@@ -157,7 +157,7 @@ function ScopedReportContent(props: { report: ReportSummary; query: string; requ
             headers={['风险类型', '对象', '原因', '截止时间']}
             emptyText="暂无风险"
             rows={(report.charts?.riskList || []).map((item) => [
-              item.type,
+              riskTypeLabel(item.type),
               item.title,
               item.reason,
               item.dueDate ? item.dueDate.slice(0, 10) : '-'
@@ -280,6 +280,13 @@ function reportSignoffLabel(status?: string) {
   if (status === 'rejected') return '已驳回';
   if (status === 'pending') return '待签核';
   return '未签核';
+}
+
+function riskTypeLabel(type: string) {
+  if (type === 'bug') return '缺陷';
+  if (type === 'requirement') return '需求';
+  if (type === 'execution') return '执行';
+  return type;
 }
 
 export function SettingsSection(props: {

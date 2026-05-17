@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Activity, Bug as BugIcon, Pencil, Plus, Save } from 'lucide-react';
+import { Activity, Bug as BugIcon, MoreHorizontal, Pencil, Plus, Save } from 'lucide-react';
 import type { Bug, Iteration, Requirement, TestCase, TestPlan, TestRunItem, TestRunStatus, UserProfile } from '@buggy/shared-types';
 import { api } from '../../api.js';
 import { Button } from '../ui/button.js';
@@ -255,8 +255,17 @@ export function PlanCard(props: { plan: TestPlan; iterations: Iteration[]; requi
             <Button type="button" size="sm" onClick={() => setBatchStatus('failed')}>{selectedRunItemIds.length ? '所选失败' : '全部失败'}</Button>
           </>
         )}
-        <Button type="button" size="sm" onClick={() => setEditing(true)}><Pencil size={14} /> 详情</Button>
-        {props.canManage && <DangerButton title={`删除测试计划「${props.plan.name}」？`} description={`关联 ${props.bugs.filter((bug) => bug.testPlanId === props.plan.id).length} 个 Bug。有关联缺陷时系统会阻止删除，请先迁移或关闭。`} onConfirm={() => props.mutate(() => api.deleteTestPlan(props.plan.id), '测试计划已删除')} />}
+        <Button type="button" size="sm" onClick={() => setEditing(true)}><Pencil size={14} /> 编辑计划</Button>
+        {props.canManage && (
+          <details className="row-more-menu">
+            <summary aria-label={`更多操作：${props.plan.name}`}>
+              <MoreHorizontal size={15} />
+            </summary>
+            <div>
+              <DangerButton title={`删除测试计划「${props.plan.name}」？`} description={`关联 ${props.bugs.filter((bug) => bug.testPlanId === props.plan.id).length} 个 Bug。有关联缺陷时系统会阻止删除，请先迁移或关闭。`} onConfirm={() => props.mutate(() => api.deleteTestPlan(props.plan.id), '测试计划已删除')} />
+            </div>
+          </details>
+        )}
       </header>
       <DataTable
         headers={['选择', '执行项', '状态', '实际结果', '执行人/时间', '关联 Bug', '快捷操作']}
@@ -329,6 +338,7 @@ export function PlanCard(props: { plan: TestPlan; iterations: Iteration[]; requi
 function RunItemActions(props: { planId: string; item: TestRunItem; users: UserProfile[]; canWrite?: boolean; mutate: (action: () => Promise<unknown>, message: string) => Promise<void> }) {
   const [editing, setEditing] = useState(false);
   const [bugOpen, setBugOpen] = useState(false);
+  const [quickStatus, setQuickStatus] = useState<TestRunStatus | null>(null);
   const [stepResults, setStepResults] = useState(() => initialStepResults(props.item));
   useEffect(() => setStepResults(initialStepResults(props.item)), [props.item]);
   useEffect(() => {
@@ -342,7 +352,7 @@ function RunItemActions(props: { planId: string; item: TestRunItem; users: UserP
   return (
     <div className="row-actions">
       {props.canWrite && (['passed', 'failed', 'blocked'] as const).map((status) => (
-        <Button key={status} type="button" size="sm" onClick={() => props.mutate(() => api.updateRunItem(props.planId, props.item.id, { status, actualResult: props.item.actualResult }), '执行结果已更新')}>{labelOf(status)}</Button>
+        <Button key={status} type="button" size="sm" onClick={() => setQuickStatus(status)}>{labelOf(status)}</Button>
       ))}
       {props.canWrite && <Button type="button" size="sm" onClick={() => setEditing(true)}><Pencil size={14} /> 记录</Button>}
       {props.canWrite && <Button type="button" size="sm" onClick={() => setBugOpen(true)}><BugIcon size={14} /> 建 Bug</Button>}
@@ -438,6 +448,21 @@ function RunItemActions(props: { planId: string; item: TestRunItem; users: UserP
           )}
         </HookForm>
       </Drawer>
+      <TextConfirmDialog
+        open={Boolean(quickStatus)}
+        title={quickStatus ? `确认执行结果为「${labelOf(quickStatus)}」？` : '确认执行结果？'}
+        description={props.item.caseTitle}
+        label={quickStatus === 'failed' || quickStatus === 'blocked' ? '问题说明' : '验证说明'}
+        placeholder={quickStatus === 'failed' || quickStatus === 'blocked' ? '说明失败/阻塞现象、环境或依赖' : '说明通过依据、验证环境或数据范围'}
+        confirmText="确认记录"
+        destructive={quickStatus === 'failed' || quickStatus === 'blocked'}
+        onCancel={() => setQuickStatus(null)}
+        onConfirm={async (note) => {
+          if (!quickStatus) return;
+          await props.mutate(() => api.updateRunItem(props.planId, props.item.id, { status: quickStatus, actualResult: note }), '执行结果已更新');
+          setQuickStatus(null);
+        }}
+      />
     </div>
   );
 }

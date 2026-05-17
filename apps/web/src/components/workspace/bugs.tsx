@@ -152,7 +152,7 @@ export function BugSection(props: {
           <MetricCard label="Bug 总数" value={props.rows.length} detail={`${props.rows.filter((row) => !['verified', 'closed'].includes(row.status)).length} 活跃`} tone="info" />
           <MetricCard label="严重缺陷" value={props.rows.filter((row) => ['S0', 'S1'].includes(row.severity)).length} detail="S0/S1" tone="risk" />
           <MetricCard label="已解决" value={props.rows.filter((row) => row.status === 'resolved').length} detail="待验证" />
-          <MetricCard label="关闭率" value={`${props.rows.length ? Math.round((props.rows.filter((row) => row.status === 'closed').length / props.rows.length) * 100) : 0}%`} detail="closed / total" tone="good" />
+          <MetricCard label="关闭率" value={`${props.rows.length ? Math.round((props.rows.filter((row) => row.status === 'closed').length / props.rows.length) * 100) : 0}%`} detail="已关闭 / 总数" tone="good" />
         </section>
       }
     >
@@ -307,7 +307,7 @@ function BugRowActions(props: {
           <MoreHorizontal size={15} />
         </summary>
         <div>
-          <Button type="button" size="sm" onClick={props.onEdit}><Pencil size={14} /> 详情</Button>
+          <Button type="button" size="sm" onClick={props.onEdit}><Pencil size={14} /> 编辑详情</Button>
           {props.canWrite && <Button type="button" size="sm" onClick={props.onDuplicate}><GitMerge size={14} /> 标记重复</Button>}
           {secondaryActions.map((action) => (
             <Button key={action.status} type="button" size="sm" onClick={() => props.onTransition(action)}>
