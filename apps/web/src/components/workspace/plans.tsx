@@ -9,7 +9,7 @@ import { Textarea } from '../ui/textarea.js';
 import { labelOf } from '../../labels.js';
 import { planStatuses, priorities, runStatuses, severities } from '../../app/constants.js';
 import { executionProgress, iterationName, requirementTitle, text } from '../../app/workspace-utils.js';
-import { DataPage, DataTable, DangerButton, Drawer, EmptyState, HookForm, MetricCard, SearchBox, Select, StatusBadge, TextConfirmDialog, Toolbar } from './common.js';
+import { DataPage, DataTable, DangerButton, Drawer, EmptyState, HookForm, MetricCard, SearchBox, Select, StatusBadge, TextConfirmDialog, Toolbar, RowMoreMenu } from './common.js';
 
 export function PlanSection(props: {
   projectId: string;
@@ -262,14 +262,9 @@ export function PlanCard(props: { plan: TestPlan; iterations: Iteration[]; requi
         )}
         <Button type="button" size="sm" onClick={() => setEditing(true)}><Pencil size={14} /> 编辑计划</Button>
         {props.canManage && (
-          <details className="row-more-menu">
-            <summary aria-label={`更多操作：${props.plan.name}`}>
-              <MoreHorizontal size={15} />
-            </summary>
-            <div>
-              <DangerButton title={`删除测试计划「${props.plan.name}」？`} description={`关联 ${props.bugs.filter((bug) => bug.testPlanId === props.plan.id).length} 个缺陷。有关联缺陷时系统会阻止删除，请先迁移或关闭。`} onConfirm={() => props.mutate(() => api.deleteTestPlan(props.plan.id), '测试计划已删除')} />
-            </div>
-          </details>
+          <RowMoreMenu label={`更多操作：${props.plan.name}`} trigger={<MoreHorizontal size={15} />}>
+            <DangerButton title={`删除测试计划「${props.plan.name}」？`} description={`关联 ${props.bugs.filter((bug) => bug.testPlanId === props.plan.id).length} 个缺陷。有关联缺陷时系统会阻止删除，请先迁移或关闭。`} onConfirm={() => props.mutate(() => api.deleteTestPlan(props.plan.id), '测试计划已删除')} />
+          </RowMoreMenu>
         )}
       </header>
       <DataTable

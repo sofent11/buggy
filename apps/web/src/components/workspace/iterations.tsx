@@ -8,7 +8,7 @@ import { Input } from '../ui/input.js';
 import { labelOf } from '../../labels.js';
 import { iterationStatuses } from '../../app/constants.js';
 import { dateInput, dateRange, matchKeyword, shortDate, text } from '../../app/workspace-utils.js';
-import { DataPage, DataTable, DangerButton, Drawer, EmptyState, HookForm, MetricCard, SearchBox, Select, StatusBadge, Toolbar } from './common.js';
+import { DataPage, DataTable, DangerButton, Drawer, EmptyState, HookForm, MetricCard, SearchBox, Select, StatusBadge, Toolbar, RowMoreMenu } from './common.js';
 import { ScopedReportDrawer } from './reportsSettings.js';
 
 export function IterationSection(props: {
@@ -73,14 +73,9 @@ export function IterationSection(props: {
                 <Button type="button" size="sm" onClick={() => setEditing(row)}><Pencil size={14} /> 编辑</Button>
                 <Button type="button" size="sm" onClick={() => setReporting(row)}><FileText size={14} /> 报告</Button>
                 {props.canManage && (
-                  <details className="row-more-menu">
-                    <summary aria-label={`更多操作：${row.name}`}>
-                      <MoreHorizontal size={15} />
-                    </summary>
-                    <div>
-                      <DangerButton title={`删除迭代「${row.name}」？`} onConfirm={() => props.mutate(() => api.deleteIteration(row.id), '迭代已删除')} />
-                    </div>
-                  </details>
+                  <RowMoreMenu label={`更多操作：${row.name}`} trigger={<MoreHorizontal size={15} />}>
+                    <DangerButton title={`删除迭代「${row.name}」？`} onConfirm={() => props.mutate(() => api.deleteIteration(row.id), '迭代已删除')} />
+                  </RowMoreMenu>
                 )}
               </div>
             ];

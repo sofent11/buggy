@@ -3945,13 +3945,13 @@ select[multiple] {
 }
 
 .row-more-menu {
-  position: relative;
+  display: inline-block;
   padding: 0;
   border: 0;
   background: transparent;
 }
 
-.row-more-menu summary {
+.row-more-trigger {
   width: 32px;
   min-height: 30px;
   display: inline-grid;
@@ -3959,18 +3959,11 @@ select[multiple] {
   border: 1px solid var(--line-strong);
   border-radius: 6px;
   background: white;
-  list-style: none;
 }
 
-.row-more-menu summary::-webkit-details-marker {
-  display: none;
-}
-
-.row-more-menu > div {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  z-index: 25;
+.row-more-popover {
+  position: fixed;
+  z-index: 120;
   min-width: 144px;
   display: grid;
   gap: 6px;
@@ -3981,8 +3974,8 @@ select[multiple] {
   box-shadow: var(--shadow-popover);
 }
 
-.row-more-menu > div button,
-.row-more-menu > div .ui-button {
+.row-more-popover button,
+.row-more-popover .ui-button {
   width: 100%;
   justify-content: flex-start;
 }

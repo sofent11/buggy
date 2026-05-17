@@ -10,7 +10,7 @@ import { Textarea } from '../ui/textarea.js';
 import { automationStatuses, caseReviewStatuses, caseStatuses, priorities } from '../../app/constants.js';
 import type { StringFormValues } from '../../app/types.js';
 import { matchKeyword, requirementTitle, shortDate, testCasePayload, userName } from '../../app/workspace-utils.js';
-import { ColumnChooser, DataPage, DataTable, DangerButton, Drawer, EmptyState, HookForm, MetricCard, Pagination, registerField, SearchBox, Select, StatusBadge, StepEditor, TextConfirmDialog, Toolbar } from './common.js';
+import { ColumnChooser, DataPage, DataTable, DangerButton, Drawer, EmptyState, HookForm, MetricCard, Pagination, registerField, SearchBox, Select, StatusBadge, StepEditor, TextConfirmDialog, Toolbar, RowMoreMenu } from './common.js';
 
 const caseColumns = [
   { key: 'case', label: '用例', locked: true, sortKey: 'title' },
@@ -462,33 +462,28 @@ function CaseRowActions(props: {
           {primaryAction.label}
         </Button>
       )}
-      <details className="row-more-menu">
-        <summary aria-label={`更多操作：${props.row.title}`}>
-          <MoreHorizontal size={15} />
-        </summary>
-        <div>
-          <Button type="button" size="sm" onClick={props.onEdit}><Pencil size={14} /> 编辑详情</Button>
-          {props.canWrite && caseStatuses.filter((status) => status !== props.row.status).map((status) => (
-            <Button key={status} type="button" size="sm" onClick={() => props.onStatus(status)}>
-              状态改为 {userNameOrLabel(status)}
-            </Button>
-          ))}
-          {secondaryActions.map((action) => (
-            <Button key={action.status} type="button" size="sm" onClick={() => { void props.onReview(action); }}>
-              {action.label}
-            </Button>
-          ))}
-          {props.canWrite && <Button type="button" size="sm" onClick={() => { void props.onBaseline(); }}><GitBranch size={14} /> 设为基线</Button>}
-          {props.canWrite && props.row.baselineSnapshot && <Button type="button" size="sm" onClick={() => { void props.onRestore(); }}><GitBranch size={14} /> 恢复基线</Button>}
-          {props.canManage && (
-            <DangerButton
-              title={`删除用例「${props.row.title}」？`}
-              description={`关联 ${props.runCount} 个执行项、${props.bugCount} 个缺陷。有关联数据时系统会阻止删除，请先迁移或清理。`}
-              onConfirm={() => { void props.onDelete(); }}
-            />
-          )}
-        </div>
-      </details>
+      <RowMoreMenu label={`更多操作：${props.row.title}`} trigger={<MoreHorizontal size={15} />}>
+        <Button type="button" size="sm" onClick={props.onEdit}><Pencil size={14} /> 编辑详情</Button>
+        {props.canWrite && caseStatuses.filter((status) => status !== props.row.status).map((status) => (
+          <Button key={status} type="button" size="sm" onClick={() => props.onStatus(status)}>
+            状态改为 {userNameOrLabel(status)}
+          </Button>
+        ))}
+        {secondaryActions.map((action) => (
+          <Button key={action.status} type="button" size="sm" onClick={() => { void props.onReview(action); }}>
+            {action.label}
+          </Button>
+        ))}
+        {props.canWrite && <Button type="button" size="sm" onClick={() => { void props.onBaseline(); }}><GitBranch size={14} /> 设为基线</Button>}
+        {props.canWrite && props.row.baselineSnapshot && <Button type="button" size="sm" onClick={() => { void props.onRestore(); }}><GitBranch size={14} /> 恢复基线</Button>}
+        {props.canManage && (
+          <DangerButton
+            title={`删除用例「${props.row.title}」？`}
+            description={`关联 ${props.runCount} 个执行项、${props.bugCount} 个缺陷。有关联数据时系统会阻止删除，请先迁移或清理。`}
+            onConfirm={() => { void props.onDelete(); }}
+          />
+        )}
+      </RowMoreMenu>
     </div>
   );
 }

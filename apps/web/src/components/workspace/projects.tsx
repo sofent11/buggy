@@ -8,7 +8,7 @@ import { Input } from '../ui/input.js';
 import { Textarea } from '../ui/textarea.js';
 import { labelOf } from '../../labels.js';
 import { matchKeyword, shortDate, text } from '../../app/workspace-utils.js';
-import { DataPage, DataTable, DangerButton, Drawer, EmptyState, HookForm, MetricCard, SearchBox, StatusBadge, Toolbar } from './common.js';
+import { DataPage, DataTable, DangerButton, Drawer, EmptyState, HookForm, MetricCard, SearchBox, StatusBadge, Toolbar, RowMoreMenu } from './common.js';
 
 const RECENT_PROJECTS_KEY = 'buggy_recent_project_ids';
 type ProjectScope = 'active' | 'mine' | 'recent' | 'sample' | 'archived' | 'all';
@@ -84,25 +84,20 @@ export function ProjectSection(props: {
           <div className="row-actions">
             {!isArchivedProject(project) && <Button type="button" size="sm" onClick={() => props.onSelect(project.id)}><Check size={14} /> 选中</Button>}
             <Button type="button" size="sm" onClick={() => setManagingMembers(project)}><Users size={14} /> 成员</Button>
-            <details className="row-more-menu">
-              <summary aria-label={`更多操作：${project.name}`}>
-                <MoreHorizontal size={15} />
-              </summary>
-              <div>
-                <Button type="button" size="sm" onClick={() => setEditing(project)}><Pencil size={14} /> 编辑档案</Button>
-                {project.status === 'archived' ? (
-                  <Button type="button" size="sm" onClick={() => props.mutate(() => api.updateProject(project.id, { status: 'active' }), '项目已恢复为活跃', { reloadProjects: true })}>恢复活跃</Button>
-                ) : (
-                  <Button type="button" size="sm" onClick={() => props.mutate(() => api.updateProject(project.id, { status: 'archived' }), '项目已归档', { reloadProjects: true })}>归档项目</Button>
-                )}
-                {project.category !== 'test' && <Button type="button" size="sm" onClick={() => props.mutate(() => api.updateProject(project.id, { category: 'test' }), '项目已标记为测试数据', { reloadProjects: true })}>标记测试数据</Button>}
-                <DangerButton
-                  title={`删除项目「${project.name}」？`}
-                  description="项目下的迭代、需求、用例、执行计划、缺陷和报告数据都会被删除。"
-                  onConfirm={() => props.mutate(() => api.deleteProject(project.id), '项目已删除', { reloadProjects: true })}
-                />
-              </div>
-            </details>
+            <RowMoreMenu label={`更多操作：${project.name}`} trigger={<MoreHorizontal size={15} />}>
+              <Button type="button" size="sm" onClick={() => setEditing(project)}><Pencil size={14} /> 编辑档案</Button>
+              {project.status === 'archived' ? (
+                <Button type="button" size="sm" onClick={() => props.mutate(() => api.updateProject(project.id, { status: 'active' }), '项目已恢复为活跃', { reloadProjects: true })}>恢复活跃</Button>
+              ) : (
+                <Button type="button" size="sm" onClick={() => props.mutate(() => api.updateProject(project.id, { status: 'archived' }), '项目已归档', { reloadProjects: true })}>归档项目</Button>
+              )}
+              {project.category !== 'test' && <Button type="button" size="sm" onClick={() => props.mutate(() => api.updateProject(project.id, { category: 'test' }), '项目已标记为测试数据', { reloadProjects: true })}>标记测试数据</Button>}
+              <DangerButton
+                title={`删除项目「${project.name}」？`}
+                description="项目下的迭代、需求、用例、执行计划、缺陷和报告数据都会被删除。"
+                onConfirm={() => props.mutate(() => api.deleteProject(project.id), '项目已删除', { reloadProjects: true })}
+              />
+            </RowMoreMenu>
           </div>
         ])}
       />

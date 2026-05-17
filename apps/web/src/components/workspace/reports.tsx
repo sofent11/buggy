@@ -8,7 +8,7 @@ import { Field, FieldLabel, FormActions } from '../ui/form.js';
 import { Input } from '../ui/input.js';
 import { Textarea } from '../ui/textarea.js';
 import { labelOf } from '../../labels.js';
-import { DataPage, DataTable, DangerButton, Drawer, EmptyState, HookForm, MetricCard, StatusBadge, TextConfirmDialog, Toolbar } from './common.js';
+import { DataPage, DataTable, DangerButton, Drawer, EmptyState, HookForm, MetricCard, StatusBadge, TextConfirmDialog, Toolbar, RowMoreMenu } from './common.js';
 
 type OpenEntity = (entityType: string, entityId?: string) => void;
 
@@ -130,14 +130,9 @@ export function ReportSection(props: {
                 <Button type="button" size="sm" onClick={() => setSelectedId(scope.id)}>查看报告</Button>
                 <Button type="button" size="sm" onClick={() => setEditing(scope)}>编辑</Button>
                 {props.canManage && (
-                  <details className="row-more-menu">
-                    <summary aria-label={`更多操作：${scope.name}`}>
-                      <MoreHorizontal size={15} />
-                    </summary>
-                    <div>
-                      <DangerButton title={`删除验收范围「${scope.name}」？`} onConfirm={() => props.mutate(() => api.deleteAcceptanceScope(scope.id), '验收范围已删除')} />
-                    </div>
-                  </details>
+                  <RowMoreMenu label={`更多操作：${scope.name}`} trigger={<MoreHorizontal size={15} />}>
+                    <DangerButton title={`删除验收范围「${scope.name}」？`} onConfirm={() => props.mutate(() => api.deleteAcceptanceScope(scope.id), '验收范围已删除')} />
+                  </RowMoreMenu>
                 )}
               </div>
             ])}

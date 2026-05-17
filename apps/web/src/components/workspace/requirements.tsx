@@ -11,7 +11,7 @@ import { labelOf } from '../../labels.js';
 import { acceptanceStatuses, priorities, requirementStatuses } from '../../app/constants.js';
 import type { StringFormValues } from '../../app/types.js';
 import { iterationName, matchKeyword, requirementPayload, shortDate, testCasePayload, userName } from '../../app/workspace-utils.js';
-import { DataPage, DataTable, DangerButton, Drawer, EmptyState, FilterChips, HookForm, MetricCard, registerField, SearchBox, Select, StatusBadge, TextConfirmDialog, Toolbar } from './common.js';
+import { DataPage, DataTable, DangerButton, Drawer, EmptyState, FilterChips, HookForm, MetricCard, registerField, SearchBox, Select, StatusBadge, TextConfirmDialog, Toolbar, RowMoreMenu } from './common.js';
 import { TestCaseDrawer } from './cases.js';
 import { ScopedReportDrawer } from './reportsSettings.js';
 
@@ -119,26 +119,21 @@ export function RequirementSection(props: {
           <div className="row-actions">
             <Button type="button" size="sm" onClick={() => setReporting(row)}><FileText size={14} /> 验收报告</Button>
             {props.canWrite && <Button type="button" size="sm" onClick={() => setCaseRequirement(row)}><Plus size={14} /> 建用例</Button>}
-            <details className="row-more-menu">
-              <summary aria-label={`更多操作：${row.title}`}>
-                <MoreHorizontal size={15} />
-              </summary>
-              <div>
-                <Button type="button" size="sm" onClick={() => setEditing(row)}><Pencil size={14} /> 编辑需求</Button>
-                {props.canWrite && requirementStatuses.filter((item) => item !== row.status).map((nextStatus) => (
-                  <Button key={nextStatus} type="button" size="sm" onClick={() => setStatusChange({ row, status: nextStatus })}>
-                    流转为 {labelOf(nextStatus)}
-                  </Button>
-                ))}
-                {props.canWrite && requirementAcceptanceActions(row.acceptanceStatus || 'not_ready').map((action) => (
-                  <Button key={action.status} type="button" size="sm" onClick={() => setAcceptanceChange({ row, action })}>
-                    {action.label}
-                  </Button>
-                ))}
-                {props.canWrite && <Button type="button" size="sm" onClick={() => props.mutate(() => api.sendLark(row.id), 'Lark 日报已发送')}><Send size={14} /> Lark</Button>}
-                {props.canManage && <DangerButton title={`删除需求「${row.title}」？`} description={`关联 ${(props.cases || []).filter((item) => item.requirementId === row.id).length} 条用例、${(props.bugs || []).filter((item) => item.requirementId === row.id).length} 个缺陷。有关联数据时系统会阻止删除，请先迁移或清理。`} onConfirm={() => props.mutate(() => api.deleteRequirement(row.id), '需求已删除')} />}
-              </div>
-            </details>
+            <RowMoreMenu label={`更多操作：${row.title}`} trigger={<MoreHorizontal size={15} />}>
+              <Button type="button" size="sm" onClick={() => setEditing(row)}><Pencil size={14} /> 编辑需求</Button>
+              {props.canWrite && requirementStatuses.filter((item) => item !== row.status).map((nextStatus) => (
+                <Button key={nextStatus} type="button" size="sm" onClick={() => setStatusChange({ row, status: nextStatus })}>
+                  流转为 {labelOf(nextStatus)}
+                </Button>
+              ))}
+              {props.canWrite && requirementAcceptanceActions(row.acceptanceStatus || 'not_ready').map((action) => (
+                <Button key={action.status} type="button" size="sm" onClick={() => setAcceptanceChange({ row, action })}>
+                  {action.label}
+                </Button>
+              ))}
+              {props.canWrite && <Button type="button" size="sm" onClick={() => props.mutate(() => api.sendLark(row.id), 'Lark 日报已发送')}><Send size={14} /> Lark</Button>}
+              {props.canManage && <DangerButton title={`删除需求「${row.title}」？`} description={`关联 ${(props.cases || []).filter((item) => item.requirementId === row.id).length} 条用例、${(props.bugs || []).filter((item) => item.requirementId === row.id).length} 个缺陷。有关联数据时系统会阻止删除，请先迁移或清理。`} onConfirm={() => props.mutate(() => api.deleteRequirement(row.id), '需求已删除')} />}
+            </RowMoreMenu>
           </div>
         ])}
       />

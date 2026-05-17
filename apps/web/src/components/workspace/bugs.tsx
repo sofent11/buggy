@@ -11,7 +11,7 @@ import { labelOf } from '../../labels.js';
 import { bugStatuses, priorities, severities, triageStatuses } from '../../app/constants.js';
 import type { StringFormValues } from '../../app/types.js';
 import { bugPayload, matchKeyword, requirementTitle, shortDate, userName } from '../../app/workspace-utils.js';
-import { ColumnChooser, DataPage, DataTable, DangerButton, Drawer, EmptyState, FilterChips, HookForm, MetricCard, Pagination, registerField, SearchBox, Select, StatusBadge, TextConfirmDialog, Toolbar } from './common.js';
+import { ColumnChooser, DataPage, DataTable, DangerButton, Drawer, EmptyState, FilterChips, HookForm, MetricCard, Pagination, registerField, SearchBox, Select, StatusBadge, TextConfirmDialog, Toolbar, RowMoreMenu } from './common.js';
 
 const bugColumns = [
   { key: 'bug', label: '缺陷', locked: true, sortKey: 'title' },
@@ -302,21 +302,16 @@ function BugRowActions(props: {
           <primaryAction.icon size={14} /> {primaryAction.label}
         </Button>
       )}
-      <details className="row-more-menu">
-        <summary aria-label={`更多操作：${props.row.title}`}>
-          <MoreHorizontal size={15} />
-        </summary>
-        <div>
-          <Button type="button" size="sm" onClick={props.onEdit}><Pencil size={14} /> 编辑详情</Button>
-          {props.canWrite && <Button type="button" size="sm" onClick={props.onDuplicate}><GitMerge size={14} /> 标记重复</Button>}
-          {secondaryActions.map((action) => (
-            <Button key={action.status} type="button" size="sm" onClick={() => props.onTransition(action)}>
-              <action.icon size={14} /> {action.label}
-            </Button>
-          ))}
-          {props.canManage && <DangerButton title={`删除缺陷「${props.row.title}」？`} onConfirm={() => { void props.onDelete(); }} />}
-        </div>
-      </details>
+      <RowMoreMenu label={`更多操作：${props.row.title}`} trigger={<MoreHorizontal size={15} />}>
+        <Button type="button" size="sm" onClick={props.onEdit}><Pencil size={14} /> 编辑详情</Button>
+        {props.canWrite && <Button type="button" size="sm" onClick={props.onDuplicate}><GitMerge size={14} /> 标记重复</Button>}
+        {secondaryActions.map((action) => (
+          <Button key={action.status} type="button" size="sm" onClick={() => props.onTransition(action)}>
+            <action.icon size={14} /> {action.label}
+          </Button>
+        ))}
+        {props.canManage && <DangerButton title={`删除缺陷「${props.row.title}」？`} onConfirm={() => { void props.onDelete(); }} />}
+      </RowMoreMenu>
     </div>
   );
 }

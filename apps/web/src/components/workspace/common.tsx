@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { useForm, type UseFormRegister } from 'react-hook-form';
 import { ChevronDown, ChevronUp, Download, FolderKanban, Plus, Search, Trash2, X } from 'lucide-react';
 import type { TestCaseStep } from '@buggy/shared-types';
@@ -213,6 +214,86 @@ export function DataTable(props: {
         </tbody>
       </table>
     </div>
+  );
+}
+
+export function RowMoreMenu(props: { label: string; trigger: ReactNode; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const [position, setPosition] = useState({ top: 0, left: 0 });
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  const updatePosition = useCallback(() => {
+    const trigger = triggerRef.current;
+    const menu = menuRef.current;
+    if (!trigger || !menu) return;
+
+    const triggerRect = trigger.getBoundingClientRect();
+    const menuRect = menu.getBoundingClientRect();
+    const gap = 6;
+    const edge = 8;
+    const menuWidth = menuRect.width || 144;
+    const menuHeight = menuRect.height || 0;
+    const maxLeft = Math.max(edge, window.innerWidth - menuWidth - edge);
+    const left = Math.min(Math.max(edge, triggerRect.right - menuWidth), maxLeft);
+    const below = triggerRect.bottom + gap;
+    const above = triggerRect.top - menuHeight - gap;
+    const top = below + menuHeight <= window.innerHeight - edge || above < edge
+      ? Math.min(below, window.innerHeight - menuHeight - edge)
+      : above;
+
+    setPosition({ top: Math.max(edge, top), left });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    updatePosition();
+  }, [open, updatePosition]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (triggerRef.current?.contains(target) || menuRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    window.addEventListener('pointerdown', handlePointerDown);
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [open, updatePosition]);
+
+  return (
+    <span className="row-more-menu">
+      <button
+        ref={triggerRef}
+        type="button"
+        className="row-more-trigger"
+        aria-label={props.label}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+      >
+        {props.trigger}
+      </button>
+      {open && createPortal(
+        <div ref={menuRef} className="row-more-popover" role="menu" style={{ top: position.top, left: position.left }} onClick={(event) => {
+          if ((event.target as HTMLElement).closest('button')) setOpen(false);
+        }}>
+          {props.children}
+        </div>,
+        document.body
+      )}
+    </span>
   );
 }
 
