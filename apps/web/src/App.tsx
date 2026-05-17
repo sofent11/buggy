@@ -8,6 +8,7 @@ import {
   CalendarRange,
   ClipboardCheck,
   Clock3,
+  FileText,
   Flag,
   FolderKanban,
   HelpCircle,
@@ -32,6 +33,7 @@ import { DictionaryProvider } from './components/workspace/dictionary.js';
 import { HelpCenter } from './components/workspace/help.js';
 import { ProjectOnboarding, QualityHealthCenter, QualityWorkflowNavigator, QualityWorkQueue, RecentWork, RiskBoard, TraceabilityMatrix } from './components/workspace/overview.js';
 import { BugSection, CaseSection, IterationSection, PlanSection, ProjectSection, RequirementSection, SettingsSection } from './components/workspace/sections.js';
+import { ReportSection } from './components/workspace/reports.js';
 
 const LAST_PROJECT_KEY = 'buggy_last_project_id';
 const RECENT_PROJECTS_KEY = 'buggy_recent_project_ids';
@@ -54,6 +56,7 @@ export function App() {
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [savedViewOpen, setSavedViewOpen] = useState(false);
   const [appliedUrlViewKey, setAppliedUrlViewKey] = useState('');
+  const [appliedDefaultViewKeys, setAppliedDefaultViewKeys] = useState<string[]>([]);
   const [tabFilters, setTabFilters] = useState<TabFilters>({});
   const currentProject = useMemo(
     () => projects.find((project) => project.id === currentProjectId),
@@ -76,12 +79,13 @@ export function App() {
     }
     setBusy(true);
     try {
-      const [iterations, requirements, cases, plans, bugs, report, dictionaries, users, activities, notifications, savedViews] = await Promise.all([
+      const [iterations, requirements, cases, plans, bugs, acceptanceScopes, report, dictionaries, users, activities, notifications, savedViews] = await Promise.all([
         api.iterations(projectId),
         api.requirements(projectId),
         api.testCases(projectId),
         api.testPlans(projectId),
         api.bugs(projectId),
+        api.acceptanceScopes(projectId),
         api.reportSummary({ projectId }),
         api.dictionaries(projectId),
         api.users(),
@@ -89,7 +93,7 @@ export function App() {
         api.notifications(projectId),
         api.savedViews(projectId)
       ]);
-      setData({ iterations, requirements, cases, plans, bugs, report, dictionaries, users, activities, notifications, savedViews });
+      setData({ iterations, requirements, cases, plans, bugs, acceptanceScopes, report, dictionaries, users, activities, notifications, savedViews });
     } catch (error) {
       setNotice((error as Error).message);
     } finally {
@@ -215,6 +219,17 @@ export function App() {
     applySavedView(view);
   }, [appliedUrlViewKey, applySavedView, currentProject, data.savedViews]);
 
+  useEffect(() => {
+    const hasUrlView = Boolean(new URL(window.location.href).searchParams.get('view'));
+    if (hasUrlView || !currentProject || data.savedViews.length === 0) return;
+    const view = data.savedViews.find((item) => item.tab === tab && item.isDefault);
+    if (!view) return;
+    const key = `${currentProject.id}:${view.id}`;
+    if (appliedDefaultViewKeys.includes(key)) return;
+    setAppliedDefaultViewKeys((current) => [...current, key]);
+    applySavedView(view);
+  }, [appliedDefaultViewKeys, applySavedView, currentProject, data.savedViews, tab]);
+
   const dashboard = useMemo(() => {
     const report = data.report;
     return [
@@ -231,6 +246,14 @@ export function App() {
   const canWriteProject = canManageProject || projectRole === 'tester' || projectRole === 'developer';
   const canExecute = canManageProject || projectRole === 'tester';
   const unreadCount = data.notifications.filter((item) => item.status === 'unread').length;
+  const openEntity = useCallback((entityType: string, entityId?: string) => {
+    const nextTab = tabOfEntity(entityType);
+    if (nextTab) setTab(nextTab);
+    if (!entityId) return;
+    window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('buggy:open-entity', { detail: { entityType, entityId } }));
+    }, 80);
+  }, []);
 
   if (loading) return <div className="boot">正在启动 Buggy...</div>;
 
@@ -287,13 +310,13 @@ export function App() {
           </div>
         </div>
         <nav>
-          <NavButton tab="overview" current={tab} icon={BarChart3} index={1} label="总览" onClick={setTab} />
+          <NavButton tab="overview" current={tab} icon={BarChart3} index={1} label="工作台" onClick={setTab} />
           <NavButton tab="projects" current={tab} icon={FolderKanban} index={2} label="项目" onClick={setTab} />
-          <NavButton tab="iterations" current={tab} icon={CalendarRange} index={3} label="迭代" onClick={setTab} />
-          <NavButton tab="requirements" current={tab} icon={Flag} index={4} label="需求" onClick={setTab} />
-          <NavButton tab="cases" current={tab} icon={ClipboardCheck} index={5} label="用例" onClick={setTab} />
-          <NavButton tab="plans" current={tab} icon={Activity} index={6} label="执行" onClick={setTab} />
-          <NavButton tab="bugs" current={tab} icon={BugIcon} index={7} label="Bug" onClick={setTab} />
+          <NavButton tab="requirements" current={tab} icon={Flag} index={3} label="需求" onClick={setTab} />
+          <NavButton tab="cases" current={tab} icon={ClipboardCheck} index={4} label="用例库" onClick={setTab} />
+          <NavButton tab="plans" current={tab} icon={Activity} index={5} label="测试执行" onClick={setTab} />
+          <NavButton tab="bugs" current={tab} icon={BugIcon} index={6} label="缺陷" onClick={setTab} />
+          <NavButton tab="reports" current={tab} icon={FileText} index={7} label="报表" onClick={setTab} />
           <NavButton tab="settings" current={tab} icon={Settings} index={8} label="配置" onClick={setTab} />
         </nav>
         <div className="sidebar-footer">
@@ -314,7 +337,7 @@ export function App() {
             <input
               value={globalKeyword}
               onChange={(event) => setGlobalKeyword(event.target.value)}
-              placeholder="搜索需求、用例、Bug、项目..."
+              placeholder="搜索需求、用例、缺陷、项目..."
             />
           </label>
           <div className="top-actions">
@@ -378,7 +401,7 @@ export function App() {
           <div>
             <span>质量资产</span>
             <strong>{data.requirements.length + data.cases.length + data.bugs.length}</strong>
-            <small>需求 / 用例 / Bug</small>
+            <small>需求 / 用例 / 缺陷</small>
           </div>
           <div>
             <span>执行通过率</span>
@@ -422,7 +445,7 @@ export function App() {
                 ))}
                 <QualityWorkflowNavigator data={data} onJump={setTab} />
                 <QualityWorkQueue data={data} user={user} onJump={setTab} />
-                <QualityHealthCenter data={data} onJump={setTab} />
+                <QualityHealthCenter data={data} onJump={setTab} onOpenEntity={openEntity} />
                 <ProjectOnboarding data={data} currentProject={currentProject} onJump={setTab} />
                 <RecentWork data={visibleData} />
                 <section className="panel">
@@ -451,7 +474,7 @@ export function App() {
                 </section>
                 <section className="panel wide">
                   <h2>项目风险</h2>
-                  <RiskBoard report={data.report} />
+                  <RiskBoard report={data.report} onOpenEntity={openEntity} />
                 </section>
               </section>
             )}
@@ -522,6 +545,7 @@ export function App() {
                 canManage={canManageProject}
                 mutate={mutate}
                 onNotice={setNotice}
+                onOpenEntity={openEntity}
               />
             )}
             {tab === 'bugs' && currentProject && (
@@ -537,6 +561,22 @@ export function App() {
                 canWrite={canWriteProject}
                 canManage={canManageProject}
                 mutate={mutate}
+                onOpenEntity={openEntity}
+              />
+            )}
+            {tab === 'reports' && currentProject && (
+              <ReportSection
+                projectId={currentProject.id}
+                scopes={visibleData.acceptanceScopes}
+                iterations={data.iterations}
+                requirements={data.requirements}
+                plans={data.plans}
+                bugs={data.bugs}
+                users={data.users}
+                canWrite={canWriteProject}
+                canManage={canManageProject}
+                mutate={mutate}
+                onOpenEntity={openEntity}
               />
             )}
             {tab === 'settings' && currentProject && (
@@ -789,6 +829,9 @@ function savedViewFilterLabel(key: string) {
     requirementId: '需求',
     reviewStatus: '评审',
     automationStatus: '自动化',
+    moduleFilter: '业务模块',
+    suiteFilter: '用例集',
+    caseQueue: '队列',
     pageSize: '页大小',
     sortBy: '排序字段',
     sortOrder: '排序方向',
@@ -829,11 +872,16 @@ function NotificationCenter(props: {
 }
 
 function tabOfNotification(notification: Notification): Tab | undefined {
-  if (notification.entityType === 'bug') return 'bugs';
-  if (notification.entityType === 'test_case') return 'cases';
-  if (notification.entityType === 'test_plan' || notification.entityType === 'run_item') return 'plans';
-  if (notification.entityType === 'requirement') return 'requirements';
-  if (notification.entityType === 'iteration') return 'iterations';
-  if (notification.entityType === 'project') return 'projects';
+  return notification.entityType ? tabOfEntity(notification.entityType) : undefined;
+}
+
+function tabOfEntity(entityType: string): Tab | undefined {
+  if (entityType === 'bug') return 'bugs';
+  if (entityType === 'test_case') return 'cases';
+  if (entityType === 'test_plan' || entityType === 'run_item') return 'plans';
+  if (entityType === 'requirement') return 'requirements';
+  if (entityType === 'iteration') return 'iterations';
+  if (entityType === 'project') return 'projects';
+  if (entityType === 'acceptance_scope') return 'reports';
   return undefined;
 }

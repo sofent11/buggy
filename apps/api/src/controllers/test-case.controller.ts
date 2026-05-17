@@ -39,6 +39,12 @@ export class TestCaseController {
     return this.cases.update(id, dto, user);
   }
 
+  @Post(':id/restore-baseline')
+  async restoreBaseline(@Param('id') id: string, @CurrentUser() user: SessionUser) {
+    await this.projects.assertWrite(await this.cases.projectIdOf(id), user);
+    return this.cases.restoreBaseline(id, user);
+  }
+
   @Delete(':id')
   async remove(@Param('id') id: string, @CurrentUser() user: SessionUser) {
     await this.projects.assertManage(await this.cases.projectIdOf(id), user);

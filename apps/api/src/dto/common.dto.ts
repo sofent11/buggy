@@ -33,6 +33,14 @@ export class ListQueryDto {
   requirementId?: string;
 
   @IsOptional()
+  @IsMongoId()
+  testPlanId?: string;
+
+  @IsOptional()
+  @IsMongoId()
+  acceptanceScopeId?: string;
+
+  @IsOptional()
   @IsString()
   status?: string;
 
@@ -67,6 +75,14 @@ export class ListQueryDto {
   @IsOptional()
   @IsMongoId()
   ownerId?: string;
+
+  @IsOptional()
+  @IsString()
+  module?: string;
+
+  @IsOptional()
+  @IsString()
+  suiteId?: string;
 
   @IsOptional()
   @IsString()

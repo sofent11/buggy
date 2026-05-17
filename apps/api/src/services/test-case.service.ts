@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import type { PageResult, TestCase, TestCaseStep } from '@buggy/shared-types';
+import type { CaseVersionHistory, CaseVersionSnapshot, PageResult, TestCase, TestCaseStep } from '@buggy/shared-types';
 import { BugEntity } from '../database/bug.schema.js';
 import { TestCaseEntity } from '../database/test-case.schema.js';
 import { TestPlanEntity } from '../database/test-plan.schema.js';
@@ -29,6 +29,8 @@ export class TestCaseService {
     if (query.reviewStatus) filter.reviewStatus = query.reviewStatus;
     if (query.automationStatus) filter.automationStatus = query.automationStatus;
     if (query.ownerId) filter.ownerId = new Types.ObjectId(query.ownerId);
+    if (query.module) filter.module = query.module;
+    if (query.suiteId) filter.suiteId = query.suiteId;
     if (query.keyword) {
       filter.$or = [
         { title: { $regex: query.keyword, $options: 'i' } },
@@ -75,6 +77,9 @@ export class TestCaseService {
       tags: dto.tags || [],
       workflowHistory: [this.workflowEntry('created', undefined, dto.status || 'ready', user, '创建用例')]
     });
+    row.versionHistory = [this.versionHistoryEntry(row, 'created', user, '创建用例')];
+    if (row.baselineVersion) row.baselineSnapshot = this.snapshotOf(row);
+    await row.save();
     await this.activities.record({
       projectId: idOf(row.projectId),
       entityType: 'test_case',
@@ -132,20 +137,28 @@ export class TestCaseService {
     );
     if (!row) throw new NotFoundException('用例不存在');
     const history: Array<{ id: string; action: string; fromStatus?: string; toStatus?: string; operatorId?: string; operatorName?: string; note?: string; createdAt: string }> = [];
+    const versionHistory: CaseVersionHistory[] = [];
     if (dto.status && dto.status !== previousStatus) {
       history.push(this.workflowEntry('status_changed', previousStatus, dto.status, user, dto.changeSummary || '状态更新'));
     }
     if (dto.reviewStatus && dto.reviewStatus !== previousReviewStatus) {
       history.push(this.workflowEntry(reviewAction(dto.reviewStatus), previousReviewStatus, dto.reviewStatus, user, dto.changeSummary || '评审状态更新'));
+      versionHistory.push(this.versionHistoryEntry(row, 'review_changed', user, dto.changeSummary || '评审状态更新'));
     }
     if (dto.changeSummary && history.length === 0) {
       history.push(this.workflowEntry('content_changed', undefined, undefined, user, dto.changeSummary));
     }
+    if (hasContentChange(dto)) {
+      versionHistory.push(this.versionHistoryEntry(row, 'content_changed', user, dto.changeSummary || '内容变更'));
+    }
     if (dto.baselineVersion !== undefined) {
       history.push(this.workflowEntry('baseline_set', previous.baselineVersion || undefined, dto.baselineVersion, user, dto.changeSummary || '设置用例基线'));
+      row.baselineSnapshot = this.snapshotOf(row);
+      versionHistory.push(this.versionHistoryEntry(row, 'baseline_set', user, dto.changeSummary || '设置用例基线'));
     }
-    if (history.length) {
+    if (history.length || versionHistory.length) {
       row.workflowHistory = [...(row.workflowHistory || []), ...history];
+      row.versionHistory = [...(row.versionHistory || []), ...versionHistory];
       await row.save();
     }
     await this.activities.record({
@@ -171,6 +184,45 @@ export class TestCaseService {
     if (blockers.length) throw new BadRequestException(`用例仍有关联数据，请先迁移或清理：${blockers.join('、')}`);
     await this.cases.findByIdAndDelete(id);
     return { deleted: true };
+  }
+
+  async restoreBaseline(id: string, user?: SessionUser): Promise<TestCase> {
+    const row = await this.cases.findById(id);
+    if (!row) throw new NotFoundException('用例不存在');
+    if (!row.baselineSnapshot) throw new BadRequestException('当前用例尚未设置可恢复的基线快照');
+    const snapshot = row.baselineSnapshot;
+    row.title = snapshot.title;
+    row.preconditions = snapshot.preconditions || '';
+    row.steps = this.normalizeSteps(snapshot.steps).map((step) => ({ ...step, sort: step.sort || 0 }));
+    row.expectedResult = snapshot.expectedResult || '';
+    row.priority = snapshot.priority;
+    row.status = snapshot.status;
+    row.module = snapshot.module || '';
+    row.suiteId = snapshot.suiteId || '';
+    row.version = snapshot.version || row.baselineVersion || row.version;
+    row.reviewStatus = snapshot.reviewStatus || row.reviewStatus;
+    row.automationStatus = snapshot.automationStatus || row.automationStatus;
+    row.tags = snapshot.tags || [];
+    row.changeSummary = `恢复基线 ${row.baselineVersion || row.version}`;
+    row.workflowHistory = [
+      ...(row.workflowHistory || []),
+      this.workflowEntry('baseline_restored', undefined, row.version, user, row.changeSummary)
+    ];
+    row.versionHistory = [
+      ...(row.versionHistory || []),
+      this.versionHistoryEntry(row, 'baseline_restored', user, row.changeSummary)
+    ];
+    await row.save();
+    await this.activities.record({
+      projectId: idOf(row.projectId),
+      entityType: 'test_case',
+      entityId: id,
+      action: 'updated',
+      title: `恢复用例基线：${row.title}`,
+      detail: row.changeSummary,
+      actor: user
+    });
+    return this.toDto(row);
   }
 
   async projectIdOf(id: string): Promise<string> {
@@ -205,6 +257,8 @@ export class TestCaseService {
       baselineByName: row.baselineByName,
       tags: row.tags,
       workflowHistory: this.normalizeWorkflow(row.workflowHistory || []),
+      versionHistory: this.normalizeVersionHistory(row.versionHistory || []),
+      baselineSnapshot: row.baselineSnapshot ? this.normalizeSnapshot(row.baselineSnapshot) : undefined,
       createdAt: row.createdAt?.toISOString(),
       updatedAt: row.updatedAt?.toISOString()
     };
@@ -238,6 +292,68 @@ export class TestCaseService {
       .filter((row) => row.action);
   }
 
+  private versionHistoryEntry(row: TestCaseEntity, action: CaseVersionHistory['action'], user?: SessionUser, changeSummary?: string): CaseVersionHistory {
+    return {
+      id: new Types.ObjectId().toString(),
+      version: row.version || 'v1',
+      action,
+      changedById: user?.id,
+      changedByName: user?.username,
+      changeSummary,
+      snapshot: this.snapshotOf(row),
+      createdAt: new Date().toISOString()
+    };
+  }
+
+  private snapshotOf(row: TestCaseEntity): CaseVersionSnapshot {
+    return {
+      title: row.title,
+      preconditions: row.preconditions,
+      steps: this.normalizeSteps(row.steps),
+      expectedResult: row.expectedResult,
+      priority: row.priority,
+      status: row.status,
+      module: row.module,
+      suiteId: row.suiteId,
+      version: row.version,
+      reviewStatus: row.reviewStatus,
+      automationStatus: row.automationStatus,
+      tags: row.tags || []
+    };
+  }
+
+  private normalizeSnapshot(snapshot: CaseVersionSnapshot): CaseVersionSnapshot {
+    return {
+      title: String(snapshot.title || ''),
+      preconditions: snapshot.preconditions || '',
+      steps: this.normalizeSteps(snapshot.steps || []),
+      expectedResult: snapshot.expectedResult || '',
+      priority: snapshot.priority || 'P2',
+      status: snapshot.status || 'ready',
+      module: snapshot.module || '',
+      suiteId: snapshot.suiteId || '',
+      version: snapshot.version || 'v1',
+      reviewStatus: snapshot.reviewStatus || 'draft',
+      automationStatus: snapshot.automationStatus || 'manual',
+      tags: snapshot.tags || []
+    };
+  }
+
+  private normalizeVersionHistory(rows: Array<Partial<CaseVersionHistory>>): CaseVersionHistory[] {
+    return rows
+      .map((row) => ({
+        id: String(row.id || new Types.ObjectId()),
+        version: String(row.version || row.snapshot?.version || 'v1'),
+        action: row.action || 'content_changed',
+        changedById: row.changedById,
+        changedByName: row.changedByName,
+        changeSummary: row.changeSummary,
+        snapshot: this.normalizeSnapshot(row.snapshot || { title: '', steps: [], priority: 'P2', status: 'ready' }),
+        createdAt: String(row.createdAt || new Date().toISOString())
+      }))
+      .filter((row) => row.snapshot.title || row.snapshot.steps.length);
+  }
+
   private normalizeSteps(steps: Array<Partial<TestCaseStep>>): TestCaseStep[] {
     return steps
       .map((step, index) => ({
@@ -262,4 +378,20 @@ function reviewAction(status: TestCase['reviewStatus']) {
   if (status === 'approved') return 'review_approved';
   if (status === 'changes_requested') return 'review_rejected';
   return 'review_reset';
+}
+
+function hasContentChange(dto: UpdateTestCaseDto) {
+  return [
+    dto.title,
+    dto.preconditions,
+    dto.steps,
+    dto.expectedResult,
+    dto.priority,
+    dto.status,
+    dto.module,
+    dto.suiteId,
+    dto.version,
+    dto.automationStatus,
+    dto.tags
+  ].some((value) => value !== undefined);
 }

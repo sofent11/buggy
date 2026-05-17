@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Bug as BugIcon, CheckCircle2, MessageSquare, MoreHorizontal, Paperclip, Pencil, Plus, RotateCcw, Save } from 'lucide-react';
+import { Bug as BugIcon, CheckCircle2, GitMerge, MessageSquare, MoreHorizontal, Paperclip, Pencil, PlayCircle, Plus, RotateCcw, Save } from 'lucide-react';
 import type { Bug, BugStatus, PageResult, ProjectMember, Requirement, TestCase, TestPlan, UserProfile } from '@buggy/shared-types';
 import type { UseFormRegister } from 'react-hook-form';
 import { api } from '../../api.js';
@@ -41,6 +41,7 @@ export function BugSection(props: {
   canWrite?: boolean;
   canManage?: boolean;
   mutate: (action: () => Promise<unknown>, message: string) => Promise<void>;
+  onOpenEntity?: (entityType: string, entityId?: string) => void;
 }) {
   const [keyword, setKeyword] = useState('');
   const [status, setStatus] = useState('');
@@ -55,6 +56,7 @@ export function BugSection(props: {
   const [pageResult, setPageResult] = useState<PageResult<Bug>>({ total: props.rows.length, page: 1, pageSize, items: props.rows.slice(0, pageSize) });
   const [loadingPage, setLoadingPage] = useState(false);
   const [transition, setTransition] = useState<{ bug: Bug; status: BugStatus; label: string } | null>(null);
+  const [duplicate, setDuplicate] = useState<Bug | null>(null);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Bug | null>(null);
   const editingRow = editing ? props.rows.find((row) => row.id === editing.id) || editing : null;
@@ -204,6 +206,7 @@ export function BugSection(props: {
               canManage={props.canManage}
               onTransition={(action) => setTransition({ bug: row, status: action.status, label: action.label })}
               onEdit={() => setEditing(row)}
+              onDuplicate={() => setDuplicate(row)}
               onDelete={() => props.mutate(() => api.deleteBug(row.id), 'Bug 已删除')}
             />
           };
@@ -235,7 +238,18 @@ export function BugSection(props: {
       }} onFileAttachment={async (file) => {
         if (!editingRow) return;
         await props.mutate(() => api.uploadBugAttachment(editingRow.id, file), '附件已上传');
-      }} />
+      }} onOpenEntity={props.onOpenEntity} />
+      <DuplicateBugDrawer
+        row={duplicate || undefined}
+        bugs={props.rows}
+        open={Boolean(duplicate)}
+        onClose={() => setDuplicate(null)}
+        onSubmit={async (duplicateOfId, reason) => {
+          if (!duplicate) return;
+          await props.mutate(() => api.markDuplicateBug(duplicate.id, { duplicateOfId, reason }), 'Bug 已标记为重复并关闭');
+          setDuplicate(null);
+        }}
+      />
       <TextConfirmDialog
         open={Boolean(transition)}
         title={transition ? `确认${transition.label} Bug？` : '确认流转 Bug？'}
@@ -275,6 +289,7 @@ function BugRowActions(props: {
   canManage?: boolean;
   onTransition: (action: ReturnType<typeof nextBugActions>[number]) => void;
   onEdit: () => void;
+  onDuplicate: () => void;
   onDelete: () => void | Promise<void>;
 }) {
   const actions = nextBugActions(props.row.status);
@@ -293,6 +308,7 @@ function BugRowActions(props: {
         </summary>
         <div>
           <Button type="button" size="sm" onClick={props.onEdit}><Pencil size={14} /> 详情</Button>
+          {props.canWrite && <Button type="button" size="sm" onClick={props.onDuplicate}><GitMerge size={14} /> 标记重复</Button>}
           {secondaryActions.map((action) => (
             <Button key={action.status} type="button" size="sm" onClick={() => props.onTransition(action)}>
               <action.icon size={14} /> {action.label}
@@ -427,6 +443,7 @@ export function BugDrawer(props: {
   onComment?: (body: string) => Promise<void>;
   onAttachment?: (attachment: { name: string; url: string }) => Promise<void>;
   onFileAttachment?: (file: File) => Promise<void>;
+  onOpenEntity?: (entityType: string, entityId?: string) => void;
 }) {
   const [activePanel, setActivePanel] = useState<'overview' | 'edit' | 'collab' | 'history'>(props.row ? 'overview' : 'edit');
   useEffect(() => {
@@ -445,7 +462,7 @@ export function BugDrawer(props: {
                 <button type="button" className={activePanel === 'history' ? 'active' : ''} onClick={() => setActivePanel('history')}>历史</button>
               </div>
             )}
-            {props.row && activePanel === 'overview' && <BugOverview row={props.row} requirements={props.requirements} cases={props.cases} plans={props.plans} users={props.users} />}
+            {props.row && activePanel === 'overview' && <BugOverview row={props.row} requirements={props.requirements} cases={props.cases} plans={props.plans} bugs={props.bugs} users={props.users} onOpenEntity={props.onOpenEntity} />}
             {activePanel === 'edit' && <BugFields row={props.row} requirements={props.requirements} cases={props.cases} plans={props.plans} bugs={props.bugs} users={props.users} register={register} />}
             {props.row && activePanel === 'collab' && <BugCollaboration row={props.row} canWrite={props.canWrite} onComment={props.onComment} onAttachment={props.onAttachment} onFileAttachment={props.onFileAttachment} />}
             {props.row && activePanel === 'history' && <BugStatusTimeline row={props.row} />}
@@ -460,13 +477,14 @@ export function BugDrawer(props: {
   );
 }
 
-function BugOverview(props: { row: Bug; requirements: Requirement[]; cases: TestCase[]; plans: TestPlan[]; users: UserProfile[] }) {
+function BugOverview(props: { row: Bug; requirements: Requirement[]; cases: TestCase[]; plans: TestPlan[]; bugs: Bug[]; users: UserProfile[]; onOpenEntity?: (entityType: string, entityId?: string) => void }) {
   const watchers = (props.row.watcherIds || []).map((id) => userName(props.users, id)).join('、') || '-';
   return (
     <div className="entity-overview">
       <article>
         <span>来源链路</span>
         <strong>{bugSource(props.row, props.requirements, props.cases, props.plans)}</strong>
+        {props.row.runItemId && <button type="button" className="linkish" onClick={() => props.onOpenEntity?.('run_item', props.row.runItemId)}><PlayCircle size={14} /> 打开复测执行项</button>}
       </article>
       <article>
         <span>负责人 / 关注人</span>
@@ -480,7 +498,7 @@ function BugOverview(props: { row: Bug; requirements: Requirement[]; cases: Test
       <article>
         <span>分诊</span>
         <strong>{labelOf(props.row.triageStatus || 'new')}</strong>
-        <small>{props.row.duplicateOfId ? '已标记重复缺陷' : '未标记重复'}</small>
+        <small>{props.row.duplicateOfId ? `重复于 ${props.bugs.find((bug) => bug.id === props.row.duplicateOfId)?.title || '源缺陷'}` : '未标记重复'}</small>
       </article>
       <section className="evidence-block">
         <strong>问题证据</strong>
@@ -492,6 +510,42 @@ function BugOverview(props: { row: Bug; requirements: Requirement[]; cases: Test
         <p>{props.row.verifyResult || '暂无验证结论'}</p>
       </section>
     </div>
+  );
+}
+
+function DuplicateBugDrawer(props: {
+  row?: Bug;
+  bugs: Bug[];
+  open: boolean;
+  onClose: () => void;
+  onSubmit: (duplicateOfId: string, reason: string) => Promise<void>;
+}) {
+  const candidates = props.bugs.filter((bug) => bug.id !== props.row?.id);
+  if (!props.row) return null;
+  return (
+    <Drawer title="标记重复缺陷" subtitle={props.row.title} open={props.open} onClose={props.onClose} size="compact">
+      <HookForm onSubmit={async (form) => props.onSubmit(String(form.get('duplicateOfId') || ''), String(form.get('reason') || '').trim())}>
+        {(register) => (
+          <>
+            <Field>
+              <FieldLabel>源缺陷</FieldLabel>
+              <select {...register('duplicateOfId')} required>
+                <option value="">选择保留的源 Bug</option>
+                {candidates.map((bug) => <option key={bug.id} value={bug.id}>{bug.title} · {labelOf(bug.status)}</option>)}
+              </select>
+            </Field>
+            <Field>
+              <FieldLabel>合并说明</FieldLabel>
+              <Textarea {...register('reason')} required placeholder="说明为什么判断为重复、保留哪个结论或附件" />
+            </Field>
+            <FormActions>
+              <Button type="button" onClick={props.onClose}>取消</Button>
+              <Button variant="primary"><GitMerge size={15} /> 标记重复并关闭</Button>
+            </FormActions>
+          </>
+        )}
+      </HookForm>
+    </Drawer>
   );
 }
 

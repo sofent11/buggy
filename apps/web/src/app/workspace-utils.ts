@@ -5,13 +5,14 @@ import type { Tab, WorkspaceData, StringFormValues } from './types.js';
 
 export function pageInfo(tab: Tab) {
   const descriptions: Record<Tab, { title: string; description: (project: string) => string }> = {
-    overview: { title: '质量总览', description: (project) => `查看「${project}」的质量指标、近期工作和风险信号。` },
+    overview: { title: '质量工作台', description: (project) => `聚合「${project}」今天最该处理的执行、缺陷和验收事项。` },
     projects: { title: '项目管理', description: () => '维护项目档案、成员和基础信息。' },
     iterations: { title: '迭代管理', description: (project) => `管理「${project}」的迭代周期、目标和状态。` },
     requirements: { title: '需求管理', description: (project) => `沉淀「${project}」的需求条目、负责人和日报同步。` },
     cases: { title: '用例库', description: (project) => `管理「${project}」的测试用例、优先级和执行前置条件。` },
     plans: { title: '测试执行', description: (project) => `组织「${project}」的测试轮次、用例范围和执行结果。` },
     bugs: { title: '缺陷追踪', description: (project) => `筛选、指派和追踪「${project}」中的缺陷。` },
+    reports: { title: '验收报表', description: (project) => `维护「${project}」的发布范围、准入判断、风险豁免和签核归档。` },
     settings: { title: '系统配置', description: (project) => `配置「${project}」的数据字典、Excel 模板和账号权限。` }
   };
   return descriptions[tab];
@@ -32,7 +33,8 @@ export function filterWorkspaceData(data: WorkspaceData, keyword: string): Works
     plans: data.plans.filter((item) => matchKeyword([item.name, item.round, item.status], normalized)),
     bugs: data.bugs.filter((item) =>
       matchKeyword([item.title, item.actualResult || '', item.expectedResult || '', item.reproduceSteps || '', item.priority, item.severity, item.status], normalized)
-    )
+    ),
+    acceptanceScopes: data.acceptanceScopes.filter((item) => matchKeyword([item.name, item.description || '', item.status], normalized))
   };
 }
 

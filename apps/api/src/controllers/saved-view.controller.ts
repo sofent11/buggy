@@ -22,7 +22,8 @@ export class SavedViewController {
 
   @Post()
   async upsert(@Body() dto: UpsertSavedViewDto, @CurrentUser() user: SessionUser) {
-    await this.projects.get(dto.projectId, user);
+    if (dto.visibility === 'project') await this.projects.assertManage(dto.projectId, user);
+    else await this.projects.get(dto.projectId, user);
     return this.views.upsert(dto, user);
   }
 

@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, SchemaTypes, Types } from 'mongoose';
-import type { Priority, TestCaseAutomationStatus, TestCaseReviewStatus, TestCaseStatus } from '@buggy/shared-types';
+import type { CaseVersionHistory, CaseVersionSnapshot, Priority, TestCaseAutomationStatus, TestCaseReviewStatus, TestCaseStatus } from '@buggy/shared-types';
 
 export type TestCaseDocument = HydratedDocument<TestCaseEntity>;
 
@@ -91,6 +91,12 @@ export class TestCaseEntity {
 
   @Prop({ type: [SchemaTypes.Mixed], default: [] })
   workflowHistory!: Array<{ id: string; action: string; fromStatus?: string; toStatus?: string; operatorId?: string; operatorName?: string; note?: string; createdAt: string }>;
+
+  @Prop({ type: [SchemaTypes.Mixed], default: [] })
+  versionHistory!: CaseVersionHistory[];
+
+  @Prop({ type: SchemaTypes.Mixed })
+  baselineSnapshot?: CaseVersionSnapshot;
 }
 
 export const TestCaseSchema = SchemaFactory.createForClass(TestCaseEntity);

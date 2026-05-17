@@ -45,6 +45,8 @@ export function CaseSection(props: {
 }) {
   const [keyword, setKeyword] = useState('');
   const [requirementId, setRequirementId] = useState('');
+  const [moduleFilter, setModuleFilter] = useState('');
+  const [suiteFilter, setSuiteFilter] = useState('');
   const [status, setStatus] = useState('');
   const [reviewStatus, setReviewStatus] = useState('');
   const [automationStatus, setAutomationStatus] = useState('');
@@ -84,13 +86,13 @@ export function CaseSection(props: {
 
   useEffect(() => {
     setPage(1);
-  }, [effectiveKeyword, requirementId, status, pageSize]);
+  }, [effectiveKeyword, requirementId, moduleFilter, suiteFilter, status, pageSize]);
 
   useEffect(() => {
     let active = true;
     setLoadingPage(true);
     api
-      .testCasePage(props.projectId, { page, pageSize, keyword: effectiveKeyword, requirementId, status, reviewStatus, automationStatus, sortBy, sortOrder })
+      .testCasePage(props.projectId, { page, pageSize, keyword: effectiveKeyword, requirementId, module: moduleFilter, suiteId: suiteFilter, status, reviewStatus, automationStatus, sortBy, sortOrder })
       .then((result) => {
         if (active) setPageResult(result);
       })
@@ -98,6 +100,8 @@ export function CaseSection(props: {
         if (!active) return;
         const fallback = props.rows.filter((row) =>
           (!requirementId || row.requirementId === requirementId) &&
+          (!moduleFilter || row.module === moduleFilter) &&
+          (!suiteFilter || row.suiteId === suiteFilter) &&
           (!status || row.status === status) &&
           (!reviewStatus || row.reviewStatus === reviewStatus) &&
           (!automationStatus || row.automationStatus === automationStatus) &&
@@ -111,12 +115,12 @@ export function CaseSection(props: {
     return () => {
       active = false;
     };
-  }, [props.projectId, props.rows, page, pageSize, effectiveKeyword, requirementId, status, reviewStatus, automationStatus, sortBy, sortOrder]);
+  }, [props.projectId, props.rows, page, pageSize, effectiveKeyword, requirementId, moduleFilter, suiteFilter, status, reviewStatus, automationStatus, sortBy, sortOrder]);
 
   useEffect(() => {
-    const filters = { keyword, requirementId, status, reviewStatus, automationStatus, caseQueue, pageSize, sortBy, sortOrder, columns: visibleColumns };
+    const filters = { keyword, requirementId, moduleFilter, suiteFilter, status, reviewStatus, automationStatus, caseQueue, pageSize, sortBy, sortOrder, columns: visibleColumns };
     window.dispatchEvent(new CustomEvent('buggy:filters-change', { detail: { tab: 'cases', filters } }));
-  }, [keyword, requirementId, status, reviewStatus, automationStatus, caseQueue, pageSize, sortBy, sortOrder, visibleColumns]);
+  }, [keyword, requirementId, moduleFilter, suiteFilter, status, reviewStatus, automationStatus, caseQueue, pageSize, sortBy, sortOrder, visibleColumns]);
 
   useEffect(() => {
     const apply = (event: Event) => {
@@ -125,6 +129,8 @@ export function CaseSection(props: {
       const filters = detail.filters || {};
       setKeyword(typeof filters.keyword === 'string' ? filters.keyword : '');
       setRequirementId(typeof filters.requirementId === 'string' ? filters.requirementId : '');
+      setModuleFilter(typeof filters.moduleFilter === 'string' ? filters.moduleFilter : '');
+      setSuiteFilter(typeof filters.suiteFilter === 'string' ? filters.suiteFilter : '');
       setStatus(typeof filters.status === 'string' ? filters.status : '');
       setReviewStatus(typeof filters.reviewStatus === 'string' ? filters.reviewStatus : '');
       setAutomationStatus(typeof filters.automationStatus === 'string' ? filters.automationStatus : '');
@@ -157,6 +163,8 @@ export function CaseSection(props: {
     }
   };
   const visibleDefinitions = caseColumns.filter((column) => visibleColumns.includes(column.key));
+  const moduleGroups = useMemo(() => groupCounts(props.rows, (row) => row.module || '未设置模块'), [props.rows]);
+  const suiteGroups = useMemo(() => groupCounts(props.rows, (row) => row.suiteId || '未设置用例集'), [props.rows]);
   const selectedRows = useMemo(() => props.rows.filter((row) => selectedCaseIds.includes(row.id)), [props.rows, selectedCaseIds]);
   const hasSelectedCases = selectedCaseIds.length > 0;
   const allVisibleSelected = rows.length > 0 && rows.every((row) => selectedCaseIds.includes(row.id));
@@ -199,10 +207,23 @@ export function CaseSection(props: {
       />
       <div className="split-layout case-layout">
         <aside className="requirement-tree">
-          <button className={!requirementId ? 'active' : ''} type="button" onClick={() => setRequirementId('')}>全部需求 <span>{props.rows.length}</span></button>
+          <div className="tree-section-label">需求覆盖</div>
+          <button className={!requirementId && !moduleFilter && !suiteFilter ? 'active' : ''} type="button" onClick={() => { setRequirementId(''); setModuleFilter(''); setSuiteFilter(''); }}>全部用例 <span>{props.rows.length}</span></button>
           {props.requirements.map((requirement) => (
-            <button key={requirement.id} className={requirementId === requirement.id ? 'active' : ''} type="button" onClick={() => setRequirementId(requirement.id)}>
+            <button key={requirement.id} className={requirementId === requirement.id ? 'active' : ''} type="button" onClick={() => { setRequirementId(requirement.id); setModuleFilter(''); setSuiteFilter(''); }}>
               {requirement.title}<span>{props.rows.filter((row) => row.requirementId === requirement.id).length}</span>
+            </button>
+          ))}
+          <div className="tree-section-label">业务模块</div>
+          {moduleGroups.map((group) => (
+            <button key={group.key} className={moduleFilter === group.key ? 'active' : ''} type="button" onClick={() => { setModuleFilter(group.key); setRequirementId(''); setSuiteFilter(''); }}>
+              {group.key}<span>{group.count}</span>
+            </button>
+          ))}
+          <div className="tree-section-label">用例集</div>
+          {suiteGroups.map((group) => (
+            <button key={group.key} className={suiteFilter === group.key ? 'active' : ''} type="button" onClick={() => { setSuiteFilter(group.key); setRequirementId(''); setModuleFilter(''); }}>
+              {group.key}<span>{group.count}</span>
             </button>
           ))}
         </aside>
@@ -267,6 +288,7 @@ export function CaseSection(props: {
                   canManage={props.canManage}
                   onReview={(action) => props.mutate(() => api.updateTestCase(row.id, { reviewStatus: action.status, changeSummary: action.note }), action.message)}
                   onBaseline={() => props.mutate(() => api.updateTestCase(row.id, { baselineVersion: row.version || 'v1', changeSummary: `设置 ${row.version || 'v1'} 为基线` }), '用例基线已设置')}
+                  onRestore={() => props.mutate(() => api.restoreTestCaseBaseline(row.id), '用例已恢复到基线')}
                   onEdit={() => setEditing(row)}
                   onDelete={() => props.mutate(() => api.deleteTestCase(row.id), '用例已删除')}
                 />
@@ -392,6 +414,7 @@ function CaseRowActions(props: {
   canManage?: boolean;
   onReview: (action: ReturnType<typeof caseReviewActions>[number]) => void | Promise<void>;
   onBaseline: () => void | Promise<void>;
+  onRestore: () => void | Promise<void>;
   onEdit: () => void;
   onDelete: () => void | Promise<void>;
 }) {
@@ -417,6 +440,7 @@ function CaseRowActions(props: {
             </Button>
           ))}
           {props.canWrite && <Button type="button" size="sm" onClick={() => { void props.onBaseline(); }}><GitBranch size={14} /> 设为基线</Button>}
+          {props.canWrite && props.row.baselineSnapshot && <Button type="button" size="sm" onClick={() => { void props.onRestore(); }}><GitBranch size={14} /> 恢复基线</Button>}
           {props.canManage && (
             <DangerButton
               title={`删除用例「${props.row.title}」？`}
@@ -443,6 +467,16 @@ function filterCaseRowsForQueue(rows: TestCase[], queue: CaseQueue, requirements
     ));
   }
   return rows.filter((row) => bugs.some((bug) => bug.testCaseId === row.id && !['verified', 'closed'].includes(bug.status)));
+}
+
+function groupCounts(rows: TestCase[], keyOf: (row: TestCase) => string) {
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    const key = keyOf(row).trim();
+    if (!key || key.startsWith('未设置')) continue;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  return [...counts.entries()].map(([key, count]) => ({ key, count })).sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
 }
 
 function isCaseQueue(value: unknown): value is CaseQueue {
@@ -516,6 +550,7 @@ export function TestCaseDrawer(props: { title: string; row?: TestCase; open: boo
 function CaseOverview(props: { row: TestCase; requirements: Requirement[]; users: UserProfile[]; plans: TestPlan[]; bugs: Bug[] }) {
   const executions = props.plans.flatMap((plan) => plan.runItems.filter((item) => item.caseId === props.row.id).map((item) => ({ plan, item })));
   const activeBugs = props.bugs.filter((bug) => bug.testCaseId === props.row.id && !['verified', 'closed'].includes(bug.status));
+  const diffRows = baselineDiff(props.row);
   return (
     <div className="entity-overview">
       <article>
@@ -543,12 +578,21 @@ function CaseOverview(props: { row: TestCase; requirements: Requirement[]; users
           {props.row.steps.map((step, index) => <li key={step.id || index}>{step.action} / {step.expected}</li>)}
         </ol>
       </section>
+      {diffRows.length > 0 && (
+        <section className="evidence-block">
+          <strong>基线差异</strong>
+          <ul>
+            {diffRows.map((item) => <li key={item}>{item}</li>)}
+          </ul>
+        </section>
+      )}
       <CaseEvidence row={props.row} plans={props.plans} bugs={props.bugs} />
     </div>
   );
 }
 
 function CaseWorkflowHistory(props: { row: TestCase }) {
+  const versions = props.row.versionHistory || [];
   return (
     <section className="history-panel">
       <div className="sub-title">评审与变更历史</div>
@@ -561,6 +605,17 @@ function CaseWorkflowHistory(props: { row: TestCase }) {
           </article>
         ))}
       </div>
+      <div className="sub-title">版本快照</div>
+      <DataTable
+        headers={['版本', '动作', '说明', '时间']}
+        emptyText="暂无版本快照"
+        rows={versions.slice().reverse().slice(0, 8).map((item) => [
+          item.version,
+          workflowLabel(item.action),
+          item.changeSummary || '-',
+          new Date(item.createdAt).toLocaleString('zh-CN')
+        ])}
+      />
     </section>
   );
 }
@@ -582,11 +637,25 @@ function baselineText(row: TestCase) {
   return row.changeSummary || '暂无基线';
 }
 
+function baselineDiff(row: TestCase) {
+  const baseline = row.baselineSnapshot;
+  if (!baseline) return [];
+  const rows: string[] = [];
+  if ((baseline.version || 'v1') !== (row.version || 'v1')) rows.push(`版本：${baseline.version || 'v1'} -> ${row.version || 'v1'}`);
+  if (baseline.title !== row.title) rows.push('标题已变更');
+  if ((baseline.expectedResult || '') !== (row.expectedResult || '')) rows.push('最终预期结果已变更');
+  if ((baseline.steps || []).length !== row.steps.length) rows.push(`步骤数：${(baseline.steps || []).length} -> ${row.steps.length}`);
+  else if ((baseline.steps || []).some((step, index) => step.action !== row.steps[index]?.action || step.expected !== row.steps[index]?.expected)) rows.push('步骤内容已变更');
+  if ((baseline.module || '') !== (row.module || '') || (baseline.suiteId || '') !== (row.suiteId || '')) rows.push('模块或用例集已变更');
+  return rows;
+}
+
 function workflowLabel(action: string) {
   if (action === 'review_submitted') return '提交评审';
   if (action === 'review_approved') return '评审通过';
   if (action === 'review_rejected') return '评审驳回';
   if (action === 'baseline_set') return '设置基线';
+  if (action === 'baseline_restored') return '恢复基线';
   if (action === 'content_changed') return '内容变更';
   if (action === 'status_changed') return '状态变更';
   if (action === 'created') return '创建';

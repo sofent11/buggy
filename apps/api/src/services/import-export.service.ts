@@ -71,12 +71,13 @@ export class ImportExportService {
             status: (row.status || row['状态'] || 'ready') as never
           });
         } else if (dto.type === 'test-cases') {
+          const steps = parseImportedSteps(row.stepsJson || row['步骤JSON'], row.step || row['步骤'], row.expected || row['预期']);
           await this.cases.create({
             projectId: dto.projectId,
             requirementId: typeof row.requirementId === 'string' ? row.requirementId : undefined,
             title: String(row.title || row['标题'] || ''),
             preconditions: String(row.preconditions || row['前置条件'] || ''),
-            steps: [{ action: String(row.step || row['步骤'] || ''), expected: String(row.expected || row['预期'] || '') }],
+            steps,
             expectedResult: String(row.expectedResult || row['预期结果'] || ''),
             priority: (row.priority || row['优先级'] || 'P2') as never,
             status: (row.status || row['状态'] || 'ready') as never,
@@ -123,7 +124,8 @@ export class ImportExportService {
             runItemId,
             {
               status,
-              actualResult: String(row.actualResult || row['实际结果'] || '')
+              actualResult: String(row.actualResult || row['实际结果'] || ''),
+              stepResults: parseImportedStepResults(row.stepResults || row['步骤结果'])
             },
             user
           );
@@ -218,7 +220,7 @@ export class ImportExportService {
 
   private headers(type: ImportRowsDto['type']): string[] {
     if (type === 'requirements') return ['标题', '描述', '优先级', '状态', 'riskOwnerId', '截止时间', '风险说明'];
-    if (type === 'test-cases') return ['标题', '模块', '用例集', '版本', '评审状态', '自动化状态', '前置条件', '步骤', '预期', '预期结果', '优先级', '状态', 'requirementId'];
+    if (type === 'test-cases') return ['标题', '模块', '用例集', '版本', '评审状态', '自动化状态', '前置条件', '步骤', '预期', '步骤JSON', '预期结果', '优先级', '状态', 'requirementId'];
     if (type === 'bugs') return ['标题', '复现步骤', '实际结果', '期望结果', '严重级别', '优先级', '状态', '分诊状态', '负责人ID', '需求ID', '用例ID', '计划ID', '截止时间', '发现环境', '发现版本', '修复版本', '根因分析'];
     return ['计划名称', '计划ID', '执行项ID', '用例标题', '需求ID', '执行状态', '实际结果', '关联Bug', '步骤结果'];
   }
@@ -241,6 +243,7 @@ export class ImportExportService {
         item.preconditions || '',
         firstStep?.action || '',
         firstStep?.expected || '',
+        JSON.stringify(item.steps || []),
         item.expectedResult || '',
         item.priority,
         item.status,
@@ -275,6 +278,7 @@ export class ImportExportService {
       { field: 'preconditions', label: '前置条件' },
       { field: 'step', label: '步骤' },
       { field: 'expected', label: '预期' },
+      { field: 'stepsJson', label: '步骤JSON' },
       { field: 'expectedResult', label: '预期结果' },
       { field: 'priority', label: '优先级' },
       { field: 'status', label: '状态' },
@@ -300,5 +304,44 @@ export class ImportExportService {
       { field: 'status', label: '执行状态', required: true },
       { field: 'actualResult', label: '实际结果' }
     ];
+  }
+}
+
+function parseImportedSteps(stepsJson: unknown, fallbackAction: unknown, fallbackExpected: unknown) {
+  const text = String(stepsJson || '').trim();
+  if (text) {
+    try {
+      const rows = JSON.parse(text) as Array<{ action?: unknown; expected?: unknown; sort?: unknown }>;
+      const parsed = rows
+        .map((step, index) => ({
+          action: String(step.action || '').trim(),
+          expected: String(step.expected || '').trim(),
+          sort: Number(step.sort || index + 1)
+        }))
+        .filter((step) => step.action || step.expected);
+      if (parsed.length) return parsed;
+    } catch {
+      // Fall back to the legacy single-step columns.
+    }
+  }
+  const action = String(fallbackAction || '').trim();
+  const expected = String(fallbackExpected || '').trim();
+  return action || expected ? [{ action, expected, sort: 1 }] : [];
+}
+
+function parseImportedStepResults(value: unknown) {
+  const text = String(value || '').trim();
+  if (!text) return undefined;
+  try {
+    const rows = JSON.parse(text) as Array<{ stepId?: string; status?: TestRunStatus; actualResult?: string }>;
+    return rows
+      .map((row) => ({
+        stepId: row.stepId,
+        status: row.status || 'untested',
+        actualResult: row.actualResult || ''
+      }))
+      .filter((row) => testRunStatuses.includes(row.status));
+  } catch {
+    return undefined;
   }
 }

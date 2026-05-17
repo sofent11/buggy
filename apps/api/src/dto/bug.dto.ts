@@ -235,6 +235,15 @@ export class TransitionBugDto {
   verifyResult?: string;
 }
 
+export class MarkDuplicateBugDto {
+  @IsMongoId()
+  duplicateOfId!: string;
+
+  @IsString()
+  @MinLength(2)
+  reason!: string;
+}
+
 export class CreateBugFromRunDto {
   @IsMongoId()
   testPlanId!: string;

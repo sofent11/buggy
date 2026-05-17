@@ -51,7 +51,7 @@ export function QualityWorkflowNavigator(props: { data: WorkspaceData; onJump?: 
       detail: signoffBlocked ? `${signoffBlocked} 项准入阻塞` : '可进入验收判断',
       value: props.data.report?.qualityGate?.status === 'pass' ? 'PASS' : 'CHECK',
       tone: signoffBlocked ? 'risk' : 'good',
-      tab: 'requirements' as Tab,
+      tab: 'reports' as Tab,
       icon: FileText
     }
   ];
@@ -158,7 +158,7 @@ export function ProjectOnboarding(props: { data: WorkspaceData; currentProject?:
   );
 }
 
-export function QualityHealthCenter(props: { data: WorkspaceData; onJump?: (tab: Tab) => void }) {
+export function QualityHealthCenter(props: { data: WorkspaceData; onJump?: (tab: Tab) => void; onOpenEntity?: (entityType: string, entityId?: string) => void }) {
   const requirementIds = new Set(props.data.requirements.map((item) => item.id));
   const caseIds = new Set(props.data.cases.map((item) => item.id));
   const planIds = new Set(props.data.plans.map((item) => item.id));
@@ -173,11 +173,11 @@ export function QualityHealthCenter(props: { data: WorkspaceData; onJump?: (tab:
   const failedItems = props.data.plans.flatMap((plan) => plan.runItems.filter((item) => ['failed', 'blocked'].includes(item.status)).map((item) => ({ plan, item })));
   const severeActiveBugs = props.data.bugs.filter((bugItem) => ['S0', 'S1'].includes(bugItem.severity) && !['verified', 'closed'].includes(bugItem.status));
   const rows = [
-    ...uncoveredRequirements.slice(0, 4).map((item) => ['未覆盖需求', item.title, '缺少可执行用例', <button className="linkish" type="button" onClick={() => props.onJump?.('requirements')}>查看需求</button>]),
-    ...orphanCases.slice(0, 4).map((item) => ['孤立用例', item.title, '未绑定有效需求', <button className="linkish" type="button" onClick={() => props.onJump?.('cases')}>查看用例</button>]),
-    ...orphanBugs.slice(0, 4).map((item) => ['孤立 Bug', item.title, '缺少需求/用例/计划来源', <button className="linkish" type="button" onClick={() => props.onJump?.('bugs')}>查看 Bug</button>]),
-    ...failedItems.slice(0, 4).map(({ plan, item }) => ['失败执行项', item.caseTitle, plan.name, <button className="linkish" type="button" onClick={() => props.onJump?.('plans')}>进入执行</button>]),
-    ...severeActiveBugs.slice(0, 4).map((item) => ['严重活跃 Bug', item.title, labelOf(item.severity), <button className="linkish" type="button" onClick={() => props.onJump?.('bugs')}>分诊</button>])
+    ...uncoveredRequirements.slice(0, 4).map((item) => ['未覆盖需求', item.title, '缺少可执行用例', <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('requirement', item.id)}>查看需求</button>]),
+    ...orphanCases.slice(0, 4).map((item) => ['孤立用例', item.title, '未绑定有效需求', <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('test_case', item.id)}>查看用例</button>]),
+    ...orphanBugs.slice(0, 4).map((item) => ['孤立 Bug', item.title, '缺少需求/用例/计划来源', <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('bug', item.id)}>查看 Bug</button>]),
+    ...failedItems.slice(0, 4).map(({ plan, item }) => ['失败执行项', item.caseTitle, plan.name, <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('run_item', item.id)}>进入执行</button>]),
+    ...severeActiveBugs.slice(0, 4).map((item) => ['严重活跃 Bug', item.title, labelOf(item.severity), <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('bug', item.id)}>分诊</button>])
   ];
   return (
     <section className="panel wide health-center">
@@ -208,18 +208,18 @@ export function RecentWork(props: { data: WorkspaceData }) {
   );
 }
 
-export function RiskBoard(props: { report: ReportSummary | null }) {
+export function RiskBoard(props: { report: ReportSummary | null; onOpenEntity?: (entityType: string, entityId?: string) => void }) {
   const report = props.report;
   if (!report) return <EmptyState text="暂无风险数据" />;
   if (report.charts?.riskList?.length) {
     return (
       <DataTable
-        headers={['类型', '事项', '原因', '截止']}
+        headers={['类型', '事项', '原因', '下一步']}
         rows={report.charts.riskList.slice(0, 8).map((item) => [
           item.type,
           item.title,
           item.reason,
-          item.dueDate ? item.dueDate.slice(0, 10) : '-'
+          <button className="linkish" type="button" onClick={() => props.onOpenEntity?.(riskEntity(item.type), item.id)}>{item.dueDate ? item.dueDate.slice(0, 10) : '定位处理'}</button>
         ])}
       />
     );
@@ -326,6 +326,11 @@ export function PageInsights(props: {
       { label: '活跃', value: report?.bugs.active || 0, tone: 'risk' },
       { label: '已解决', value: report?.bugs.resolved || 0, tone: 'good' }
     ],
+    reports: [
+      { label: '验收范围', value: props.data.acceptanceScopes.length },
+      { label: '待签核', value: props.data.acceptanceScopes.filter((item) => !['signed', 'archived'].includes(item.status)).length, tone: 'info' },
+      { label: '阻塞项', value: report?.qualityGate?.issues.length || 0, tone: report?.qualityGate?.issues.length ? 'risk' : 'good' }
+    ],
     settings: [
       { label: '字典', value: props.data.dictionaries.length },
       { label: '用户', value: props.data.users.length },
@@ -349,4 +354,10 @@ export function PageInsights(props: {
       )}
     </section>
   );
+}
+
+function riskEntity(type: string) {
+  if (type === 'bug') return 'bug';
+  if (type === 'execution') return 'run_item';
+  return 'requirement';
 }

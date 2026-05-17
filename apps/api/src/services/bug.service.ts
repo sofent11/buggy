@@ -4,7 +4,7 @@ import { Model, Types } from 'mongoose';
 import type { Bug, BugAttachment, BugComment, BugStatusHistory, PageResult } from '@buggy/shared-types';
 import { BugEntity } from '../database/bug.schema.js';
 import { TestPlanEntity } from '../database/test-plan.schema.js';
-import type { AddBugAttachmentDto, AddBugCommentDto, CreateBugDto, CreateBugFromRunDto, TransitionBugDto, UpdateBugDto } from '../dto/bug.dto.js';
+import type { AddBugAttachmentDto, AddBugCommentDto, CreateBugDto, CreateBugFromRunDto, MarkDuplicateBugDto, TransitionBugDto, UpdateBugDto } from '../dto/bug.dto.js';
 import type { ListQueryDto } from '../dto/common.dto.js';
 import { idOf, toObjectId } from '../shared/mongo.js';
 import { ActivityService } from './activity.service.js';
@@ -223,6 +223,7 @@ export class BugService {
       detail: dto.body.trim(),
       actor: user
     });
+    await this.notifyWatchers(row, `Bug 新评论：${row.title}`, dto.body.trim(), user);
     return this.toDto(row);
   }
 
@@ -252,6 +253,60 @@ export class BugService {
       detail: dto.name.trim(),
       actor: user
     });
+    await this.notifyWatchers(row, `Bug 新附件：${row.title}`, dto.name.trim(), user);
+    return this.toDto(row);
+  }
+
+  async markDuplicate(id: string, dto: MarkDuplicateBugDto, user: SessionUser): Promise<Bug> {
+    if (id === dto.duplicateOfId) throw new BadRequestException('不能将 Bug 标记为自身重复');
+    const [row, source] = await Promise.all([
+      this.bugs.findById(id),
+      this.bugs.findById(dto.duplicateOfId)
+    ]);
+    if (!row) throw new NotFoundException('Bug 不存在');
+    if (!source) throw new NotFoundException('源 Bug 不存在');
+    if (idOf(row.projectId) !== idOf(source.projectId)) throw new BadRequestException('只能合并同一项目下的重复 Bug');
+    const previousStatus = row.status;
+    row.duplicateOfId = new Types.ObjectId(dto.duplicateOfId);
+    row.triageStatus = 'duplicate';
+    row.status = 'closed';
+    row.verifyResult = dto.reason.trim();
+    row.statusHistory = [
+      ...(row.statusHistory || []),
+      this.statusHistoryEntry(previousStatus, 'closed', user, `重复于 ${source.title}：${dto.reason.trim()}`)
+    ];
+    row.comments = [
+      ...(row.comments || []),
+      {
+        id: new Types.ObjectId().toString(),
+        authorId: user.id,
+        authorName: user.username,
+        body: `标记为重复缺陷：${source.title}。${dto.reason.trim()}`,
+        createdAt: new Date().toISOString()
+      }
+    ];
+    source.comments = [
+      ...(source.comments || []),
+      {
+        id: new Types.ObjectId().toString(),
+        authorId: user.id,
+        authorName: user.username,
+        body: `收到重复缺陷：${row.title}。${dto.reason.trim()}`,
+        createdAt: new Date().toISOString()
+      }
+    ];
+    await source.save();
+    await row.save();
+    await this.activities.record({
+      projectId: idOf(row.projectId),
+      entityType: 'bug',
+      entityId: id,
+      action: 'status_changed',
+      title: `合并重复 Bug：${row.title}`,
+      detail: `重复于：${source.title}`,
+      actor: user
+    });
+    await this.notifyStatus(row, previousStatus, user);
     return this.toDto(row);
   }
 
@@ -300,6 +355,13 @@ export class BugService {
       comments: this.normalizeComments(row.comments || []),
       attachments: this.normalizeAttachments(row.attachments || []),
       statusHistory: this.normalizeStatusHistory(row.statusHistory || []),
+      duplicateLinks: row.duplicateOfId ? [{
+        id: `${idOf(row.duplicateOfId)}:${idOf(row._id)}`,
+        sourceBugId: idOf(row.duplicateOfId),
+        duplicateBugId: idOf(row._id),
+        reason: row.verifyResult || '重复缺陷合并',
+        createdAt: row.updatedAt?.toISOString() || new Date().toISOString()
+      }] : [],
       createdAt: row.createdAt?.toISOString(),
       updatedAt: row.updatedAt?.toISOString()
     };
@@ -401,8 +463,29 @@ export class BugService {
         this.notifications.create({
           userId,
           projectId: idOf(row.projectId),
-          title: `Bug 状态变更：${row.title}`,
-          body: `${previousStatus} -> ${row.status}`,
+          title: row.status === 'resolved' ? `Bug 待复测：${row.title}` : `Bug 状态变更：${row.title}`,
+          body: row.status === 'resolved' ? (row.resolution || '开发已标记解决，请补充复测结论。') : `${previousStatus} -> ${row.status}`,
+          entityType: 'bug',
+          entityId: idOf(row._id),
+          actorId: user?.id
+        })
+      )
+    );
+  }
+
+  private async notifyWatchers(row: BugEntity & { _id: unknown }, title: string, body: string, user?: SessionUser) {
+    const targets = [
+      row.assigneeId ? idOf(row.assigneeId) : undefined,
+      row.reporterId ? idOf(row.reporterId) : undefined,
+      ...(row.watcherIds || []).map(idOf)
+    ];
+    await Promise.all(
+      [...new Set(targets.filter(Boolean))].map((userId) =>
+        this.notifications.create({
+          userId,
+          projectId: idOf(row.projectId),
+          title,
+          body,
           entityType: 'bug',
           entityId: idOf(row._id),
           actorId: user?.id

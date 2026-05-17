@@ -1,5 +1,6 @@
 import type {
   ApiResult,
+  AcceptanceScope,
   ActivityLog,
   Bug,
   Dictionary,
@@ -108,6 +109,7 @@ export const api = {
   testCases: async (projectId: string, params?: ListParams) => itemsOf(await request<PageResult<TestCase> | TestCase[]>(`/test-cases${queryString({ projectId, pageSize: 500, ...params })}`)),
   createTestCase: (body: Partial<TestCase>) => request<TestCase>('/test-cases', { method: 'POST', body: JSON.stringify(body) }),
   updateTestCase: (id: string, body: Partial<TestCase>) => request<TestCase>(`/test-cases/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  restoreTestCaseBaseline: (id: string) => request<TestCase>(`/test-cases/${id}/restore-baseline`, { method: 'POST' }),
   deleteTestCase: (id: string) => request<{ deleted: true }>(`/test-cases/${id}`, { method: 'DELETE' }),
 
   testPlanPage: (projectId: string, params?: ListParams) => request<PageResult<TestPlan>>(`/test-plans${queryString({ projectId, ...params })}`),
@@ -135,10 +137,24 @@ export const api = {
     return upload<Bug>(`/bugs/${id}/attachments/upload`, formData);
   },
   deleteBug: (id: string) => request<{ deleted: true }>(`/bugs/${id}`, { method: 'DELETE' }),
+  markDuplicateBug: (id: string, body: { duplicateOfId: string; reason: string }) =>
+    request<Bug>(`/bugs/${id}/duplicate`, { method: 'POST', body: JSON.stringify(body) }),
   createBugFromRun: (body: { testPlanId: string; runItemId: string; title: string; actualResult?: string; reproduceSteps?: string; severity?: string; priority?: string; assigneeId?: string; dueAt?: string; environment?: string; foundVersion?: string }) =>
     request<Bug>('/bugs/from-run', { method: 'POST', body: JSON.stringify(body) }),
 
-  reportSummary: (params: { projectId: string; iterationId?: string; requirementId?: string }) =>
+  acceptanceScopes: async (projectId: string, params?: ListParams) =>
+    itemsOf(await request<PageResult<AcceptanceScope> | AcceptanceScope[]>(`/acceptance-scopes${queryString({ projectId, pageSize: 500, ...params })}`)),
+  createAcceptanceScope: (body: Partial<AcceptanceScope>) =>
+    request<AcceptanceScope>('/acceptance-scopes', { method: 'POST', body: JSON.stringify(body) }),
+  updateAcceptanceScope: (id: string, body: Partial<AcceptanceScope>) =>
+    request<AcceptanceScope>(`/acceptance-scopes/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteAcceptanceScope: (id: string) => request<{ deleted: true }>(`/acceptance-scopes/${id}`, { method: 'DELETE' }),
+  addScopeWaiver: (id: string, body: { targetType: string; targetId?: string; reason: string; ownerId?: string; expiresAt?: string }) =>
+    request<AcceptanceScope>(`/acceptance-scopes/${id}/waivers`, { method: 'POST', body: JSON.stringify(body) }),
+  signoffAcceptanceScope: (id: string, body: { status: 'signed' | 'rejected'; note: string }) =>
+    request<AcceptanceScope>(`/acceptance-scopes/${id}/signoff`, { method: 'POST', body: JSON.stringify(body) }),
+
+  reportSummary: (params: { projectId: string; iterationId?: string; requirementId?: string; testPlanId?: string; acceptanceScopeId?: string }) =>
     request<ReportSummary>(`/reports/summary${queryString(params)}`),
   activities: async (projectId: string, params?: ListParams) => itemsOf(await request<PageResult<ActivityLog> | ActivityLog[]>(`/activities${queryString({ projectId, pageSize: 20, ...params })}`)),
   notifications: async (projectId?: string) => itemsOf(await request<PageResult<Notification> | Notification[]>(`/notifications${queryString({ projectId, pageSize: 20 })}`)),

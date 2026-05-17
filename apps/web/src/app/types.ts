@@ -1,5 +1,6 @@
 import type {
   Bug,
+  AcceptanceScope,
   ActivityLog,
   Dictionary,
   Iteration,
@@ -14,7 +15,7 @@ import type {
   UserProfile
 } from '@buggy/shared-types';
 
-export type Tab = 'overview' | 'projects' | 'iterations' | 'requirements' | 'cases' | 'plans' | 'bugs' | 'settings';
+export type Tab = 'overview' | 'projects' | 'iterations' | 'requirements' | 'cases' | 'plans' | 'bugs' | 'reports' | 'settings';
 
 export type WorkspaceData = {
   iterations: Iteration[];
@@ -22,6 +23,7 @@ export type WorkspaceData = {
   cases: TestCase[];
   plans: TestPlan[];
   bugs: Bug[];
+  acceptanceScopes: AcceptanceScope[];
   report: ReportSummary | null;
   dictionaries: Dictionary[];
   users: UserProfile[];

@@ -25,6 +25,7 @@ export function PlanSection(props: {
   canManage?: boolean;
   mutate: (action: () => Promise<unknown>, message: string) => Promise<void>;
   onNotice?: (message: string) => void;
+  onOpenEntity?: (entityType: string, entityId?: string) => void;
 }) {
   const [creating, setCreating] = useState(false);
   const [keyword, setKeyword] = useState('');
@@ -68,7 +69,7 @@ export function PlanSection(props: {
         <span className="toolbar-summary">{rows.length} 个测试计划 · {props.cases.length} 条可选用例</span>
         {props.canWrite && <button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建计划</button>}
       </Toolbar>
-      <ExecutionWorkbench rows={props.rows} bugs={props.bugs} users={props.users} currentUser={props.currentUser} canWrite={props.canWrite} mutate={props.mutate} />
+      <ExecutionWorkbench rows={props.rows} bugs={props.bugs} users={props.users} currentUser={props.currentUser} canWrite={props.canWrite} mutate={props.mutate} onOpenEntity={props.onOpenEntity} />
       <div className="plan-stack">
         {rows.map((plan) => <PlanCard key={plan.id} plan={plan} iterations={props.iterations} requirements={props.requirements} cases={props.cases} bugs={props.bugs} users={props.users} canWrite={props.canWrite} canManage={props.canManage} mutate={props.mutate} />)}
       </div>
@@ -93,7 +94,7 @@ export function PlanSection(props: {
   );
 }
 
-function ExecutionWorkbench(props: { rows: TestPlan[]; bugs: Bug[]; users: UserProfile[]; currentUser: UserProfile; canWrite?: boolean; mutate: (action: () => Promise<unknown>, message: string) => Promise<void> }) {
+function ExecutionWorkbench(props: { rows: TestPlan[]; bugs: Bug[]; users: UserProfile[]; currentUser: UserProfile; canWrite?: boolean; mutate: (action: () => Promise<unknown>, message: string) => Promise<void>; onOpenEntity?: (entityType: string, entityId?: string) => void }) {
   const runItems = props.rows.flatMap((plan) => plan.runItems.map((item) => ({ plan, item })));
   const myQueue = runItems.filter(({ item }) => item.status === 'untested' && (!item.executorId || item.executorId === props.currentUser.id));
   const failedQueue = runItems.filter(({ item }) => ['failed', 'blocked'].includes(item.status) && item.bugIds.length === 0);
@@ -148,7 +149,9 @@ function ExecutionWorkbench(props: { rows: TestPlan[]; bugs: Bug[]; users: UserP
             bug.title,
             bug.resolution || bug.actualResult || '暂无修复说明',
             <StatusBadge value={bug.status} dictionaryType="bugStatus" />,
-            bug.verifyResult || '待验证结论'
+            <Button type="button" size="sm" onClick={() => bug.runItemId ? props.onOpenEntity?.('run_item', bug.runItemId) : props.onOpenEntity?.('bug', bug.id)}>
+              进入复测
+            </Button>
           ])}
         />
       </div>

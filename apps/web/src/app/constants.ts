@@ -6,6 +6,7 @@ export const emptyData: WorkspaceData = {
   cases: [],
   plans: [],
   bugs: [],
+  acceptanceScopes: [],
   report: null,
   dictionaries: [],
   users: [],

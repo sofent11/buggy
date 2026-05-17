@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ActivityEntity, ActivitySchema } from '../database/activity.schema.js';
+import { AcceptanceScopeEntity, AcceptanceScopeSchema } from '../database/acceptance-scope.schema.js';
 import { BugEntity, BugSchema } from '../database/bug.schema.js';
 import { DictionaryEntity, DictionarySchema } from '../database/dictionary.schema.js';
 import { IterationEntity, IterationSchema } from '../database/iteration.schema.js';
@@ -27,6 +28,7 @@ import { UserEntity, UserSchema } from '../database/user.schema.js';
       { name: BugEntity.name, schema: BugSchema },
       { name: DictionaryEntity.name, schema: DictionarySchema },
       { name: ActivityEntity.name, schema: ActivitySchema },
+      { name: AcceptanceScopeEntity.name, schema: AcceptanceScopeSchema },
       { name: NotificationEntity.name, schema: NotificationSchema },
       { name: SavedViewEntity.name, schema: SavedViewSchema }
     ])

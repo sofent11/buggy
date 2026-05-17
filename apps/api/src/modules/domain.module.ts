@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AcceptanceScopeController } from '../controllers/acceptance-scope.controller.js';
 import { ActivityController } from '../controllers/activity.controller.js';
 import { BugController } from '../controllers/bug.controller.js';
 import { DictionaryController } from '../controllers/dictionary.controller.js';
@@ -14,6 +15,7 @@ import { TestCaseController } from '../controllers/test-case.controller.js';
 import { TestPlanController } from '../controllers/test-plan.controller.js';
 import { UploadController } from '../controllers/upload.controller.js';
 import { UserController } from '../controllers/user.controller.js';
+import { AcceptanceScopeService } from '../services/acceptance-scope.service.js';
 import { ActivityService } from '../services/activity.service.js';
 import { BugService } from '../services/bug.service.js';
 import { DictionaryService } from '../services/dictionary.service.js';
@@ -37,6 +39,7 @@ import { DatabaseModule } from './database.module.js';
   imports: [DatabaseModule, AuthModule],
   controllers: [
     HealthController,
+    AcceptanceScopeController,
     ProjectController,
     IterationController,
     RequirementController,
@@ -54,6 +57,7 @@ import { DatabaseModule } from './database.module.js';
   ],
   providers: [
     ActivityService,
+    AcceptanceScopeService,
     ProjectService,
     IterationService,
     RequirementService,

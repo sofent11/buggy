@@ -35,6 +35,18 @@ export interface QualityGateResult {
   checkedAt: string;
   summary: string;
   issues: string[];
+  waivedIssues?: string[];
+  rules?: QualityGateRule[];
+}
+
+export interface QualityGateRule {
+  id: Id;
+  label: string;
+  metric: 'case_coverage' | 'plan_coverage' | 'untested_runs' | 'failed_runs' | 'blocked_runs' | 'active_s01_bugs';
+  enabled: boolean;
+  blocking: boolean;
+  threshold?: number;
+  description?: string;
 }
 
 export interface WorkflowHistoryEntry {
@@ -54,6 +66,19 @@ export interface ReportSignoff {
   signerName?: string;
   note?: string;
   signedAt?: string;
+}
+
+export interface RiskWaiver {
+  id: Id;
+  targetType: 'requirement' | 'test_case' | 'run_item' | 'bug' | 'quality_gate';
+  targetId?: Id;
+  reason: string;
+  ownerId?: Id;
+  ownerName?: string;
+  expiresAt?: string;
+  createdById?: Id;
+  createdByName?: string;
+  createdAt: string;
 }
 
 export type Id = string;
@@ -128,6 +153,44 @@ export interface TestCaseStep {
   sort?: number;
 }
 
+export interface CaseSuite {
+  id: Id;
+  projectId: Id;
+  name: string;
+  module?: string;
+  requirementId?: Id;
+  caseCount: number;
+  ownerId?: Id;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface CaseVersionSnapshot {
+  title: string;
+  preconditions?: string;
+  steps: TestCaseStep[];
+  expectedResult?: string;
+  priority: Priority;
+  status: TestCaseStatus;
+  module?: string;
+  suiteId?: string;
+  version?: string;
+  reviewStatus?: TestCaseReviewStatus;
+  automationStatus?: TestCaseAutomationStatus;
+  tags?: string[];
+}
+
+export interface CaseVersionHistory {
+  id: Id;
+  version: string;
+  action: 'created' | 'content_changed' | 'review_changed' | 'baseline_set' | 'baseline_restored';
+  changedById?: Id;
+  changedByName?: string;
+  changeSummary?: string;
+  snapshot: CaseVersionSnapshot;
+  createdAt: string;
+}
+
 export interface TestCase {
   id: Id;
   projectId: Id;
@@ -153,6 +216,8 @@ export interface TestCase {
   baselineByName?: string;
   tags?: string[];
   workflowHistory?: WorkflowHistoryEntry[];
+  versionHistory?: CaseVersionHistory[];
+  baselineSnapshot?: CaseVersionSnapshot;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -195,6 +260,26 @@ export interface TestPlan {
   updatedAt?: string;
 }
 
+export interface AcceptanceScope {
+  id: Id;
+  projectId: Id;
+  name: string;
+  description?: string;
+  status: 'draft' | 'reviewing' | 'signed' | 'rejected' | 'archived';
+  ownerId?: Id;
+  targetDate?: string;
+  iterationIds: Id[];
+  requirementIds: Id[];
+  testPlanIds: Id[];
+  bugIds: Id[];
+  qualityGateRules: QualityGateRule[];
+  qualityGateResult?: QualityGateResult;
+  riskWaivers: RiskWaiver[];
+  reportSignoff?: ReportSignoff;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface BugComment {
   id: Id;
   authorId?: Id;
@@ -221,6 +306,16 @@ export interface BugStatusHistory {
   operatorId?: Id;
   operatorName?: string;
   note?: string;
+  createdAt: string;
+}
+
+export interface BugDuplicateLink {
+  id: Id;
+  sourceBugId: Id;
+  duplicateBugId: Id;
+  reason: string;
+  mergedById?: Id;
+  mergedByName?: string;
   createdAt: string;
 }
 
@@ -259,11 +354,12 @@ export interface Bug {
   comments?: BugComment[];
   attachments?: BugAttachment[];
   statusHistory?: BugStatusHistory[];
+  duplicateLinks?: BugDuplicateLink[];
   createdAt?: string;
   updatedAt?: string;
 }
 
-export type ActivityEntityType = 'project' | 'iteration' | 'requirement' | 'test_case' | 'test_plan' | 'run_item' | 'bug' | 'dictionary' | 'import';
+export type ActivityEntityType = 'project' | 'iteration' | 'requirement' | 'test_case' | 'test_plan' | 'run_item' | 'bug' | 'acceptance_scope' | 'dictionary' | 'import';
 export type ActivityAction = 'created' | 'updated' | 'deleted' | 'status_changed' | 'commented' | 'attached' | 'imported';
 
 export interface ActivityLog {
@@ -338,7 +434,7 @@ export interface ReportSummary {
   requirementId?: Id;
   testPlanId?: Id;
   scope: {
-    type: 'project' | 'iteration' | 'requirement';
+    type: 'project' | 'iteration' | 'requirement' | 'test_plan' | 'acceptance_scope';
     id?: Id;
     name: string;
   };
@@ -374,11 +470,13 @@ export interface ReportSummary {
     overdue: number;
   };
   qualityGate?: QualityGateResult;
+  riskWaivers?: RiskWaiver[];
   reportSignoff?: ReportSignoff;
   charts?: {
     executionTrend: Array<{ label: string; total: number; passed: number; failed: number; blocked: number; skipped: number; passRate: number }>;
     bugStatus: Array<{ key: BugStatus; label: string; value: number }>;
     bugSeverity: Array<{ key: Severity; label: string; value: number }>;
+    bugRootCause: Array<{ key: string; label: string; value: number }>;
     priority: Array<{ key: Priority; label: string; value: number }>;
     iterationRank: Array<{ id: Id; name: string; requirements: number; cases: number; executionTotal: number; passRate: number; activeBugs: number }>;
     requirementCoverage: Array<{ id: Id; title: string; caseCount: number; bugCount: number; status: RequirementStatus; riskOwnerId?: Id; dueDate?: string; riskNote?: string }>;

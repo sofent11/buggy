@@ -1,6 +1,6 @@
 import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
-import { AddBugAttachmentDto, AddBugCommentDto, CreateBugDto, CreateBugFromRunDto, TransitionBugDto, UpdateBugDto } from '../dto/bug.dto.js';
+import { AddBugAttachmentDto, AddBugCommentDto, CreateBugDto, CreateBugFromRunDto, MarkDuplicateBugDto, TransitionBugDto, UpdateBugDto } from '../dto/bug.dto.js';
 import { ListQueryDto } from '../dto/common.dto.js';
 import { BugService } from '../services/bug.service.js';
 import { AuthGuard } from '../shared/auth.guard.js';
@@ -48,6 +48,12 @@ export class BugController {
   async transition(@Param('id') id: string, @Body() dto: TransitionBugDto, @CurrentUser() user: SessionUser) {
     await this.projects.assertWrite(await this.bugs.projectIdOf(id), user);
     return this.bugs.transition(id, dto, user);
+  }
+
+  @Post(':id/duplicate')
+  async markDuplicate(@Param('id') id: string, @Body() dto: MarkDuplicateBugDto, @CurrentUser() user: SessionUser) {
+    await this.projects.assertWrite(await this.bugs.projectIdOf(id), user);
+    return this.bugs.markDuplicate(id, dto, user);
   }
 
   @Post(':id/comments')
