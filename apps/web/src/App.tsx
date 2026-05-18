@@ -269,13 +269,20 @@ export function App() {
 
   const visibleData = useMemo(() => filterWorkspaceData(data, deferredGlobalKeyword), [data, deferredGlobalKeyword]);
   const page = pageInfo(tab);
-  const projectRole = currentProject?.members.find((member) => member.userId === user?.id)?.role;
-  const workspaceRole: WorkspaceRole = projectRole || user?.role || 'viewer';
   const systemPermission = user?.systemPermission || user?.role;
-  const canUseUserAdmin = systemPermission === 'admin' || systemPermission === 'maintainer';
   const currentMember = currentProject?.members.find((member) => member.userId === user?.id);
-  const projectPermission = currentMember?.projectPermission || (projectRole === 'owner' ? 'manage' : projectRole === 'tester' || projectRole === 'developer' ? 'maintain' : 'normal');
-  const businessRoleKey = currentMember?.businessRoleKey || (projectRole === 'owner' ? 'manager' : projectRole || 'viewer');
+  const isCurrentProjectOwner = Boolean(currentProject && user && currentProject.ownerId === user.id);
+  const projectRole: ProjectRole | undefined = isCurrentProjectOwner ? 'owner' : currentMember?.role;
+  const workspaceRole: WorkspaceRole = systemPermission === 'admin' || systemPermission === 'maintainer'
+    ? systemPermission
+    : projectRole || user?.role || 'viewer';
+  const canUseUserAdmin = systemPermission === 'admin' || systemPermission === 'maintainer';
+  const projectPermission = isCurrentProjectOwner
+    ? 'manage'
+    : currentMember?.projectPermission || (projectRole === 'owner' ? 'manage' : projectRole === 'tester' || projectRole === 'developer' ? 'maintain' : 'normal');
+  const businessRoleKey = isCurrentProjectOwner
+    ? 'manager'
+    : currentMember?.businessRoleKey || (projectRole === 'owner' ? 'manager' : projectRole || 'viewer');
   const businessRole = currentProject?.businessRoles?.find((role) => role.key === businessRoleKey);
   const canManageProject = systemPermission === 'admin' || projectPermission === 'manage' || currentProject?.ownerId === user?.id;
   const canWriteProject = canManageProject || projectPermission === 'maintain' || hasBusinessPermission(businessRole, 'requirements', 'edit');

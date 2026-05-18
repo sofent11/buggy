@@ -309,6 +309,7 @@ export class ProjectService {
   }
 
   toDto(project: ProjectEntity & { _id: unknown; createdAt?: Date; updatedAt?: Date }, joinRequestStatus?: JoinRequestStatus): Project {
+    const ownerId = idOf(project.ownerId);
     return {
       id: idOf(project._id),
       name: project.name,
@@ -316,16 +317,21 @@ export class ProjectService {
       description: project.description,
       status: (project.status || 'active') as ProjectStatus,
       category: (project.category || inferProjectCategory(project.name, project.code, project.description)) as ProjectCategory,
-      ownerId: idOf(project.ownerId),
+      ownerId,
       members: project.members.map(
-        (member): ProjectMember => ({
-          userId: idOf(member.userId),
-          username: member.username,
-          email: member.email,
-          projectPermission: normalizeMemberPermission(member),
-          businessRoleKey: normalizeMemberBusinessRole(member),
-          role: legacyRoleOf(normalizeMemberPermission(member), normalizeMemberBusinessRole(member))
-        })
+        (member): ProjectMember => {
+          const userId = idOf(member.userId);
+          const projectPermission = userId === ownerId ? 'manage' : normalizeMemberPermission(member);
+          const businessRoleKey = userId === ownerId ? 'manager' : normalizeMemberBusinessRole(member);
+          return {
+            userId,
+            username: member.username,
+            email: member.email,
+            projectPermission,
+            businessRoleKey,
+            role: legacyRoleOf(projectPermission, businessRoleKey)
+          };
+        }
       ),
       joinRequestsEnabled: project.joinRequestsEnabled === true,
       joinRequestStatus,
