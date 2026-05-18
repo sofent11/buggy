@@ -1,4 +1,4 @@
-import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import {
   Activity,
@@ -44,6 +44,7 @@ type WorkspaceRole = UserProfile['role'] | ProjectRole;
 
 export function App() {
   const [user, setUser] = useState<UserProfile | null>(null);
+  const userRef = useRef<UserProfile | null>(null);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('register');
   const authForm = useForm<AuthFormValues>({
     defaultValues: { username: '', email: '', password: '' }
@@ -69,13 +70,17 @@ export function App() {
   );
   const deferredGlobalKeyword = useDeferredValue(globalKeyword);
 
-  const loadProjects = useCallback(async (actor = user) => {
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
+
+  const loadProjects = useCallback(async (actor?: UserProfile | null) => {
     const rows = await api.projects();
-    const nextProjectId = await chooseDefaultProject(rows, actor || undefined);
+    const nextProjectId = await chooseDefaultProject(rows, actor || userRef.current || undefined);
     setProjects(rows);
     setCurrentProjectId(nextProjectId);
     if (nextProjectId) localStorage.setItem(LAST_PROJECT_KEY, nextProjectId);
-  }, [user]);
+  }, []);
 
   const loadUsers = useCallback(async () => {
     const rows = await api.users();
