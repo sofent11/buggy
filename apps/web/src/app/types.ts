@@ -38,7 +38,7 @@ export type AuthFormValues = {
   password: string;
 };
 
-export type StringFormValues = Record<string, string>;
+export type StringFormValues = Record<string, string | boolean>;
 
 export type MutationOptions = { reloadProjects?: boolean; reloadUsers?: boolean };
 export type Mutate = (action: () => Promise<unknown>, message: string, options?: MutationOptions) => Promise<void>;

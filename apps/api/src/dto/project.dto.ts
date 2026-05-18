@@ -1,4 +1,4 @@
-import { IsEmail, IsIn, IsMongoId, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsBoolean, IsEmail, IsIn, IsMongoId, IsOptional, IsString, MinLength } from 'class-validator';
 import type { BusinessRoleConfig, BusinessRoleKey, ProjectCategory, ProjectPermission, ProjectQualitySettings, ProjectRole, ProjectStatus } from '@buggy/shared-types';
 
 export class CreateProjectDto {
@@ -23,6 +23,7 @@ export class CreateProjectDto {
   category?: ProjectCategory;
 
   @IsOptional()
+  @IsBoolean()
   joinRequestsEnabled?: boolean;
 
   @IsOptional()
@@ -55,6 +56,7 @@ export class UpdateProjectDto {
   category?: ProjectCategory;
 
   @IsOptional()
+  @IsBoolean()
   joinRequestsEnabled?: boolean;
 
   @IsOptional()

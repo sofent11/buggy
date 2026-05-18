@@ -8,7 +8,7 @@ import { Field, FieldLabel, FormActions } from '../ui/form.js';
 import { Input } from '../ui/input.js';
 import { Textarea } from '../ui/textarea.js';
 import { labelOf } from '../../labels.js';
-import { matchKeyword, shortDate, text } from '../../app/workspace-utils.js';
+import { checked, matchKeyword, shortDate, text } from '../../app/workspace-utils.js';
 import { DataPage, DataTable, DangerButton, Drawer, EmptyState, HookForm, MetricCard, SearchBox, StatusBadge, Toolbar, RowMoreMenu } from './common.js';
 
 const RECENT_PROJECTS_KEY = 'buggy_recent_project_ids';
@@ -126,7 +126,7 @@ export function ProjectSection(props: {
         onClose={() => setCreating(false)}
         onSubmit={async (form) => {
           await props.mutate(
-            () => api.createProject({ name: text(form, 'name'), code: text(form, 'code'), description: text(form, 'description'), status: text(form, 'status') as Project['status'], category: text(form, 'category') as Project['category'], joinRequestsEnabled: form.get('joinRequestsEnabled') === 'on' }),
+            () => api.createProject({ name: text(form, 'name'), code: text(form, 'code'), description: text(form, 'description'), status: text(form, 'status') as Project['status'], category: text(form, 'category') as Project['category'], joinRequestsEnabled: checked(form, 'joinRequestsEnabled') }),
             '项目已创建',
             { reloadProjects: true }
           );
@@ -141,7 +141,7 @@ export function ProjectSection(props: {
         onSubmit={async (form) => {
           if (!editing) return;
           await props.mutate(
-            () => api.updateProject(editing.id, { name: text(form, 'name'), code: text(form, 'code'), description: text(form, 'description'), status: text(form, 'status') as Project['status'], category: text(form, 'category') as Project['category'], joinRequestsEnabled: form.get('joinRequestsEnabled') === 'on' }),
+            () => api.updateProject(editing.id, { name: text(form, 'name'), code: text(form, 'code'), description: text(form, 'description'), status: text(form, 'status') as Project['status'], category: text(form, 'category') as Project['category'], joinRequestsEnabled: checked(form, 'joinRequestsEnabled') }),
             '项目已保存',
             { reloadProjects: true }
           );
@@ -224,7 +224,7 @@ function ProjectDrawer(props: {
     <Drawer title={props.title} subtitle={props.row?.name || '创建项目档案，成员请在独立入口维护'} open={props.open} onClose={props.onClose} size="compact">
       <div className="drawer-form project-info-form">
         <HookForm
-          defaultValues={{ name: props.row?.name || '', code: props.row?.code || '', description: props.row?.description || '', status: props.row?.status || 'active', category: props.row?.category || (props.row && isSampleProject(props.row) ? 'test' : 'standard') }}
+          defaultValues={{ name: props.row?.name || '', code: props.row?.code || '', description: props.row?.description || '', status: props.row?.status || 'active', category: props.row?.category || (props.row && isSampleProject(props.row) ? 'test' : 'standard'), joinRequestsEnabled: props.row?.joinRequestsEnabled === true }}
           onSubmit={async (form) => props.onSubmit(form)}
         >
           {(register) => (
@@ -237,7 +237,7 @@ function ProjectDrawer(props: {
               </div>
               <Field><FieldLabel>项目描述</FieldLabel><Textarea {...register('description')} /></Field>
               <label className="check-row compact-check-row">
-                <input type="checkbox" {...register('joinRequestsEnabled')} defaultChecked={props.row?.joinRequestsEnabled === true} />
+                <input type="checkbox" {...register('joinRequestsEnabled')} />
                 <span>允许普通用户申请加入</span>
               </label>
               <FormActions>

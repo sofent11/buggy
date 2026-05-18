@@ -10,7 +10,7 @@ import { Sheet, SheetBody, SheetContent, SheetDescription, SheetHeader, SheetTit
 import { Input } from '../ui/input.js';
 import { Textarea } from '../ui/textarea.js';
 import { downloadUrl } from '../../api.js';
-import { badgeTone, formDataFromValues } from '../../app/workspace-utils.js';
+import { badgeTone, formDataFromValues, formValue } from '../../app/workspace-utils.js';
 import type { StringFormValues, Tab } from '../../app/types.js';
 import { dictionaryLabel, dictionaryStyle, useDictionaryOptions, useDictionaryValue } from './dictionary.js';
 
@@ -60,7 +60,9 @@ export function HookForm(props: {
       className={props.className || 'drawer-form'}
       onSubmit={form.handleSubmit(async (values, event) => {
         const domForm = event?.currentTarget instanceof HTMLFormElement ? new FormData(event.currentTarget) : formDataFromValues(values);
-        Object.entries(values).forEach(([key, value]) => domForm.set(key, value ?? ''));
+        Object.entries(values).forEach(([key, value]) => {
+          if (!domForm.has(key)) domForm.set(key, formValue(value));
+        });
         await props.onSubmit(domForm, values);
       })}
     >

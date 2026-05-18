@@ -50,10 +50,20 @@ export function text(form: FormData, key: string) {
   return String(form.get(key) || '').trim();
 }
 
+export function checked(form: FormData, key: string) {
+  const value = form.get(key);
+  return value === 'on' || value === 'true' || value === '1';
+}
+
 export function formDataFromValues(values: StringFormValues) {
   const form = new FormData();
-  Object.entries(values).forEach(([key, value]) => form.set(key, value ?? ''));
+  Object.entries(values).forEach(([key, value]) => form.set(key, formValue(value)));
   return form;
+}
+
+export function formValue(value: string | boolean | undefined | null) {
+  if (typeof value === 'boolean') return value ? 'on' : '';
+  return value ?? '';
 }
 
 export function matchKeyword(values: string[], ...keywords: Array<string | undefined>) {
