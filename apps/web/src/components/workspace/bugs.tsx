@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Bug as BugIcon, CheckCircle2, GitMerge, MessageSquare, MoreHorizontal, Paperclip, Pencil, PlayCircle, Plus, RotateCcw, Save } from 'lucide-react';
-import type { Bug, BugStatus, PageResult, ProjectMember, Requirement, TestCase, TestPlan, UserProfile } from '@buggy/shared-types';
+import { Bug as BugIcon, CheckCircle2, GitMerge, MessageSquare, MoreHorizontal, Paperclip, Pencil, PlayCircle, Plus, RotateCcw, Save, Trash2, UploadCloud } from 'lucide-react';
+import type { Bug, BugAttachment, BugStatus, PageResult, ProjectMember, Requirement, TestCase, TestPlan, UserProfile } from '@buggy/shared-types';
 import type { UseFormRegister } from 'react-hook-form';
 import { api } from '../../api.js';
 import { Button } from '../ui/button.js';
@@ -235,11 +235,14 @@ export function BugSection(props: {
           action={props.canCreate ? <button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建缺陷</button> : undefined}
         />
       )}
-      <BugDrawer title="新建缺陷" open={creating} requirements={props.requirements} cases={props.cases} plans={props.plans} bugs={props.rows} users={memberUsers} canWrite={props.canCreate} onClose={() => setCreating(false)} onSubmit={async (form) => {
-        await props.mutate(() => api.createBug(bugPayload(form, props.projectId)), '缺陷已创建');
+      <BugDrawer title="新建缺陷" projectId={props.projectId} open={creating} requirements={props.requirements} cases={props.cases} plans={props.plans} bugs={props.rows} users={memberUsers} canWrite={props.canCreate} onClose={() => setCreating(false)} onDraftFileAttachment={async (file) => {
+        const asset = await api.uploadFile(props.projectId, file);
+        return asset;
+      }} onSubmit={async (form, attachments) => {
+        await props.mutate(() => api.createBug(bugPayload(form, props.projectId, attachments)), '缺陷已创建');
         setCreating(false);
       }} />
-      <BugDrawer title="编辑缺陷" row={editingRow || undefined} open={Boolean(editing)} requirements={props.requirements} cases={props.cases} plans={props.plans} bugs={props.rows} users={memberUsers} canWrite={props.canWrite} onClose={() => setEditing(null)} onSubmit={async (form) => {
+      <BugDrawer title="编辑缺陷" projectId={props.projectId} row={editingRow || undefined} open={Boolean(editing)} requirements={props.requirements} cases={props.cases} plans={props.plans} bugs={props.rows} users={memberUsers} canWrite={props.canWrite} onClose={() => setEditing(null)} onSubmit={async (form) => {
         if (!editingRow) return;
         await props.mutate(() => api.updateBug(editingRow.id, bugPayload(form, props.projectId)), '缺陷已保存');
         setEditing(null);
@@ -523,6 +526,7 @@ function bugIntakeAdvice() {
 
 export function BugDrawer(props: {
   title: string;
+  projectId: string;
   row?: Bug;
   open: boolean;
   requirements: Requirement[];
@@ -532,19 +536,24 @@ export function BugDrawer(props: {
   users: UserProfile[];
   canWrite?: boolean;
   onClose: () => void;
-  onSubmit: (form: FormData) => Promise<void>;
+  onSubmit: (form: FormData, attachments?: BugAttachment[]) => Promise<void>;
   onComment?: (body: string) => Promise<void>;
   onAttachment?: (attachment: { name: string; url: string }) => Promise<void>;
   onFileAttachment?: (file: File) => Promise<void>;
+  onDraftFileAttachment?: (file: File) => Promise<BugAttachment>;
   onOpenEntity?: (entityType: string, entityId?: string) => void;
 }) {
   const [activePanel, setActivePanel] = useState<'overview' | 'edit' | 'collab' | 'history'>(props.row ? 'overview' : 'edit');
+  const [draftAttachments, setDraftAttachments] = useState<BugAttachment[]>([]);
   useEffect(() => {
     if (props.open) setActivePanel(props.row ? 'overview' : 'edit');
   }, [props.open, props.row?.id]);
+  useEffect(() => {
+    if (props.open && !props.row) setDraftAttachments([]);
+  }, [props.open, props.row?.id]);
   return (
     <Drawer title={props.title} subtitle={props.row?.title || '记录复现步骤、预期结果和责任人'} open={props.open} onClose={props.onClose}>
-      <HookForm onSubmit={async (form) => props.onSubmit(form)}>
+      <HookForm onSubmit={async (form) => props.onSubmit(form, props.row ? undefined : draftAttachments)}>
         {(register) => (
           <>
             {props.row && (
@@ -557,16 +566,84 @@ export function BugDrawer(props: {
             )}
             {props.row && activePanel === 'overview' && <BugOverview row={props.row} requirements={props.requirements} cases={props.cases} plans={props.plans} bugs={props.bugs} users={props.users} onOpenEntity={props.onOpenEntity} />}
             {activePanel === 'edit' && <BugFields row={props.row} requirements={props.requirements} cases={props.cases} plans={props.plans} bugs={props.bugs} users={props.users} register={register} />}
+            {!props.row && activePanel === 'edit' && (
+              <BugAttachmentDraft
+                attachments={draftAttachments}
+                canWrite={props.canWrite}
+                onChange={setDraftAttachments}
+                onUpload={props.onDraftFileAttachment}
+              />
+            )}
             {props.row && activePanel === 'collab' && <BugCollaboration row={props.row} canWrite={props.canWrite} onComment={props.onComment} onAttachment={props.onAttachment} onFileAttachment={props.onFileAttachment} />}
             {props.row && activePanel === 'history' && <BugStatusTimeline row={props.row} />}
             <FormActions>
               <Button type="button" onClick={props.onClose}>取消</Button>
-              {props.canWrite && activePanel === 'edit' && <Button variant="primary"><Save size={15} /> 保存缺陷</Button>}
+              {props.canWrite && activePanel === 'edit' && <Button variant="primary"><Save size={15} /> {props.row ? '保存缺陷' : '创建缺陷'}</Button>}
             </FormActions>
           </>
         )}
       </HookForm>
     </Drawer>
+  );
+}
+
+function BugAttachmentDraft(props: {
+  attachments: BugAttachment[];
+  canWrite?: boolean;
+  onChange: (attachments: BugAttachment[]) => void;
+  onUpload?: (file: File) => Promise<BugAttachment>;
+}) {
+  const [name, setName] = useState('');
+  const [url, setUrl] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const addLink = () => {
+    const nextName = name.trim();
+    const nextUrl = url.trim();
+    if (!nextName || !nextUrl) return;
+    props.onChange([
+      ...props.attachments,
+      { id: `draft-${Date.now()}`, name: nextName, url: nextUrl, createdAt: new Date().toISOString() }
+    ]);
+    setName('');
+    setUrl('');
+  };
+  const remove = (id: string) => props.onChange(props.attachments.filter((attachment) => attachment.id !== id));
+  return (
+    <section className="create-attachment-panel" aria-label="创建缺陷附件">
+      <div className="sub-title"><Paperclip size={16} /> 附件</div>
+      <div className="draft-attachment-list">
+        {props.attachments.length === 0 ? <span className="muted">可在创建缺陷时一并上传截图、日志或补充链接。</span> : props.attachments.map((attachment) => (
+          <article key={attachment.id}>
+            <a href={attachment.url} target="_blank" rel="noreferrer">{attachment.name}</a>
+            <small>{attachment.size ? `${Math.round(attachment.size / 1024)}KB` : '链接附件'}</small>
+            <button type="button" title={`移除附件 ${attachment.name}`} onClick={() => remove(attachment.id)}><Trash2 size={14} /></button>
+          </article>
+        ))}
+      </div>
+      {props.canWrite && (
+        <div className="draft-attachment-actions">
+          <label className="file-pick-button">
+            <UploadCloud size={15} />
+            <span>{uploading ? '上传中' : '上传文件'}</span>
+            <input type="file" disabled={uploading} onChange={async (event) => {
+              const file = event.target.files?.[0];
+              event.target.value = '';
+              if (!file || !props.onUpload) return;
+              setUploading(true);
+              try {
+                const attachment = await props.onUpload(file);
+                props.onChange([...props.attachments, attachment]);
+              } finally {
+                setUploading(false);
+              }
+            }} />
+          </label>
+          <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="附件名称" />
+          <Input value={url} onChange={(event) => setUrl(event.target.value)} placeholder="截图、日志或文档链接" />
+          <Button type="button" onClick={addLink}><Paperclip size={15} /> 添加链接</Button>
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -705,13 +782,37 @@ function BugCollaboration(props: { row: Bug; canWrite?: boolean; onComment?: (bo
 }
 
 function BugStatusTimeline(props: { row: Bug }) {
+  const history = props.row.statusHistory || [];
+  const transitions = history.filter((item) => item.fromStatus && item.fromStatus !== item.toStatus).length;
+  const latest = history[history.length - 1];
   return (
-    <section className="history-panel">
-      <div className="sub-title">状态历史</div>
-      <div className="timeline-list compact-timeline">
-        {(props.row.statusHistory || []).length === 0 ? <span className="muted">暂无状态历史</span> : (props.row.statusHistory || []).map((item) => (
+    <section className="history-panel bug-history-panel">
+      <div className="bug-history-summary">
+        <article>
+          <span>当前状态</span>
+          <StatusBadge value={props.row.status} dictionaryType="bugStatus" />
+        </article>
+        <article>
+          <span>历史节点</span>
+          <strong>{history.length}</strong>
+        </article>
+        <article>
+          <span>状态流转</span>
+          <strong>{transitions}</strong>
+        </article>
+        <article>
+          <span>最近更新</span>
+          <strong>{latest ? shortDate(latest.createdAt) : '-'}</strong>
+          <small>{latest?.operatorName || '系统'}</small>
+        </article>
+      </div>
+      <div className="timeline-list bug-history-timeline">
+        {history.length === 0 ? <span className="muted">暂无状态历史</span> : history.map((item, index) => (
           <article key={item.id}>
-            <strong>{item.fromStatus ? `${labelOf(item.fromStatus)} -> ${labelOf(item.toStatus)}` : labelOf(item.toStatus)}</strong>
+            <div className="history-node-head">
+              <strong>{item.fromStatus ? `${labelOf(item.fromStatus)} -> ${labelOf(item.toStatus)}` : labelOf(item.toStatus)}</strong>
+              <small>#{index + 1}</small>
+            </div>
             <span>{item.operatorName || '系统'} · {new Date(item.createdAt).toLocaleString('zh-CN')}</span>
             {item.note && <p>{item.note}</p>}
           </article>

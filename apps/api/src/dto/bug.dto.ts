@@ -1,8 +1,26 @@
-import { IsArray, IsIn, IsMongoId, IsOptional, IsString, MinLength } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsArray, IsIn, IsMongoId, IsOptional, IsString, MinLength, ValidateNested } from 'class-validator';
 import type { BugStatus, BugTeam, BugTriageStatus, Priority, Severity } from '@buggy/shared-types';
 
 const bugTeams = ['web', 'android', 'ios', 'development', 'product', 'design', 'qa', 'operations', 'pm', 'other'] as const;
 const bugTeamValues = [...bugTeams, ''] as const;
+
+export class AddBugAttachmentDto {
+  @IsString()
+  @MinLength(1)
+  name!: string;
+
+  @IsString()
+  @MinLength(1)
+  url!: string;
+
+  @IsOptional()
+  size?: number;
+
+  @IsOptional()
+  @IsString()
+  mimeType?: string;
+}
 
 export class CreateBugDto {
   @IsMongoId()
@@ -108,6 +126,12 @@ export class CreateBugDto {
   @IsOptional()
   @IsIn(['new', 'triaged', 'needs_info', 'duplicate', 'accepted'])
   triageStatus?: BugTriageStatus;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => AddBugAttachmentDto)
+  attachments?: AddBugAttachmentDto[];
 }
 
 export class UpdateBugDto {
@@ -303,21 +327,4 @@ export class AddBugCommentDto {
   @IsString()
   @MinLength(1)
   body!: string;
-}
-
-export class AddBugAttachmentDto {
-  @IsString()
-  @MinLength(1)
-  name!: string;
-
-  @IsString()
-  @MinLength(1)
-  url!: string;
-
-  @IsOptional()
-  size?: number;
-
-  @IsOptional()
-  @IsString()
-  mimeType?: string;
 }

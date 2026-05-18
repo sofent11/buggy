@@ -3618,6 +3618,149 @@ tbody tr:hover {
   gap: 10px;
 }
 
+.create-attachment-panel {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+  padding: 12px;
+}
+
+.draft-attachment-list {
+  display: grid;
+  gap: 8px;
+}
+
+.draft-attachment-list article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  padding: 9px 10px;
+}
+
+.draft-attachment-list a {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--primary);
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.draft-attachment-list small {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.draft-attachment-list button,
+.file-pick-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: white;
+  color: var(--text);
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.draft-attachment-list button {
+  width: 36px;
+  padding: 0;
+}
+
+.draft-attachment-actions {
+  display: grid;
+  grid-template-columns: auto minmax(140px, 0.8fr) minmax(180px, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.file-pick-button {
+  padding: 0 12px;
+  white-space: nowrap;
+}
+
+.file-pick-button input {
+  display: none;
+}
+
+.bug-history-panel {
+  align-content: start;
+  gap: 14px;
+  min-height: min(520px, calc(100vh - 280px));
+}
+
+.bug-history-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.bug-history-summary article {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+  padding: 12px;
+}
+
+.bug-history-summary span,
+.bug-history-summary small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.bug-history-summary strong {
+  color: var(--text);
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.bug-history-timeline {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+}
+
+.history-node-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.history-node-head small {
+  color: var(--muted);
+  font-weight: 750;
+}
+
+@media (max-width: 720px) {
+  .draft-attachment-actions,
+  .bug-history-summary,
+  .bug-history-timeline {
+    grid-template-columns: 1fr;
+  }
+
+  .draft-attachment-list article {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .draft-attachment-list small {
+    grid-column: 1 / -1;
+  }
+}
+
 .sla-cell {
   display: grid;
   gap: 2px;

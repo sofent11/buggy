@@ -89,7 +89,7 @@ export class BugService {
       watcherIds: (dto.watcherIds || []).map((id) => new Types.ObjectId(id)),
       triageStatus: dto.triageStatus || (dto.assigneeId ? 'accepted' : 'new'),
       comments: [],
-      attachments: [],
+      attachments: (dto.attachments || []).map((attachment) => this.attachmentEntry(attachment, user)),
       statusHistory: [this.statusHistoryEntry(undefined, status, user, '创建缺陷')]
     });
     if (dto.testPlanId && dto.runItemId) await this.testPlanService.appendBug(dto.testPlanId, dto.runItemId, idOf(row._id));
@@ -255,16 +255,7 @@ export class BugService {
     if (!row) throw new NotFoundException('Bug 不存在');
     row.attachments = [
       ...(row.attachments || []),
-      {
-        id: new Types.ObjectId().toString(),
-        name: dto.name.trim(),
-        url: dto.url.trim(),
-        size: dto.size,
-        mimeType: dto.mimeType,
-        uploaderId: user?.id,
-        uploaderName: user?.username,
-        createdAt: new Date().toISOString()
-      }
+      this.attachmentEntry(dto, user)
     ];
     await row.save();
     await this.activities.record({
@@ -413,6 +404,19 @@ export class BugService {
         createdAt: String(row.createdAt || new Date().toISOString())
       }))
       .filter((row) => row.body);
+  }
+
+  private attachmentEntry(dto: AddBugAttachmentDto, user?: SessionUser): BugAttachment {
+    return {
+      id: new Types.ObjectId().toString(),
+      name: dto.name.trim(),
+      url: dto.url.trim(),
+      size: dto.size,
+      mimeType: dto.mimeType,
+      uploaderId: user?.id,
+      uploaderName: user?.username,
+      createdAt: new Date().toISOString()
+    };
   }
 
   private normalizeAttachments(rows: Array<Partial<BugAttachment>>): BugAttachment[] {

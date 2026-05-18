@@ -1,4 +1,4 @@
-import type { Bug, DictionaryValue, Requirement, TestCase, TestCaseStep, TestRunItem, UserProfile, Iteration } from '@buggy/shared-types';
+import type { Bug, BugAttachment, DictionaryValue, Requirement, TestCase, TestCaseStep, TestRunItem, UserProfile, Iteration } from '@buggy/shared-types';
 import type { ImportResult } from '../api.js';
 import { labelOf } from '../labels.js';
 import type { Tab, WorkspaceData, StringFormValues } from './types.js';
@@ -167,7 +167,7 @@ export function parseSteps(value: string, fallbackAction = '', fallbackExpected 
   return fallbackAction || fallbackExpected ? [{ action: fallbackAction, expected: fallbackExpected, sort: 1 }] : [];
 }
 
-export function bugPayload(form: FormData, projectId: string): Partial<Bug> {
+export function bugPayload(form: FormData, projectId: string, attachments?: BugAttachment[]): Partial<Bug> {
   const watcherValues = form.getAll('watcherIds').map(String).filter(Boolean);
   return {
     projectId,
@@ -197,7 +197,8 @@ export function bugPayload(form: FormData, projectId: string): Partial<Bug> {
     watcherIds: (watcherValues.length ? watcherValues : text(form, 'watcherIds')
       .split(',')
       .map((item) => item.trim())
-      .filter(Boolean))
+      .filter(Boolean)),
+    attachments
   };
 }
 
