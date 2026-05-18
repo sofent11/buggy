@@ -16,7 +16,7 @@ import {
   Users
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import type { Project, UserProfile } from '@buggy/shared-types';
+import type { Project, ProjectRole, UserProfile } from '@buggy/shared-types';
 import type { WorkspaceData } from '../../app/types.js';
 import { labelOf } from '../../labels.js';
 import { Drawer } from './common.js';
@@ -30,6 +30,7 @@ type HelpSection = {
   tips: string[];
   keywords: string[];
 };
+type WorkspaceRole = UserProfile['role'] | ProjectRole;
 
 const helpSections: HelpSection[] = [
   {
@@ -169,6 +170,7 @@ export function HelpCenter(props: {
   open: boolean;
   onClose: () => void;
   user: UserProfile;
+  role?: WorkspaceRole;
   currentProject?: Project;
   projectCount: number;
   data: WorkspaceData;
@@ -196,6 +198,7 @@ export function HelpCenter(props: {
     filteredSections[0] ||
     helpSections[0];
   const assetTotal = props.data.requirements.length + props.data.cases.length + props.data.plans.length + props.data.bugs.length;
+  const role = props.role || props.user.role;
 
   return (
     <Drawer title="帮助中心" subtitle="按当前功能整理的操作指南、权限说明和排查入口" open={props.open} onClose={props.onClose} size="full">
@@ -204,7 +207,7 @@ export function HelpCenter(props: {
           <div>
             <span>Buggy Guide</span>
             <strong>从项目建档到报告导出，一次看清。</strong>
-            <small>当前身份：{props.user.username} · {labelOf(props.user.role)}</small>
+            <small>当前身份：{props.user.username} · {labelOf(role)}</small>
           </div>
           <div className="help-context-grid">
             <article>

@@ -15,7 +15,7 @@ import type {
   UserProfile
 } from '@buggy/shared-types';
 
-export type Tab = 'overview' | 'projects' | 'iterations' | 'requirements' | 'cases' | 'plans' | 'bugs' | 'reports' | 'settings';
+export type Tab = 'overview' | 'projects' | 'iterations' | 'requirements' | 'cases' | 'plans' | 'bugs' | 'reports' | 'users' | 'settings';
 
 export type WorkspaceData = {
   iterations: Iteration[];
@@ -40,7 +40,8 @@ export type AuthFormValues = {
 
 export type StringFormValues = Record<string, string>;
 
-export type Mutate = (action: () => Promise<unknown>, message: string, options?: { reloadProjects?: boolean }) => Promise<void>;
-export type MutateWithResult = <T>(action: () => Promise<T>, resolveMessage: (result: T) => string, options?: { reloadProjects?: boolean }) => Promise<void>;
+export type MutationOptions = { reloadProjects?: boolean; reloadUsers?: boolean };
+export type Mutate = (action: () => Promise<unknown>, message: string, options?: MutationOptions) => Promise<void>;
+export type MutateWithResult = <T>(action: () => Promise<T>, resolveMessage: (result: T) => string, options?: MutationOptions) => Promise<void>;
 
 export type TabFilters = Partial<Record<Tab, SavedViewFilters>>;

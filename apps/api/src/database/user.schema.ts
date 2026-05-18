@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument } from 'mongoose';
-import type { SystemRole, UserStatus } from '@buggy/shared-types';
+import type { SystemPermission, SystemRole, UserStatus } from '@buggy/shared-types';
 
 export type UserDocument = HydratedDocument<UserEntity>;
 
@@ -15,8 +15,11 @@ export class UserEntity {
   @Prop({ type: String, required: true })
   passwordHash!: string;
 
-  @Prop({ type: String, required: true, default: 'tester' })
+  @Prop({ type: String, required: true, default: 'user' })
   role!: SystemRole;
+
+  @Prop({ type: String, required: true, default: 'user', enum: ['admin', 'maintainer', 'user'] })
+  systemPermission!: SystemPermission;
 
   @Prop({ type: String, required: true, default: 'active' })
   status!: UserStatus;

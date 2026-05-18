@@ -23,7 +23,7 @@ export class TestPlanController {
 
   @Post()
   async create(@Body() dto: CreateTestPlanDto, @CurrentUser() user: SessionUser) {
-    await this.projects.assertWrite(dto.projectId, user);
+    await this.projects.assertModuleAction(dto.projectId, user, 'plans', 'create');
     return this.plans.create(dto, user);
   }
 
@@ -35,7 +35,7 @@ export class TestPlanController {
 
   @Patch(':id')
   async update(@Param('id') id: string, @Body() dto: UpdateTestPlanDto, @CurrentUser() user: SessionUser) {
-    await this.projects.assertWrite(await this.plans.projectIdOf(id), user);
+    await this.projects.assertModuleAction(await this.plans.projectIdOf(id), user, 'plans', 'edit');
     return this.plans.update(id, dto, user);
   }
 
@@ -46,19 +46,19 @@ export class TestPlanController {
     @Body() dto: UpdateRunItemDto,
     @CurrentUser() user: SessionUser
   ) {
-    await this.projects.assertRole(await this.plans.projectIdOf(id), user, ['owner', 'tester']);
+    await this.projects.assertModuleAction(await this.plans.projectIdOf(id), user, 'plans', 'execute');
     return this.plans.updateRunItem(id, runItemId, dto, user);
   }
 
   @Patch(':id/run-items')
   async batchUpdateRunItems(@Param('id') id: string, @Body() dto: BatchUpdateRunItemsDto, @CurrentUser() user: SessionUser) {
-    await this.projects.assertRole(await this.plans.projectIdOf(id), user, ['owner', 'tester']);
+    await this.projects.assertModuleAction(await this.plans.projectIdOf(id), user, 'plans', 'execute');
     return this.plans.batchUpdateRunItems(id, dto, user);
   }
 
   @Delete(':id')
   async remove(@Param('id') id: string, @CurrentUser() user: SessionUser) {
-    await this.projects.assertManage(await this.plans.projectIdOf(id), user);
+    await this.projects.assertModuleAction(await this.plans.projectIdOf(id), user, 'plans', 'delete');
     return this.plans.remove(id);
   }
 }

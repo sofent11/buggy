@@ -28,50 +28,50 @@ export class BugController {
 
   @Post()
   async create(@Body() dto: CreateBugDto, @CurrentUser() user: SessionUser) {
-    await this.projects.assertWrite(dto.projectId, user);
+    await this.projects.assertModuleAction(dto.projectId, user, 'bugs', 'create');
     return this.bugs.create(dto, user);
   }
 
   @Post('from-run')
   async createFromRun(@Body() dto: CreateBugFromRunDto, @CurrentUser() user: SessionUser) {
-    await this.projects.assertWrite(await this.plans.projectIdOf(dto.testPlanId), user);
+    await this.projects.assertModuleAction(await this.plans.projectIdOf(dto.testPlanId), user, 'bugs', 'create');
     return this.bugs.createFromRun(dto, user);
   }
 
   @Patch(':id')
   async update(@Param('id') id: string, @Body() dto: UpdateBugDto, @CurrentUser() user: SessionUser) {
-    await this.projects.assertWrite(await this.bugs.projectIdOf(id), user);
+    await this.projects.assertModuleAction(await this.bugs.projectIdOf(id), user, 'bugs', 'edit');
     return this.bugs.update(id, dto, user);
   }
 
   @Post(':id/transition')
   async transition(@Param('id') id: string, @Body() dto: TransitionBugDto, @CurrentUser() user: SessionUser) {
-    await this.projects.assertWrite(await this.bugs.projectIdOf(id), user);
+    await this.projects.assertModuleAction(await this.bugs.projectIdOf(id), user, 'bugs', 'edit');
     return this.bugs.transition(id, dto, user);
   }
 
   @Post(':id/duplicate')
   async markDuplicate(@Param('id') id: string, @Body() dto: MarkDuplicateBugDto, @CurrentUser() user: SessionUser) {
-    await this.projects.assertWrite(await this.bugs.projectIdOf(id), user);
+    await this.projects.assertModuleAction(await this.bugs.projectIdOf(id), user, 'bugs', 'edit');
     return this.bugs.markDuplicate(id, dto, user);
   }
 
   @Post(':id/comments')
   async addComment(@Param('id') id: string, @Body() dto: AddBugCommentDto, @CurrentUser() user: SessionUser) {
-    await this.projects.assertWrite(await this.bugs.projectIdOf(id), user);
+    await this.projects.assertModuleAction(await this.bugs.projectIdOf(id), user, 'bugs', 'edit');
     return this.bugs.addComment(id, dto, user);
   }
 
   @Post(':id/attachments')
   async addAttachment(@Param('id') id: string, @Body() dto: AddBugAttachmentDto, @CurrentUser() user: SessionUser) {
-    await this.projects.assertWrite(await this.bugs.projectIdOf(id), user);
+    await this.projects.assertModuleAction(await this.bugs.projectIdOf(id), user, 'bugs', 'edit');
     return this.bugs.addAttachment(id, dto, user);
   }
 
   @Post(':id/attachments/upload')
   async uploadAttachment(@Param('id') id: string, @Req() request: FastifyRequest, @CurrentUser() user: SessionUser) {
     const projectId = await this.bugs.projectIdOf(id);
-    await this.projects.assertWrite(projectId, user);
+    await this.projects.assertModuleAction(projectId, user, 'bugs', 'edit');
     const file = await request.file();
     if (!file) throw new BadRequestException('请选择上传文件');
     const asset = await this.uploads.save(file, projectId, user);
@@ -80,7 +80,7 @@ export class BugController {
 
   @Delete(':id')
   async remove(@Param('id') id: string, @CurrentUser() user: SessionUser) {
-    await this.projects.assertManage(await this.bugs.projectIdOf(id), user);
+    await this.projects.assertModuleAction(await this.bugs.projectIdOf(id), user, 'bugs', 'delete');
     return this.bugs.remove(id);
   }
 }

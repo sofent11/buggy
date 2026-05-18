@@ -25,7 +25,7 @@ export class RequirementController {
 
   @Post()
   async create(@Body() dto: CreateRequirementDto, @CurrentUser() user: SessionUser) {
-    await this.projects.assertWrite(dto.projectId, user);
+    await this.projects.assertModuleAction(dto.projectId, user, 'requirements', 'create');
     return this.requirements.create(dto, user);
   }
 
@@ -37,13 +37,13 @@ export class RequirementController {
 
   @Patch(':id')
   async update(@Param('id') id: string, @Body() dto: UpdateRequirementDto, @CurrentUser() user: SessionUser) {
-    await this.projects.assertWrite(await this.requirements.projectIdOf(id), user);
+    await this.projects.assertModuleAction(await this.requirements.projectIdOf(id), user, 'requirements', 'edit');
     return this.requirements.update(id, dto, user);
   }
 
   @Patch(':id/lark')
   async bindLark(@Param('id') id: string, @Body() dto: BindLarkDto, @CurrentUser() user: SessionUser) {
-    await this.projects.assertWrite(await this.requirements.projectIdOf(id), user);
+    await this.projects.assertModuleAction(await this.requirements.projectIdOf(id), user, 'requirements', 'edit');
     return this.requirements.bindLark(id, dto, user);
   }
 
@@ -55,7 +55,7 @@ export class RequirementController {
 
   @Delete(':id')
   async remove(@Param('id') id: string, @CurrentUser() user: SessionUser) {
-    await this.projects.assertManage(await this.requirements.projectIdOf(id), user);
+    await this.projects.assertModuleAction(await this.requirements.projectIdOf(id), user, 'requirements', 'delete');
     return this.requirements.remove(id);
   }
 }

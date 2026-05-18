@@ -5,7 +5,7 @@ import { parse, serialize } from 'cookie';
 import jwt from 'jsonwebtoken';
 import { Model } from 'mongoose';
 import type { FastifyRequest } from 'fastify';
-import type { SystemRole, UserProfile } from '@buggy/shared-types';
+import type { SystemPermission, UserProfile } from '@buggy/shared-types';
 import { UserEntity } from '../database/user.schema.js';
 import type { LoginDto, RegisterDto } from '../dto/auth.dto.js';
 import { idOf } from '../shared/mongo.js';
@@ -14,7 +14,8 @@ export interface SessionUser {
   id: string;
   username: string;
   email: string;
-  role: SystemRole;
+  systemPermission: SystemPermission;
+  role: SystemPermission;
 }
 
 interface JwtPayload {
@@ -28,16 +29,18 @@ export class AuthService {
   constructor(@InjectModel(UserEntity.name) private readonly users: Model<UserEntity>) {}
 
   async register(dto: RegisterDto): Promise<{ user: UserProfile; cookies: string[] }> {
+    const count = await this.users.countDocuments();
+
     const exists = await this.users.exists({ $or: [{ email: dto.email.toLowerCase() }, { username: dto.username }] });
     if (exists) throw new ConflictException('用户名或邮箱已存在');
+    const systemPermission: SystemPermission = count === 0 ? 'admin' : 'user';
 
-    const count = await this.users.countDocuments();
-    const role: SystemRole = count === 0 ? 'admin' : 'tester';
     const user = await this.users.create({
       username: dto.username,
       email: dto.email.toLowerCase(),
       passwordHash: await hash(dto.password, 10),
-      role,
+      role: systemPermission,
+      systemPermission,
       status: 'active'
     });
     return { user: this.toProfile(user), cookies: this.buildCookies(idOf(user._id)) };
@@ -64,7 +67,8 @@ export class AuthService {
         id: idOf(user._id),
         username: user.username,
         email: user.email,
-        role: user.role
+        systemPermission: this.normalizeSystemPermission(user),
+        role: this.normalizeSystemPermission(user)
       };
     } catch {
       return null;
@@ -113,14 +117,21 @@ export class AuthService {
   }
 
   toProfile(user: UserEntity & { _id: unknown; createdAt?: Date; updatedAt?: Date }): UserProfile {
+    const systemPermission = this.normalizeSystemPermission(user);
     return {
       id: idOf(user._id),
       username: user.username,
       email: user.email,
-      role: user.role,
+      systemPermission,
+      role: systemPermission,
       status: user.status,
       createdAt: user.createdAt?.toISOString(),
       updatedAt: user.updatedAt?.toISOString()
     };
+  }
+
+  private normalizeSystemPermission(user: Pick<UserEntity, 'role' | 'systemPermission'>): SystemPermission {
+    if (user.systemPermission === 'admin' || user.systemPermission === 'maintainer' || user.systemPermission === 'user') return user.systemPermission;
+    return user.role === 'admin' ? 'admin' : 'user';
   }
 }

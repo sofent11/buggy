@@ -13,7 +13,8 @@ export function pageInfo(tab: Tab) {
     plans: { title: '测试执行', description: (project) => `组织「${project}」的测试轮次、用例范围和执行结果。` },
     bugs: { title: '缺陷追踪', description: (project) => `筛选、指派和追踪「${project}」中的缺陷。` },
     reports: { title: '验收报表', description: (project) => `维护「${project}」的发布范围、准入判断、风险豁免和签核归档。` },
-    settings: { title: '系统配置', description: (project) => `配置「${project}」的数据字典、Excel 模板和账号权限。` }
+    users: { title: '用户管理', description: () => '由管理员创建账号、维护系统角色、启用状态和临时密码。' },
+    settings: { title: '系统配置', description: (project) => `配置「${project}」的数据字典、Excel 模板和质量策略。` }
   };
   return descriptions[tab];
 }

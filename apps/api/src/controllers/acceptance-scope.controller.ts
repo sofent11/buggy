@@ -23,7 +23,7 @@ export class AcceptanceScopeController {
 
   @Post()
   async create(@Body() dto: CreateAcceptanceScopeDto, @CurrentUser() user: SessionUser) {
-    await this.projects.assertWrite(dto.projectId, user);
+    await this.projects.assertModuleAction(dto.projectId, user, 'reports', 'create');
     return this.scopes.create(dto, user);
   }
 
@@ -35,25 +35,25 @@ export class AcceptanceScopeController {
 
   @Patch(':id')
   async update(@Param('id') id: string, @Body() dto: UpdateAcceptanceScopeDto, @CurrentUser() user: SessionUser) {
-    await this.projects.assertWrite(await this.scopes.projectIdOf(id), user);
+    await this.projects.assertModuleAction(await this.scopes.projectIdOf(id), user, 'reports', 'edit');
     return this.scopes.update(id, dto, user);
   }
 
   @Post(':id/waivers')
   async addWaiver(@Param('id') id: string, @Body() dto: AddRiskWaiverDto, @CurrentUser() user: SessionUser) {
-    await this.projects.assertWrite(await this.scopes.projectIdOf(id), user);
+    await this.projects.assertModuleAction(await this.scopes.projectIdOf(id), user, 'reports', 'edit');
     return this.scopes.addWaiver(id, dto, user);
   }
 
   @Post(':id/signoff')
   async signoff(@Param('id') id: string, @Body() dto: SignoffAcceptanceScopeDto, @CurrentUser() user: SessionUser) {
-    await this.projects.assertManage(await this.scopes.projectIdOf(id), user);
+    await this.projects.assertModuleAction(await this.scopes.projectIdOf(id), user, 'reports', 'signoff');
     return this.scopes.signoff(id, dto, user);
   }
 
   @Delete(':id')
   async remove(@Param('id') id: string, @CurrentUser() user: SessionUser) {
-    await this.projects.assertManage(await this.scopes.projectIdOf(id), user);
+    await this.projects.assertModuleAction(await this.scopes.projectIdOf(id), user, 'reports', 'delete');
     return this.scopes.remove(id);
   }
 }

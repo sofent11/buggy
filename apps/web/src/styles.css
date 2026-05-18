@@ -3100,11 +3100,58 @@ tbody tr:hover {
   align-items: center;
 }
 
+.user-admin-panel,
+.user-admin-heading {
+  display: grid;
+  gap: 12px;
+}
+
+.user-admin-heading {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+}
+
+.user-admin-heading p {
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+
 .permission-note {
   margin: 0;
   border-left: 3px solid var(--warning);
   background: var(--warning-soft);
   padding: 8px 10px;
+}
+
+.temporary-password-dialog {
+  max-width: 480px;
+}
+
+.temporary-password-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+  padding: 12px;
+}
+
+.temporary-password-box strong {
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 18px;
+  overflow-wrap: anywhere;
+}
+
+.business-role-editor {
+  display: grid;
+  gap: 12px;
+}
+
+.permission-chip-grid {
+  display: grid;
+  gap: 6px;
+  min-width: 120px;
 }
 
 .dictionary-toolbar {
@@ -3731,8 +3778,13 @@ select[multiple] {
   .column-chooser,
   .column-chooser summary,
   .pagination,
+  .user-admin-heading .report-actions,
   .account-admin-toolbar .search-box {
     width: 100%;
+  }
+
+  .user-admin-heading {
+    grid-template-columns: 1fr;
   }
 
   .column-chooser > div {

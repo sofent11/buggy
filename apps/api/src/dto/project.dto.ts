@@ -1,5 +1,5 @@
 import { IsEmail, IsIn, IsMongoId, IsOptional, IsString, MinLength } from 'class-validator';
-import type { ProjectCategory, ProjectQualitySettings, ProjectRole, ProjectStatus } from '@buggy/shared-types';
+import type { BusinessRoleConfig, BusinessRoleKey, ProjectCategory, ProjectPermission, ProjectQualitySettings, ProjectRole, ProjectStatus } from '@buggy/shared-types';
 
 export class CreateProjectDto {
   @IsString()
@@ -21,6 +21,12 @@ export class CreateProjectDto {
   @IsOptional()
   @IsIn(['standard', 'demo', 'test'])
   category?: ProjectCategory;
+
+  @IsOptional()
+  joinRequestsEnabled?: boolean;
+
+  @IsOptional()
+  businessRoles?: BusinessRoleConfig[];
 
   @IsOptional()
   qualitySettings?: ProjectQualitySettings;
@@ -49,6 +55,12 @@ export class UpdateProjectDto {
   category?: ProjectCategory;
 
   @IsOptional()
+  joinRequestsEnabled?: boolean;
+
+  @IsOptional()
+  businessRoles?: BusinessRoleConfig[];
+
+  @IsOptional()
   qualitySettings?: ProjectQualitySettings;
 }
 
@@ -61,6 +73,23 @@ export class UpsertProjectMemberDto {
   @IsEmail()
   email?: string;
 
+  @IsOptional()
   @IsIn(['owner', 'tester', 'developer', 'viewer'])
-  role!: ProjectRole;
+  role?: ProjectRole;
+
+  @IsOptional()
+  @IsIn(['manage', 'maintain', 'normal'])
+  projectPermission?: ProjectPermission;
+
+  @IsOptional()
+  @IsString()
+  businessRoleKey?: BusinessRoleKey;
+}
+
+export class DecideProjectJoinRequestDto {
+  @IsIn(['manage', 'maintain', 'normal'])
+  projectPermission!: ProjectPermission;
+
+  @IsString()
+  businessRoleKey!: BusinessRoleKey;
 }

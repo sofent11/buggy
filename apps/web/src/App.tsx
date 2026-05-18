@@ -17,28 +17,30 @@ import {
   Search,
   Settings,
   ShieldCheck,
+  Users,
 } from 'lucide-react';
-import type { Notification, Project, SavedView, SavedViewFilters, UserProfile } from '@buggy/shared-types';
+import type { BusinessRoleConfig, Notification, Project, ProjectRole, SavedView, SavedViewFilters, UserProfile } from '@buggy/shared-types';
 import { api } from './api.js';
 import { Button } from './components/ui/button.js';
 import { Field, FieldLabel } from './components/ui/form.js';
 import { Input } from './components/ui/input.js';
 import { Textarea } from './components/ui/textarea.js';
 import { emptyData, LOGGED_OUT_KEY } from './app/constants.js';
-import type { AuthFormValues, Tab, TabFilters, WorkspaceData } from './app/types.js';
+import type { AuthFormValues, MutationOptions, Tab, TabFilters, WorkspaceData } from './app/types.js';
 import { filterWorkspaceData, pageInfo } from './app/workspace-utils.js';
 import { labelOf } from './labels.js';
 import { DataTable, Drawer, NavButton, StatusBadge } from './components/workspace/common.js';
 import { DictionaryProvider } from './components/workspace/dictionary.js';
 import { HelpCenter } from './components/workspace/help.js';
 import { QualityCommandCenter, QualityWorkflowNavigator, TraceabilityMatrix } from './components/workspace/overview.js';
-import { BugSection, CaseSection, IterationSection, PlanSection, ProjectSection, RequirementSection, SettingsSection } from './components/workspace/sections.js';
+import { BugSection, CaseSection, IterationSection, PlanSection, ProjectSection, RequirementSection, SettingsSection, UserManagementSection } from './components/workspace/sections.js';
 import { ReportSection } from './components/workspace/reports.js';
 
 const LAST_PROJECT_KEY = 'buggy_last_project_id';
 const RECENT_PROJECTS_KEY = 'buggy_recent_project_ids';
 const SAVED_VIEW_TABS: Tab[] = ['requirements', 'cases', 'plans', 'bugs'];
 type WorkspaceLoadIssue = { key: keyof WorkspaceData; label: string; message: string };
+type WorkspaceRole = UserProfile['role'] | ProjectRole;
 
 export function App() {
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -67,17 +69,22 @@ export function App() {
   );
   const deferredGlobalKeyword = useDeferredValue(globalKeyword);
 
-  const loadProjects = useCallback(async () => {
+  const loadProjects = useCallback(async (actor = user) => {
     const rows = await api.projects();
-    const nextProjectId = await chooseDefaultProject(rows);
+    const nextProjectId = await chooseDefaultProject(rows, actor || undefined);
     setProjects(rows);
     setCurrentProjectId(nextProjectId);
     if (nextProjectId) localStorage.setItem(LAST_PROJECT_KEY, nextProjectId);
+  }, [user]);
+
+  const loadUsers = useCallback(async () => {
+    const rows = await api.users();
+    setData((current) => ({ ...current, users: rows }));
   }, []);
 
   const loadWorkspace = useCallback(async (projectId = currentProjectId) => {
     if (!projectId) {
-      setData(emptyData);
+      setData((current) => ({ ...emptyData, users: current.users }));
       setWorkspaceIssues([]);
       return;
     }
@@ -91,7 +98,6 @@ export function App() {
       { key: 'acceptanceScopes', label: '验收范围', load: () => api.acceptanceScopes(projectId) },
       { key: 'report', label: '质量报表', load: () => api.reportSummary({ projectId }) },
       { key: 'dictionaries', label: '数据字典', load: () => api.dictionaries(projectId) },
-      { key: 'users', label: '账号', load: () => api.users() },
       { key: 'activities', label: '项目动态', load: () => api.activities(projectId) },
       { key: 'notifications', label: '通知', load: () => api.notifications(projectId) },
       { key: 'savedViews', label: '常用筛选', load: () => api.savedViews(projectId) }
@@ -107,7 +113,7 @@ export function App() {
       }
       issues.push({ key: task.key, label: task.label, message: readableWorkspaceError(result.reason) });
     });
-    setData(nextData);
+    setData((current) => ({ ...nextData, users: current.users }));
     setWorkspaceIssues(issues);
     setBusy(false);
   }, [currentProjectId]);
@@ -115,12 +121,13 @@ export function App() {
   const runMutation = useCallback(async <T,>(
     action: () => Promise<T>,
     onSuccess: (result: T) => string | Promise<string>,
-    options?: { reloadProjects?: boolean }
+    options?: MutationOptions
   ) => {
     setBusy(true);
     try {
       const result = await action();
       if (options?.reloadProjects) await loadProjects();
+      if (options?.reloadUsers) await loadUsers();
       await loadWorkspace();
       setNotice(await onSuccess(result));
     } catch (error) {
@@ -128,13 +135,13 @@ export function App() {
     } finally {
       setBusy(false);
     }
-  }, [loadProjects, loadWorkspace]);
+  }, [loadProjects, loadUsers, loadWorkspace]);
 
-  const mutate = useCallback(async (action: () => Promise<unknown>, message: string, options?: { reloadProjects?: boolean }) => {
+  const mutate = useCallback(async (action: () => Promise<unknown>, message: string, options?: MutationOptions) => {
     await runMutation(action, () => message, options);
   }, [runMutation]);
 
-  const mutateWithResult = useCallback(async <T,>(action: () => Promise<T>, resolveMessage: (result: T) => string, options?: { reloadProjects?: boolean }) => {
+  const mutateWithResult = useCallback(async <T,>(action: () => Promise<T>, resolveMessage: (result: T) => string, options?: MutationOptions) => {
     await runMutation(action, resolveMessage, options);
   }, [runMutation]);
 
@@ -148,13 +155,13 @@ export function App() {
       localStorage.removeItem(LOGGED_OUT_KEY);
       setUser(profile);
       setNotice(`欢迎，${profile.username}`);
-      await loadProjects();
+      await Promise.all([loadProjects(profile), loadUsers()]);
     } catch (error) {
       setNotice(readableWorkspaceError(error));
     } finally {
       setBusy(false);
     }
-  }, [authMode, loadProjects]);
+  }, [authMode, loadProjects, loadUsers]);
 
   const logout = useCallback(async () => {
     try {
@@ -188,15 +195,25 @@ export function App() {
       .me()
       .then(async (profile) => {
         setUser(profile);
-        if (profile) await loadProjects();
+        if (profile) await Promise.all([loadProjects(profile), loadUsers()]);
       })
       .catch(() => undefined)
       .finally(() => setLoading(false));
-  }, [loadProjects]);
+  }, [loadProjects, loadUsers]);
 
   useEffect(() => {
     if (currentProjectId) void loadWorkspace(currentProjectId);
   }, [currentProjectId, loadWorkspace]);
+
+  useEffect(() => {
+    const permission = user?.systemPermission || user?.role;
+    if (tab === 'users' && permission !== 'admin' && permission !== 'maintainer') setTab('overview');
+  }, [tab, user?.role, user?.systemPermission]);
+
+  useEffect(() => {
+    const permission = user?.systemPermission || user?.role;
+    if (tab === 'users' && (permission === 'admin' || permission === 'maintainer')) void loadUsers();
+  }, [loadUsers, tab, user?.role, user?.systemPermission]);
 
   useEffect(() => {
     if (!notice) return;
@@ -248,9 +265,16 @@ export function App() {
   const visibleData = useMemo(() => filterWorkspaceData(data, deferredGlobalKeyword), [data, deferredGlobalKeyword]);
   const page = pageInfo(tab);
   const projectRole = currentProject?.members.find((member) => member.userId === user?.id)?.role;
-  const canManageProject = user?.role === 'admin' || projectRole === 'owner' || currentProject?.ownerId === user?.id;
-  const canWriteProject = canManageProject || projectRole === 'tester' || projectRole === 'developer';
-  const canExecute = canManageProject || projectRole === 'tester';
+  const workspaceRole: WorkspaceRole = projectRole || user?.role || 'viewer';
+  const systemPermission = user?.systemPermission || user?.role;
+  const canUseUserAdmin = systemPermission === 'admin' || systemPermission === 'maintainer';
+  const currentMember = currentProject?.members.find((member) => member.userId === user?.id);
+  const projectPermission = currentMember?.projectPermission || (projectRole === 'owner' ? 'manage' : projectRole === 'tester' || projectRole === 'developer' ? 'maintain' : 'normal');
+  const businessRoleKey = currentMember?.businessRoleKey || (projectRole === 'owner' ? 'manager' : projectRole || 'viewer');
+  const businessRole = currentProject?.businessRoles?.find((role) => role.key === businessRoleKey);
+  const canManageProject = systemPermission === 'admin' || projectPermission === 'manage' || currentProject?.ownerId === user?.id;
+  const canWriteProject = canManageProject || projectPermission === 'maintain' || hasBusinessPermission(businessRole, 'requirements', 'edit');
+  const canExecute = canManageProject || projectPermission === 'maintain' || hasBusinessPermission(businessRole, 'plans', 'execute');
   const unreadCount = data.notifications.filter((item) => item.status === 'unread').length;
   const openEntity = useCallback((entityType: string, entityId?: string) => {
     const nextTab = tabOfEntity(entityType);
@@ -324,7 +348,8 @@ export function App() {
           <NavButton tab="plans" current={tab} icon={Activity} index={6} label="测试执行" onClick={changeTab} />
           <NavButton tab="bugs" current={tab} icon={BugIcon} index={7} label="缺陷" onClick={changeTab} />
           <NavButton tab="reports" current={tab} icon={FileText} index={8} label="报表" onClick={changeTab} />
-          <NavButton tab="settings" current={tab} icon={Settings} index={9} label="配置" onClick={changeTab} />
+          {canUseUserAdmin && <NavButton tab="users" current={tab} icon={Users} index={9} label="用户管理" onClick={changeTab} />}
+          <NavButton tab="settings" current={tab} icon={Settings} index={canUseUserAdmin ? 10 : 9} label="配置" onClick={changeTab} />
         </nav>
         <div className="sidebar-footer">
           <button type="button" className="ghost" onClick={() => setHelpOpen(true)}>
@@ -348,8 +373,8 @@ export function App() {
             />
           </label>
           <div className="top-actions">
-            <ProjectSwitcher projects={projects} currentProjectId={currentProjectId} currentUserId={user.id} onSelect={selectProject} />
-            <button className="refresh-button" title="刷新工作区数据" onClick={() => loadWorkspace()} disabled={busy || !currentProjectId}>
+            <ProjectSwitcher projects={projects} currentProjectId={currentProjectId} currentUser={user} onSelect={selectProject} />
+            <button className="refresh-button" title="刷新当前数据" onClick={() => tab === 'users' ? loadUsers() : loadWorkspace()} disabled={busy || (!currentProjectId && tab !== 'users')}>
               <RefreshCw size={17} />
               <span>{busy ? '同步中' : '刷新'}</span>
             </button>
@@ -364,7 +389,7 @@ export function App() {
             >
               <Bell size={15} /> {unreadCount || '通知'}
             </button>
-            <span className="user-pill">{user.username} · {labelOf(user.role)}</span>
+            <span className="user-pill">{user.username} · {labelOf(workspaceRole)}</span>
           </div>
         </header>
 
@@ -437,7 +462,9 @@ export function App() {
 
         {notice && <div className={isBlockingNotice(notice) ? 'notice notice-warning' : 'notice'}>{notice}</div>}
 
-        {!currentProject && tab !== 'projects' ? (
+        {tab === 'users' ? (
+          <UserManagementSection currentUser={user} users={data.users} onRefresh={loadUsers} onNotice={setNotice} />
+        ) : !currentProject && tab !== 'projects' ? (
           <ProjectSection
             user={user}
             projects={projects}
@@ -452,7 +479,7 @@ export function App() {
           <>
             {tab === 'overview' && currentProject && (
               <section className="grid role-dashboard-grid">
-                <QualityCommandCenter data={data} user={user} onJump={changeTab} onOpenEntity={openEntity} />
+                <QualityCommandCenter data={data} user={user} role={workspaceRole} onJump={changeTab} onOpenEntity={openEntity} />
                 <QualityWorkflowNavigator data={data} onJump={changeTab} />
                 <TraceabilityMatrix data={data} />
                 <section className="panel wide compact-activity-panel">
@@ -592,6 +619,7 @@ export function App() {
         open={helpOpen}
         onClose={() => setHelpOpen(false)}
         user={user}
+        role={workspaceRole}
         currentProject={currentProject}
         projectCount={projects.length}
         data={data}
@@ -639,9 +667,13 @@ export function App() {
   );
 }
 
-async function chooseDefaultProject(rows: Project[]) {
-  const candidates = rows.filter((project) => (project.status || 'active') === 'active' && (project.category || 'standard') === 'standard');
-  const scopedRows = candidates.length ? candidates : rows.filter((project) => (project.status || 'active') === 'active');
+async function chooseDefaultProject(rows: Project[], user?: UserProfile) {
+  const canAccessAll = (user?.systemPermission || user?.role) === 'admin' || (user?.systemPermission || user?.role) === 'maintainer';
+  const accessibleRows = canAccessAll || !user
+    ? rows
+    : rows.filter((project) => project.ownerId === user.id || project.members.some((member) => member.userId === user.id));
+  const candidates = accessibleRows.filter((project) => (project.status || 'active') === 'active' && (project.category || 'standard') === 'standard');
+  const scopedRows = candidates.length ? candidates : accessibleRows.filter((project) => (project.status || 'active') === 'active');
   const remembered = localStorage.getItem(LAST_PROJECT_KEY);
   if (remembered && scopedRows.some((item) => item.id === remembered)) return remembered;
   if (scopedRows.length <= 1) return scopedRows[0]?.id || '';
@@ -666,7 +698,7 @@ async function chooseDefaultProject(rows: Project[]) {
   return scored.reduce((best, item) => (item.score > best.score ? item : best), scored[0])?.id || scopedRows[0]?.id || '';
 }
 
-function ProjectSwitcher(props: { projects: Project[]; currentProjectId: string; currentUserId: string; onSelect: (id: string) => void }) {
+function ProjectSwitcher(props: { projects: Project[]; currentProjectId: string; currentUser: UserProfile; onSelect: (id: string) => void }) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const recentIds = useMemo(() => {
@@ -679,18 +711,22 @@ function ProjectSwitcher(props: { projects: Project[]; currentProjectId: string;
   const current = props.projects.find((project) => project.id === props.currentProjectId);
   const filtered = useMemo(() => {
     const keyword = query.trim().toLowerCase();
-    const selectableProjects = props.projects.filter((project) => (project.status || 'active') === 'active');
+    const canAccessAll = (props.currentUser.systemPermission || props.currentUser.role) === 'admin' || (props.currentUser.systemPermission || props.currentUser.role) === 'maintainer';
+    const selectableProjects = props.projects.filter((project) =>
+      (project.status || 'active') === 'active' &&
+      (canAccessAll || project.ownerId === props.currentUser.id || project.members.some((member) => member.userId === props.currentUser.id))
+    );
     const rows = keyword
       ? selectableProjects.filter((project) => `${project.name} ${project.code || ''}`.toLowerCase().includes(keyword))
       : selectableProjects;
     const score = (project: Project) => {
       if ((project.category || 'standard') === 'standard') return recentIds.includes(project.id) ? 0 : 1;
       if (recentIds.includes(project.id)) return 0;
-      if (project.members.some((member) => member.userId === props.currentUserId && member.role === 'owner')) return 2;
+      if (project.members.some((member) => member.userId === props.currentUser.id && (member.projectPermission === 'manage' || member.role === 'owner'))) return 2;
       return 3;
     };
     return [...rows].sort((a, b) => score(a) - score(b) || a.name.localeCompare(b.name)).slice(0, 12);
-  }, [props.projects, props.currentUserId, query, recentIds]);
+  }, [props.projects, props.currentUser, query, recentIds]);
   const pick = (id: string) => {
     const nextRecent = [id, ...recentIds.filter((item) => item !== id)].slice(0, 6);
     localStorage.setItem(RECENT_PROJECTS_KEY, JSON.stringify(nextRecent));
@@ -899,4 +935,8 @@ function tabOfEntity(entityType: string): Tab | undefined {
   if (entityType === 'project') return 'projects';
   if (entityType === 'acceptance_scope') return 'reports';
   return undefined;
+}
+
+function hasBusinessPermission(role: BusinessRoleConfig | undefined, module: keyof BusinessRoleConfig['permissions'], action: string) {
+  return Boolean(role?.permissions?.[module]?.includes(action as never));
 }

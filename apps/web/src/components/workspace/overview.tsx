@@ -1,8 +1,10 @@
-import type { Project, ReportSummary, UserProfile } from '@buggy/shared-types';
+import type { Project, ProjectRole, ReportSummary, UserProfile } from '@buggy/shared-types';
 import { Activity, Bug, CalendarRange, ClipboardCheck, FileText, Flag, FolderKanban, GitPullRequestArrow, RotateCcw, ShieldAlert, Users } from 'lucide-react';
 import { labelOf } from '../../labels.js';
 import type { Tab, WorkspaceData } from '../../app/types.js';
 import { DataTable, EmptyState, StatusBadge, Table } from './common.js';
+
+type WorkspaceRole = UserProfile['role'] | ProjectRole;
 
 export function QualityWorkflowNavigator(props: { data: WorkspaceData; onJump?: (tab: Tab) => void }) {
   const coveredRequirementIds = new Set(props.data.cases.map((item) => item.requirementId).filter(Boolean));
@@ -77,7 +79,8 @@ export function QualityWorkflowNavigator(props: { data: WorkspaceData; onJump?: 
   );
 }
 
-export function QualityWorkQueue(props: { data: WorkspaceData; user: UserProfile; onJump?: (tab: Tab) => void }) {
+export function QualityWorkQueue(props: { data: WorkspaceData; user: UserProfile; role?: WorkspaceRole; onJump?: (tab: Tab) => void }) {
+  const role = props.role || props.user.role;
   const runEntries = props.data.plans.flatMap((plan) => plan.runItems.map((item) => ({ plan, item })));
   const myUntested = runEntries.filter(({ item }) => item.status === 'untested' && (!item.executorId || item.executorId === props.user.id));
   const failedWithoutBug = runEntries.filter(({ item }) => ['failed', 'blocked'].includes(item.status) && item.bugIds.length === 0);
@@ -105,7 +108,7 @@ export function QualityWorkQueue(props: { data: WorkspaceData; user: UserProfile
   return (
     <section className="panel wide role-workbench">
       <div className="section-heading compact">
-        <span>{labelOf(props.user.role)}工作台</span>
+        <span>{labelOf(role)}工作台</span>
         <strong>今天最该处理的事项</strong>
       </div>
       <div className="role-queue-cards">
@@ -127,7 +130,8 @@ export function QualityWorkQueue(props: { data: WorkspaceData; user: UserProfile
   );
 }
 
-export function QualityCommandCenter(props: { data: WorkspaceData; user: UserProfile; onJump?: (tab: Tab) => void; onOpenEntity?: (entityType: string, entityId?: string) => void }) {
+export function QualityCommandCenter(props: { data: WorkspaceData; user: UserProfile; role?: WorkspaceRole; onJump?: (tab: Tab) => void; onOpenEntity?: (entityType: string, entityId?: string) => void }) {
+  const role = props.role || props.user.role;
   const requirementIds = new Set(props.data.requirements.map((item) => item.id));
   const caseIds = new Set(props.data.cases.map((item) => item.id));
   const planIds = new Set(props.data.plans.map((item) => item.id));
@@ -167,7 +171,7 @@ export function QualityCommandCenter(props: { data: WorkspaceData; user: UserPro
     item.reason,
     <button className="linkish" type="button" onClick={() => props.onOpenEntity?.(riskEntity(item.type), item.id)}>定位处理</button>
   ]);
-  const roleFocus = roleFocusFor(props.user.role, {
+  const roleFocus = roleFocusFor(role, {
     myUntested: myUntested.length,
     failedWithoutBug: failedWithoutBug.length,
     retestBugs: retestBugs.length,
@@ -201,7 +205,7 @@ export function QualityCommandCenter(props: { data: WorkspaceData; user: UserPro
     <section className="command-center" aria-label="今日质量指挥台">
       <article className="command-card primary-command">
         <div className="section-heading compact">
-          <span>{labelOf(props.user.role)}待办</span>
+          <span>{labelOf(role)}待办</span>
           <strong>今天先处理这些</strong>
         </div>
         <div className="command-metric-row">
@@ -235,7 +239,7 @@ export function QualityCommandCenter(props: { data: WorkspaceData; user: UserPro
   );
 }
 
-function roleFocusFor(role: UserProfile['role'], counts: {
+function roleFocusFor(role: WorkspaceRole, counts: {
   myUntested: number;
   failedWithoutBug: number;
   retestBugs: number;
@@ -282,7 +286,7 @@ function roleFocusFor(role: UserProfile['role'], counts: {
     };
   }
   return {
-    label: role === 'project_owner' ? '负责人视角' : '管理视角',
+    label: role === 'owner' ? '负责人视角' : '管理视角',
     title: '看风险、看进度、看发布结论',
     items: [
       { label: '覆盖缺口', value: counts.uncoveredRequirements, detail: '需求无用例或用例孤立', tab: 'cases' as Tab, icon: ClipboardCheck, tone: counts.uncoveredRequirements ? 'risk' : 'good' },
@@ -497,9 +501,14 @@ export function PageInsights(props: {
       { label: '待签核', value: props.data.acceptanceScopes.filter((item) => !['signed', 'archived'].includes(item.status)).length, tone: 'info' },
       { label: '阻塞项', value: report?.qualityGate?.issues.length || 0, tone: report?.qualityGate?.issues.length ? 'risk' : 'good' }
     ],
+    users: [
+      { label: '系统账号', value: props.data.users.length },
+      { label: '管理员', value: props.data.users.filter((item) => (item.systemPermission || item.role) === 'admin').length, tone: 'good' },
+      { label: '禁用账号', value: props.data.users.filter((item) => item.status === 'disabled').length, tone: 'risk' }
+    ],
     settings: [
       { label: '字典', value: props.data.dictionaries.length },
-      { label: '用户', value: props.data.users.length },
+      { label: '质量策略', value: props.currentProject?.qualitySettings ? '已配置' : '默认' },
       { label: '导入范围', value: props.currentProject?.code || '未选择' }
     ]
   };

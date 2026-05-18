@@ -23,7 +23,7 @@ export class TestCaseController {
 
   @Post()
   async create(@Body() dto: CreateTestCaseDto, @CurrentUser() user: SessionUser) {
-    await this.projects.assertWrite(dto.projectId, user);
+    await this.projects.assertModuleAction(dto.projectId, user, 'cases', 'create');
     return this.cases.create(dto, user);
   }
 
@@ -35,19 +35,19 @@ export class TestCaseController {
 
   @Patch(':id')
   async update(@Param('id') id: string, @Body() dto: UpdateTestCaseDto, @CurrentUser() user: SessionUser) {
-    await this.projects.assertWrite(await this.cases.projectIdOf(id), user);
+    await this.projects.assertModuleAction(await this.cases.projectIdOf(id), user, 'cases', 'edit');
     return this.cases.update(id, dto, user);
   }
 
   @Post(':id/restore-baseline')
   async restoreBaseline(@Param('id') id: string, @CurrentUser() user: SessionUser) {
-    await this.projects.assertWrite(await this.cases.projectIdOf(id), user);
+    await this.projects.assertModuleAction(await this.cases.projectIdOf(id), user, 'cases', 'edit');
     return this.cases.restoreBaseline(id, user);
   }
 
   @Delete(':id')
   async remove(@Param('id') id: string, @CurrentUser() user: SessionUser) {
-    await this.projects.assertManage(await this.cases.projectIdOf(id), user);
+    await this.projects.assertModuleAction(await this.cases.projectIdOf(id), user, 'cases', 'delete');
     return this.cases.remove(id);
   }
 }

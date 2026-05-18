@@ -23,19 +23,19 @@ export class IterationController {
 
   @Post()
   async create(@Body() dto: CreateIterationDto, @CurrentUser() user: SessionUser) {
-    await this.projects.assertManage(dto.projectId, user);
+    await this.projects.assertModuleAction(dto.projectId, user, 'iterations', 'create');
     return this.iterations.create(dto);
   }
 
   @Patch(':id')
   async update(@Param('id') id: string, @Body() dto: UpdateIterationDto, @CurrentUser() user: SessionUser) {
-    await this.projects.assertManage(await this.iterations.projectIdOf(id), user);
+    await this.projects.assertModuleAction(await this.iterations.projectIdOf(id), user, 'iterations', 'edit');
     return this.iterations.update(id, dto);
   }
 
   @Delete(':id')
   async remove(@Param('id') id: string, @CurrentUser() user: SessionUser) {
-    await this.projects.assertManage(await this.iterations.projectIdOf(id), user);
+    await this.projects.assertModuleAction(await this.iterations.projectIdOf(id), user, 'iterations', 'delete');
     return this.iterations.remove(id);
   }
 }

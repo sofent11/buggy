@@ -7,9 +7,8 @@ import { Button } from '../ui/button.js';
 import { Field, FieldLabel } from '../ui/form.js';
 import { Input } from '../ui/input.js';
 import { labelOf } from '../../labels.js';
-import { systemRoles, userStatuses } from '../../app/constants.js';
-import { importMessage, rate, userStatusLabel } from '../../app/workspace-utils.js';
-import { ConfirmDialog, DataPage, DataTable, Drawer, EmptyState, MetricCard, Pagination, SearchBox, StatusBadge, TemplateLink, TextConfirmDialog } from './common.js';
+import { importMessage, rate } from '../../app/workspace-utils.js';
+import { DataPage, DataTable, Drawer, EmptyState, MetricCard, StatusBadge, TemplateLink, TextConfirmDialog } from './common.js';
 
 const chartColors = ['#2563eb', '#16a34a', '#f97316', '#dc2626', '#7c3aed', '#64748b'];
 const fallbackColor = '#64748b';
@@ -378,7 +377,6 @@ export function SettingsSection(props: {
           )}
         </article>
         <QualityStrategyConsole project={props.currentProject} canManage={props.canManage} mutate={props.mutate} />
-        <UserAdmin currentUser={props.currentUser} users={props.users} mutate={props.mutate} />
         <DictionaryEditor dictionaries={props.dictionaries} projectId={props.projectId} mutate={props.mutate} />
       </div>
     </DataPage>
@@ -547,67 +545,6 @@ function nonNegativeNumber(value: FormDataEntryValue | null, fallback: number) {
 
 function formText(form: FormData, key: string) {
   return String(form.get(key) || '').trim();
-}
-
-export function UserAdmin(props: { currentUser: UserProfile; users: UserProfile[]; mutate: (action: () => Promise<unknown>, message: string) => Promise<void> }) {
-  const canManage = props.currentUser.role === 'admin';
-  const [keyword, setKeyword] = useState('');
-  const [page, setPage] = useState(1);
-  const [pending, setPending] = useState<{ user: UserProfile; field: 'role' | 'status'; value: string } | null>(null);
-  const filtered = useMemo(() => {
-    const normalized = keyword.trim().toLowerCase();
-    if (!normalized) return props.users;
-    return props.users.filter((user) => `${user.username} ${user.email} ${labelOf(user.role)} ${userStatusLabel(user.status)}`.toLowerCase().includes(normalized));
-  }, [props.users, keyword]);
-  const pageSize = 8;
-  const rows = filtered.slice((page - 1) * pageSize, page * pageSize);
-  return (
-    <article className="item-card span-two">
-      <strong>账号权限</strong>
-      <div className="account-admin-toolbar">
-        <SearchBox value={keyword} onChange={(value) => {
-          setKeyword(value);
-          setPage(1);
-        }} placeholder="搜索用户、邮箱、角色" />
-        <span className="toolbar-summary">{filtered.length} / {props.users.length} 个账号</span>
-      </div>
-      <p className="permission-note">角色和账号状态变更会立即影响登录与项目访问，请确认后再提交。</p>
-      <DataTable
-        headers={['用户', '邮箱', '系统角色', '状态', '操作']}
-        rows={rows.map((user) => [
-          user.username,
-          user.email,
-          canManage ? (
-            <select value={user.role} onChange={(event) => setPending({ user, field: 'role', value: event.target.value })}>
-              {systemRoles.map((role) => <option key={role} value={role}>{labelOf(role)}</option>)}
-            </select>
-          ) : labelOf(user.role),
-          canManage ? (
-            <select value={user.status} onChange={(event) => setPending({ user, field: 'status', value: event.target.value })}>
-              {userStatuses.map((status) => <option key={status} value={status}>{userStatusLabel(status)}</option>)}
-            </select>
-          ) : userStatusLabel(user.status),
-          user.role === 'admin' ? <StatusBadge value="admin" /> : '可维护'
-        ])}
-      />
-      <Pagination page={page} pageSize={pageSize} total={filtered.length} onPage={setPage} />
-      <ConfirmDialog
-        open={Boolean(pending)}
-        title={pending ? `确认修改 ${pending.user.username}？` : '确认修改账号？'}
-        description={pending ? `${pending.field === 'role' ? '系统角色' : '账号状态'}将变更为 ${pending.field === 'role' ? labelOf(pending.value) : userStatusLabel(pending.value)}。` : undefined}
-        confirmText="确认修改"
-        onCancel={() => setPending(null)}
-        onConfirm={() => {
-          if (!pending) return;
-          void props.mutate(
-            () => api.updateUser(pending.user.id, pending.field === 'role' ? { role: pending.value as never } : { status: pending.value as never }),
-            pending.field === 'role' ? '用户角色已更新' : '账号状态已更新'
-          );
-          setPending(null);
-        }}
-      />
-    </article>
-  );
 }
 
 export function DictionaryEditor(props: { dictionaries: Dictionary[]; projectId: string; mutate: (action: () => Promise<unknown>, message: string) => Promise<void> }) {

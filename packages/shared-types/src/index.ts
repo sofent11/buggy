@@ -12,9 +12,15 @@ export type ApiResult<T = unknown> =
       };
     };
 
-export type SystemRole = 'admin' | 'project_owner' | 'tester' | 'developer' | 'viewer';
+export type SystemPermission = 'admin' | 'maintainer' | 'user';
+export type SystemRole = SystemPermission;
 export type UserStatus = 'active' | 'disabled';
+export type ProjectPermission = 'manage' | 'maintain' | 'normal';
 export type ProjectRole = 'owner' | 'tester' | 'developer' | 'viewer';
+export type BusinessRoleKey = 'manager' | 'tester' | 'developer' | 'viewer' | string;
+export type PermissionModule = 'iterations' | 'requirements' | 'cases' | 'plans' | 'bugs' | 'reports';
+export type PermissionAction = 'view' | 'create' | 'edit' | 'delete' | 'execute' | 'signoff';
+export type JoinRequestStatus = 'pending' | 'approved' | 'rejected';
 export type ProjectStatus = 'active' | 'archived' | 'deleted';
 export type ProjectCategory = 'standard' | 'demo' | 'test';
 
@@ -156,17 +162,99 @@ export interface UserProfile {
   id: Id;
   username: string;
   email: string;
-  role: SystemRole;
+  systemPermission: SystemPermission;
+  role: SystemPermission;
   status: UserStatus;
   createdAt?: string;
   updatedAt?: string;
 }
 
+export type BusinessRolePermissions = Partial<Record<PermissionModule, PermissionAction[]>>;
+
+export interface BusinessRoleConfig {
+  key: BusinessRoleKey;
+  name: string;
+  description?: string;
+  permissions: BusinessRolePermissions;
+}
+
+export const DEFAULT_BUSINESS_ROLES: BusinessRoleConfig[] = [
+  {
+    key: 'manager',
+    name: '项目管理',
+    description: '项目管理者默认拥有全部业务模块操作权限',
+    permissions: {
+      iterations: ['view', 'create', 'edit', 'delete'],
+      requirements: ['view', 'create', 'edit', 'delete'],
+      cases: ['view', 'create', 'edit', 'delete'],
+      plans: ['view', 'create', 'edit', 'delete', 'execute'],
+      bugs: ['view', 'create', 'edit', 'delete'],
+      reports: ['view', 'create', 'edit', 'delete', 'signoff']
+    }
+  },
+  {
+    key: 'tester',
+    name: '测试',
+    description: '测试人员维护用例、执行计划、缺陷和验收材料',
+    permissions: {
+      iterations: ['view'],
+      requirements: ['view', 'create', 'edit'],
+      cases: ['view', 'create', 'edit', 'delete'],
+      plans: ['view', 'create', 'edit', 'execute'],
+      bugs: ['view', 'create', 'edit'],
+      reports: ['view', 'create', 'edit']
+    }
+  },
+  {
+    key: 'developer',
+    name: '开发',
+    description: '开发人员处理缺陷并查看质量上下文',
+    permissions: {
+      iterations: ['view'],
+      requirements: ['view'],
+      cases: ['view'],
+      plans: ['view'],
+      bugs: ['view', 'edit'],
+      reports: ['view']
+    }
+  },
+  {
+    key: 'viewer',
+    name: '观察者',
+    description: '只读查看项目质量资产',
+    permissions: {
+      iterations: ['view'],
+      requirements: ['view'],
+      cases: ['view'],
+      plans: ['view'],
+      bugs: ['view'],
+      reports: ['view']
+    }
+  }
+];
+
 export interface ProjectMember {
   userId: Id;
   username: string;
   email: string;
+  projectPermission: ProjectPermission;
+  businessRoleKey: BusinessRoleKey;
   role: ProjectRole;
+}
+
+export interface ProjectJoinRequest {
+  id: Id;
+  projectId: Id;
+  userId: Id;
+  username: string;
+  email: string;
+  status: JoinRequestStatus;
+  createdAt: string;
+  decidedBy?: Id;
+  decidedByName?: string;
+  decidedAt?: string;
+  projectPermission?: ProjectPermission;
+  businessRoleKey?: BusinessRoleKey;
 }
 
 export interface Project {
@@ -178,6 +266,9 @@ export interface Project {
   category?: ProjectCategory;
   ownerId: Id;
   members: ProjectMember[];
+  joinRequestsEnabled?: boolean;
+  joinRequestStatus?: JoinRequestStatus;
+  businessRoles?: BusinessRoleConfig[];
   qualitySettings?: ProjectQualitySettings;
   createdAt?: string;
   updatedAt?: string;

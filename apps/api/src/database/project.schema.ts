@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, SchemaTypes, Types } from 'mongoose';
-import type { ProjectCategory, ProjectQualitySettings, ProjectRole, ProjectStatus } from '@buggy/shared-types';
+import type { BusinessRoleConfig, BusinessRoleKey, ProjectCategory, ProjectPermission, ProjectQualitySettings, ProjectRole, ProjectStatus } from '@buggy/shared-types';
 
 export type ProjectDocument = HydratedDocument<ProjectEntity>;
 
@@ -17,6 +17,12 @@ export class ProjectMemberEntity {
 
   @Prop({ type: String, required: true, default: 'viewer' })
   role!: ProjectRole;
+
+  @Prop({ type: String, required: true, default: 'normal', enum: ['manage', 'maintain', 'normal'] })
+  projectPermission!: ProjectPermission;
+
+  @Prop({ type: String, required: true, default: 'viewer' })
+  businessRoleKey!: BusinessRoleKey;
 }
 
 const ProjectMemberSchema = SchemaFactory.createForClass(ProjectMemberEntity);
@@ -43,6 +49,12 @@ export class ProjectEntity {
 
   @Prop({ type: [ProjectMemberSchema], default: [] })
   members!: ProjectMemberEntity[];
+
+  @Prop({ type: Boolean, required: true, default: false })
+  joinRequestsEnabled!: boolean;
+
+  @Prop({ type: SchemaTypes.Mixed, default: [] })
+  businessRoles!: BusinessRoleConfig[];
 
   @Prop({ type: SchemaTypes.Mixed, default: {} })
   qualitySettings!: ProjectQualitySettings;

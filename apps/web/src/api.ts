@@ -20,6 +20,7 @@ import type {
   UploadAsset,
   UserProfile
 } from '@buggy/shared-types';
+import type { BusinessRoleKey, ProjectJoinRequest, ProjectPermission, SystemPermission, UserStatus } from '@buggy/shared-types';
 
 const API_BASE = import.meta.env.VITE_API_BASE || '/api';
 export type ImportResult = { imported: number; errors: Array<{ row: number; message: string }> };
@@ -79,14 +80,26 @@ export const api = {
   createProject: (body: Partial<Project>) => request<Project>('/projects', { method: 'POST', body: JSON.stringify(body) }),
   updateProject: (id: string, body: Partial<Project>) => request<Project>(`/projects/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteProject: (id: string) => request<{ deleted: true }>(`/projects/${id}`, { method: 'DELETE' }),
-  upsertProjectMember: (projectId: string, body: { userId?: string; email?: string; role: ProjectMember['role'] }) =>
+  upsertProjectMember: (projectId: string, body: { userId?: string; email?: string; role?: ProjectMember['role']; projectPermission?: ProjectPermission; businessRoleKey?: BusinessRoleKey }) =>
     request<Project>(`/projects/${projectId}/members`, { method: 'POST', body: JSON.stringify(body) }),
   removeProjectMember: (projectId: string, userId: string) =>
     request<Project>(`/projects/${projectId}/members/${userId}`, { method: 'DELETE' }),
+  requestProjectJoin: (projectId: string) =>
+    request<ProjectJoinRequest>(`/projects/${projectId}/join-requests`, { method: 'POST' }),
+  projectJoinRequests: (projectId: string) =>
+    request<ProjectJoinRequest[]>(`/projects/${projectId}/join-requests`),
+  approveProjectJoinRequest: (projectId: string, requestId: string, body: { projectPermission: ProjectPermission; businessRoleKey: BusinessRoleKey }) =>
+    request<Project>(`/projects/${projectId}/join-requests/${requestId}/approve`, { method: 'POST', body: JSON.stringify(body) }),
+  rejectProjectJoinRequest: (projectId: string, requestId: string) =>
+    request<ProjectJoinRequest>(`/projects/${projectId}/join-requests/${requestId}/reject`, { method: 'POST' }),
 
   users: (keyword = '') => request<UserProfile[]>(`/users${keyword ? `?keyword=${encodeURIComponent(keyword)}` : ''}`),
-  updateUser: (id: string, body: Partial<Pick<UserProfile, 'role' | 'status'>>) =>
+  createUser: (body: { username: string; email: string; password: string; systemPermission: SystemPermission; status?: UserStatus }) =>
+    request<UserProfile>('/users', { method: 'POST', body: JSON.stringify(body) }),
+  updateUser: (id: string, body: Partial<Pick<UserProfile, 'systemPermission' | 'status'>>) =>
     request<UserProfile>(`/users/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  resetUserPassword: (id: string) =>
+    request<{ user: UserProfile; temporaryPassword: string }>(`/users/${id}/reset-password`, { method: 'POST' }),
 
   iterationPage: (projectId: string, params?: ListParams) => request<PageResult<Iteration>>(`/iterations${queryString({ projectId, ...params })}`),
   iterations: async (projectId: string, params?: ListParams) => itemsOf(await request<PageResult<Iteration> | Iteration[]>(`/iterations${queryString({ projectId, pageSize: 500, ...params })}`)),
