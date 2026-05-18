@@ -19,7 +19,7 @@ API 默认运行在 `http://localhost:3400/api`，Web 默认运行在 `http://lo
 docker compose up --build
 ```
 
-部署后访问 `http://localhost:8090`。MongoDB 数据保存在 `./mongo_data`。
+部署后访问 `http://localhost:28090`。MongoDB 数据保存在 `./mongo_data`。
 
 ## 首次使用
 
