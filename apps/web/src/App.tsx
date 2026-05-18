@@ -40,19 +40,19 @@ import { ReportSection } from './components/workspace/reports.js';
 const LAST_PROJECT_KEY = 'buggy_last_project_id';
 const RECENT_PROJECTS_KEY = 'buggy_recent_project_ids';
 const SAVED_VIEW_TABS: Tab[] = ['requirements', 'cases', 'plans', 'bugs'];
-const TAB_ROUTES: Record<Tab, string> = {
-  overview: '/overview',
-  projects: '/projects',
-  iterations: '/iterations',
-  requirements: '/requirements',
-  cases: '/cases',
-  plans: '/plans',
-  bugs: '/bugs',
-  reports: '/reports',
-  users: '/users',
-  settings: '/settings'
+const TAB_ROUTE_SEGMENTS: Record<Tab, string> = {
+  overview: 'overview',
+  projects: 'projects',
+  iterations: 'iterations',
+  requirements: 'requirements',
+  cases: 'cases',
+  plans: 'plans',
+  bugs: 'bugs',
+  reports: 'reports',
+  users: 'users',
+  settings: 'settings'
 };
-const ROUTE_TABS = Object.fromEntries(Object.entries(TAB_ROUTES).map(([tabKey, route]) => [route.replace(/^\//, ''), tabKey])) as Record<string, Tab>;
+const ROUTE_TABS = Object.fromEntries(Object.entries(TAB_ROUTE_SEGMENTS).map(([tabKey, segment]) => [segment, tabKey])) as Record<string, Tab>;
 type WorkspaceLoadIssue = { key: keyof WorkspaceData; label: string; message: string };
 type WorkspaceRole = UserProfile['role'] | ProjectRole;
 type TabRouteOptions = { replace?: boolean; preserveSearch?: boolean; scroll?: boolean; viewKey?: string | null };
@@ -793,19 +793,17 @@ export function App() {
 }
 
 function tabFromLocation(location: Location): Tab {
-  const segment = location.pathname.replace(/^\/+|\/+$/g, '').split('/')[0];
-  if (!segment) return 'overview';
-  return ROUTE_TABS[segment] || 'overview';
+  return routeFromLocation(location).tab;
 }
 
 function isKnownTabRoute(location: Location) {
-  const segment = location.pathname.replace(/^\/+|\/+$/g, '').split('/')[0];
-  return !segment || Boolean(ROUTE_TABS[segment]);
+  return routeFromLocation(location).routeIndex >= 0 || location.pathname === '/' || currentRouteBase(location) !== '';
 }
 
 function updateBrowserTabRoute(tab: Tab, options?: TabRouteOptions) {
   const url = new URL(window.location.href);
-  url.pathname = TAB_ROUTES[tab];
+  const base = currentRouteBase(window.location);
+  url.pathname = joinRoutePath(base, TAB_ROUTE_SEGMENTS[tab]);
   if (options?.viewKey !== undefined) {
     if (options.viewKey) url.searchParams.set('view', options.viewKey);
     else url.searchParams.delete('view');
@@ -817,6 +815,33 @@ function updateBrowserTabRoute(tab: Tab, options?: TabRouteOptions) {
   if (nextUrl === currentUrl) return;
   const method = options?.replace ? 'replaceState' : 'pushState';
   window.history[method]({ tab }, '', nextUrl);
+}
+
+function routeFromLocation(location: Location) {
+  const segments = location.pathname.split('/').filter(Boolean);
+  const routeIndex = segments.findIndex((segment) => Boolean(ROUTE_TABS[segment]));
+  return {
+    tab: routeIndex >= 0 ? ROUTE_TABS[segments[routeIndex]] : 'overview',
+    routeIndex
+  };
+}
+
+function currentRouteBase(location: Location) {
+  const segments = location.pathname.split('/').filter(Boolean);
+  const routeIndex = segments.findIndex((segment) => Boolean(ROUTE_TABS[segment]));
+  if (routeIndex > 0) return `/${segments.slice(0, routeIndex).join('/')}`;
+  if (routeIndex === -1 && segments.length > 0) return `/${segments.join('/')}`;
+  return normalizedViteBase();
+}
+
+function normalizedViteBase() {
+  const base = import.meta.env.BASE_URL.replace(/\/+$/g, '').replace(/^\/+/g, '');
+  return base ? `/${base}` : '';
+}
+
+function joinRoutePath(base: string, segment: string) {
+  const normalizedBase = base.replace(/\/+$/g, '');
+  return `${normalizedBase}/${segment}`;
 }
 
 async function chooseDefaultProject(rows: Project[], user?: UserProfile) {
