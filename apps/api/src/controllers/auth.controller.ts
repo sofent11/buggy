@@ -1,7 +1,7 @@
-import { Body, Controller, Get, Post, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Patch, Post, Res, UseGuards } from '@nestjs/common';
 import type { FastifyReply } from 'fastify';
 import type { UserProfile } from '@buggy/shared-types';
-import { LoginDto, RegisterDto } from '../dto/auth.dto.js';
+import { ChangePasswordDto, LoginDto, RegisterDto } from '../dto/auth.dto.js';
 import { AuthService } from '../services/auth.service.js';
 import { AuthGuard } from '../shared/auth.guard.js';
 import { CurrentUser } from '../shared/current-user.decorator.js';
@@ -35,5 +35,11 @@ export class AuthController {
   @UseGuards(AuthGuard)
   async me(@CurrentUser() user: SessionUser): Promise<UserProfile | null> {
     return this.auth.getProfile(user.id);
+  }
+
+  @Patch('password')
+  @UseGuards(AuthGuard)
+  async changePassword(@Body() dto: ChangePasswordDto, @CurrentUser() user: SessionUser): Promise<UserProfile> {
+    return this.auth.changePassword(user.id, dto);
   }
 }

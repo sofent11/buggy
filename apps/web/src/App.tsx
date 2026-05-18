@@ -12,6 +12,7 @@ import {
   Flag,
   FolderKanban,
   HelpCircle,
+  KeyRound,
   LogOut,
   RefreshCw,
   Search,
@@ -41,6 +42,11 @@ const RECENT_PROJECTS_KEY = 'buggy_recent_project_ids';
 const SAVED_VIEW_TABS: Tab[] = ['requirements', 'cases', 'plans', 'bugs'];
 type WorkspaceLoadIssue = { key: keyof WorkspaceData; label: string; message: string };
 type WorkspaceRole = UserProfile['role'] | ProjectRole;
+type ChangePasswordFormValues = {
+  currentPassword: string;
+  newPassword: string;
+  confirmPassword: string;
+};
 
 export function App() {
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -61,6 +67,10 @@ export function App() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [savedViewOpen, setSavedViewOpen] = useState(false);
+  const [passwordOpen, setPasswordOpen] = useState(false);
+  const passwordForm = useForm<ChangePasswordFormValues>({
+    defaultValues: { currentPassword: '', newPassword: '', confirmPassword: '' }
+  });
   const [appliedUrlViewKey, setAppliedUrlViewKey] = useState('');
   const [appliedDefaultViewKeys, setAppliedDefaultViewKeys] = useState<string[]>([]);
   const [tabFilters, setTabFilters] = useState<TabFilters>({});
@@ -180,6 +190,33 @@ export function App() {
       localStorage.setItem(LOGGED_OUT_KEY, '1');
     }
   }, []);
+
+  const submitPasswordChange = useCallback(async (values: ChangePasswordFormValues) => {
+    const currentPassword = values.currentPassword;
+    const newPassword = values.newPassword;
+    const confirmPassword = values.confirmPassword;
+    if (newPassword.length < 6) {
+      setNotice('新密码至少需要 6 位');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setNotice('两次输入的新密码不一致');
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const profile = await api.changePassword({ currentPassword, newPassword });
+      setUser(profile);
+      passwordForm.reset();
+      setPasswordOpen(false);
+      setNotice('密码已修改');
+    } catch (error) {
+      setNotice(readableWorkspaceError(error));
+    } finally {
+      setBusy(false);
+    }
+  }, [passwordForm]);
 
   const selectProject = useCallback((projectId: string) => {
     setCurrentProjectId(projectId);
@@ -400,6 +437,15 @@ export function App() {
               onClick={() => setNotificationOpen(true)}
             >
               <Bell size={15} /> {unreadCount || '通知'}
+            </button>
+            <button
+              type="button"
+              className="account-action"
+              title="修改密码"
+              onClick={() => setPasswordOpen(true)}
+            >
+              <KeyRound size={15} />
+              <span>修改密码</span>
             </button>
             <span className="user-pill">{user.username} · {labelOf(workspaceRole)}</span>
           </div>
@@ -653,6 +699,34 @@ export function App() {
           }
         }}
       />
+      <Drawer title="修改密码" subtitle="验证当前密码后更新登录密码" open={passwordOpen} onClose={() => {
+        setPasswordOpen(false);
+        passwordForm.reset();
+      }}>
+        <form className="drawer-form password-form" onSubmit={passwordForm.handleSubmit(submitPasswordChange)}>
+          <Field>
+            <FieldLabel required>当前密码</FieldLabel>
+            <Input type="password" autoComplete="current-password" {...passwordForm.register('currentPassword')} required />
+          </Field>
+          <Field>
+            <FieldLabel required>新密码</FieldLabel>
+            <Input type="password" minLength={6} autoComplete="new-password" {...passwordForm.register('newPassword')} required />
+          </Field>
+          <Field>
+            <FieldLabel required>确认新密码</FieldLabel>
+            <Input type="password" minLength={6} autoComplete="new-password" {...passwordForm.register('confirmPassword')} required />
+          </Field>
+          <div className="form-actions">
+            <Button type="button" onClick={() => {
+              setPasswordOpen(false);
+              passwordForm.reset();
+            }}>取消</Button>
+            <Button type="submit" variant="primary" disabled={busy}>
+              <KeyRound size={15} /> 保存新密码
+            </Button>
+          </div>
+        </form>
+      </Drawer>
       {currentProject && isSavedViewSupported(tab) && (
         <SavedViewDialog
           open={savedViewOpen}

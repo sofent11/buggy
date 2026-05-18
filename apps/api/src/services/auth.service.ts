@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { compare, hash } from 'bcryptjs';
 import { parse, serialize } from 'cookie';
@@ -7,7 +7,7 @@ import { Model } from 'mongoose';
 import type { FastifyRequest } from 'fastify';
 import type { SystemPermission, UserProfile } from '@buggy/shared-types';
 import { UserEntity } from '../database/user.schema.js';
-import type { LoginDto, RegisterDto } from '../dto/auth.dto.js';
+import type { ChangePasswordDto, LoginDto, RegisterDto } from '../dto/auth.dto.js';
 import { idOf } from '../shared/mongo.js';
 
 export interface SessionUser {
@@ -53,6 +53,17 @@ export class AuthService {
     }
     if (user.status !== 'active') throw new UnauthorizedException('账号已禁用');
     return { user: this.toProfile(user, await this.resolveSystemPermission(user)), cookies: this.buildCookies(idOf(user._id)) };
+  }
+
+  async changePassword(userId: string, dto: ChangePasswordDto): Promise<UserProfile> {
+    const user = await this.users.findById(userId);
+    if (!user || user.status !== 'active') throw new UnauthorizedException('请先登录');
+    if (!(await compare(dto.currentPassword, user.passwordHash))) throw new UnauthorizedException('当前密码错误');
+    if (await compare(dto.newPassword, user.passwordHash)) throw new BadRequestException('新密码不能与当前密码相同');
+
+    user.passwordHash = await hash(dto.newPassword, 10);
+    const row = await user.save();
+    return this.toProfile(row, await this.resolveSystemPermission(row));
   }
 
   async getCurrentUser(req: FastifyRequest): Promise<SessionUser | null> {

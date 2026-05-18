@@ -930,6 +930,10 @@ summary {
   gap: 14px;
 }
 
+.password-form {
+  align-content: start;
+}
+
 .segmented {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1176,6 +1180,26 @@ summary {
   border-color: rgba(220, 38, 38, 0.28);
   background: #fff5f5;
   color: var(--danger);
+}
+
+.account-action {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(36, 88, 167, 0.2);
+  border-radius: 999px;
+  background: var(--primary-soft);
+  color: var(--primary-dark);
+  padding: 0 11px;
+  font-size: 13px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.account-action:hover {
+  border-color: rgba(36, 88, 167, 0.36);
+  background: #e9f0fb;
 }
 
 .user-pill {
@@ -1861,7 +1885,8 @@ tr:last-child td {
   }
 
   .refresh-button,
-  .sync-status {
+  .sync-status,
+  .account-action {
     width: 100%;
   }
 
@@ -2661,6 +2686,7 @@ tbody tr:hover {
   .refresh-button,
   .sync-status,
   .notification-chip,
+  .account-action,
   .user-pill {
     width: 100%;
     max-width: none;
@@ -2668,6 +2694,7 @@ tbody tr:hover {
 
   .sync-status,
   .notification-chip,
+  .account-action,
   .user-pill {
     min-height: 38px;
     justify-content: center;
@@ -3891,6 +3918,7 @@ select[multiple] {
 
   .project-combobox,
   .global-search,
+  .account-action,
   .user-pill {
     grid-column: 1 / -1;
   }

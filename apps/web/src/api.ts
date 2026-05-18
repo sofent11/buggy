@@ -74,6 +74,8 @@ export const api = {
   register: (body: { username: string; email: string; password: string }) =>
     request<UserProfile>('/auth/register', { method: 'POST', body: JSON.stringify(body) }),
   logout: () => request<{ loggedOut: boolean }>('/auth/logout', { method: 'POST' }),
+  changePassword: (body: { currentPassword: string; newPassword: string }) =>
+    request<UserProfile>('/auth/password', { method: 'PATCH', body: JSON.stringify(body) }),
 
   projectPage: (params?: ListParams) => request<PageResult<Project>>(`/projects${queryString(params)}`),
   projects: async (params?: ListParams) => itemsOf(await request<PageResult<Project> | Project[]>(`/projects${queryString({ pageSize: 500, ...params })}`)),
