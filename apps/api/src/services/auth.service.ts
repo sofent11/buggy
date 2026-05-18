@@ -43,7 +43,7 @@ export class AuthService {
       systemPermission,
       status: 'active'
     });
-    return { user: this.toProfile(user), cookies: this.buildCookies(idOf(user._id)) };
+    return { user: this.toProfile(user, await this.resolveSystemPermission(user)), cookies: this.buildCookies(idOf(user._id)) };
   }
 
   async login(dto: LoginDto): Promise<{ user: UserProfile; cookies: string[] }> {
@@ -52,7 +52,7 @@ export class AuthService {
       throw new UnauthorizedException('邮箱或密码错误');
     }
     if (user.status !== 'active') throw new UnauthorizedException('账号已禁用');
-    return { user: this.toProfile(user), cookies: this.buildCookies(idOf(user._id)) };
+    return { user: this.toProfile(user, await this.resolveSystemPermission(user)), cookies: this.buildCookies(idOf(user._id)) };
   }
 
   async getCurrentUser(req: FastifyRequest): Promise<SessionUser | null> {
@@ -63,12 +63,13 @@ export class AuthService {
       const payload = jwt.verify(token, this.secret) as JwtPayload;
       const user = await this.users.findById(payload.sub);
       if (!user || user.status !== 'active') return null;
+      const systemPermission = await this.resolveSystemPermission(user);
       return {
         id: idOf(user._id),
         username: user.username,
         email: user.email,
-        systemPermission: this.normalizeSystemPermission(user),
-        role: this.normalizeSystemPermission(user)
+        systemPermission,
+        role: systemPermission
       };
     } catch {
       return null;
@@ -77,7 +78,7 @@ export class AuthService {
 
   async getProfile(userId: string): Promise<UserProfile | null> {
     const user = await this.users.findById(userId);
-    return user ? this.toProfile(user) : null;
+    return user ? this.toProfile(user, await this.resolveSystemPermission(user)) : null;
   }
 
   logoutCookies(): string[] {
@@ -116,8 +117,8 @@ export class AuthService {
     return process.env.SESSION_SECRET || 'buggy-local-session-secret';
   }
 
-  toProfile(user: UserEntity & { _id: unknown; createdAt?: Date; updatedAt?: Date }): UserProfile {
-    const systemPermission = this.normalizeSystemPermission(user);
+  toProfile(user: UserEntity & { _id: unknown; createdAt?: Date; updatedAt?: Date }, permission?: SystemPermission): UserProfile {
+    const systemPermission = permission || this.normalizeSystemPermission(user);
     return {
       id: idOf(user._id),
       username: user.username,
@@ -130,8 +131,20 @@ export class AuthService {
     };
   }
 
+  private async resolveSystemPermission(user: UserEntity & { _id: unknown }): Promise<SystemPermission> {
+    const permission = this.normalizeSystemPermission(user);
+    if (permission === 'admin' || permission === 'maintainer') return permission;
+    const hasAdmin = await this.users.exists({ status: 'active', $or: [{ systemPermission: 'admin' }, { role: 'admin' }] });
+    if (hasAdmin) return permission;
+    const firstActiveUser = await this.users.findOne({ status: 'active' }).sort({ createdAt: 1, _id: 1 }).select('_id');
+    if (!firstActiveUser || idOf(firstActiveUser._id) !== idOf(user._id)) return permission;
+    await this.users.findByIdAndUpdate(user._id, { $set: { role: 'admin', systemPermission: 'admin' } });
+    return 'admin';
+  }
+
   private normalizeSystemPermission(user: Pick<UserEntity, 'role' | 'systemPermission'>): SystemPermission {
+    if (user.role === 'admin') return 'admin';
     if (user.systemPermission === 'admin' || user.systemPermission === 'maintainer' || user.systemPermission === 'user') return user.systemPermission;
-    return user.role === 'admin' ? 'admin' : 'user';
+    return 'user';
   }
 }

@@ -110,8 +110,9 @@ export class UserService {
   }
 
   private permissionOf(input: SessionUser | UserEntity): SystemPermission {
+    if (input.role === 'admin') return 'admin';
     if ('systemPermission' in input && (input.systemPermission === 'admin' || input.systemPermission === 'maintainer' || input.systemPermission === 'user')) return input.systemPermission;
-    return input.role === 'admin' ? 'admin' : 'user';
+    return 'user';
   }
 
   private requestedSystemPermission(input?: string): SystemPermission {
