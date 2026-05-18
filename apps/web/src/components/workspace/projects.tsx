@@ -13,6 +13,7 @@ import { DataPage, DataTable, DangerButton, Drawer, EmptyState, HookForm, Metric
 
 const RECENT_PROJECTS_KEY = 'buggy_recent_project_ids';
 type ProjectScope = 'active' | 'mine' | 'recent' | 'sample' | 'archived' | 'all';
+type MemberManagerTab = 'members' | 'requests' | 'permissions';
 
 export function ProjectSection(props: {
   user: UserProfile;
@@ -278,6 +279,7 @@ export function MemberManager(props: {
   mutate: (action: () => Promise<unknown>, message: string, options?: { reloadProjects?: boolean }) => Promise<void>;
 }) {
   const owner = props.project.members.find((member) => member.projectPermission === 'manage' || member.role === 'owner');
+  const [activeTab, setActiveTab] = useState<MemberManagerTab>('members');
   const [requests, setRequests] = useState<ProjectJoinRequest[]>([]);
   const [requestDecisions, setRequestDecisions] = useState<Record<string, { projectPermission: ProjectPermission; businessRoleKey: BusinessRoleKey }>>({});
   useEffect(() => {
@@ -310,123 +312,138 @@ export function MemberManager(props: {
           <small>含负责人</small>
         </div>
       </section>
-      <div className="sub-title"><Users size={16} /> 添加或调整成员</div>
-      <form
-        className="member-toolbar"
-        onSubmit={(event) => {
-          event.preventDefault();
-          const form = new FormData(event.currentTarget);
-          props.mutate(
-            () => api.upsertProjectMember(props.project.id, {
-              email: text(form, 'email'),
-              projectPermission: text(form, 'projectPermission') as ProjectPermission,
-              businessRoleKey: text(form, 'businessRoleKey') as BusinessRoleKey
-            }),
-            '成员已保存',
-            { reloadProjects: true }
-          );
-          event.currentTarget.reset();
-        }}
-      >
-        <Field>
-          <FieldLabel>用户邮箱</FieldLabel>
-          <Input name="email" placeholder="user@example.com" list="user-emails" required />
-        </Field>
-        <Field>
-          <FieldLabel>项目角色</FieldLabel>
-          <select name="projectPermission" defaultValue="normal">
-            {projectPermissions.map((permission) => <option key={permission} value={permission}>{labelOf(permission)}</option>)}
-          </select>
-        </Field>
-        <Field>
-          <FieldLabel>业务角色</FieldLabel>
-          <select name="businessRoleKey" defaultValue="viewer">
-            {businessRoles.map((role) => <option key={role.key} value={role.key}>{role.name}</option>)}
-          </select>
-        </Field>
-        <Button><Plus size={15} /> 添加</Button>
-      </form>
-      <datalist id="user-emails">
-        {props.users.map((user) => <option key={user.id} value={user.email}>{user.username}</option>)}
-      </datalist>
-      <DataTable
-        headers={['成员', '邮箱', '项目权限', '业务角色', '操作']}
-        rows={props.project.members.map((member) => [
-          member.username,
-          member.email,
-          <select
-            value={member.projectPermission || (member.role === 'owner' ? 'manage' : member.role === 'tester' || member.role === 'developer' ? 'maintain' : 'normal')}
-            aria-label={`${member.username} 项目权限`}
-            onChange={(event) =>
+      <div className="drawer-tabs member-manager-tabs" role="tablist" aria-label="项目成员管理视图">
+        <button type="button" className={activeTab === 'members' ? 'active' : ''} onClick={() => setActiveTab('members')}>成员管理</button>
+        <button type="button" className={activeTab === 'requests' ? 'active' : ''} onClick={() => setActiveTab('requests')}>加入申请{requests.length > 0 ? ` · ${requests.length}` : ''}</button>
+        <button type="button" className={activeTab === 'permissions' ? 'active' : ''} onClick={() => setActiveTab('permissions')}>权限管理</button>
+      </div>
+      {activeTab === 'members' && (
+        <section className="member-manager-pane" role="tabpanel" aria-label="成员管理">
+          <div className="sub-title"><Users size={16} /> 添加或调整成员</div>
+          <form
+            className="member-toolbar"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const form = new FormData(event.currentTarget);
               props.mutate(
-                () => api.upsertProjectMember(props.project.id, { userId: member.userId, projectPermission: event.target.value as ProjectPermission, businessRoleKey: member.businessRoleKey || businessRoleOf(member.role) }),
-                '成员项目权限已更新',
+                () => api.upsertProjectMember(props.project.id, {
+                  email: text(form, 'email'),
+                  projectPermission: text(form, 'projectPermission') as ProjectPermission,
+                  businessRoleKey: text(form, 'businessRoleKey') as BusinessRoleKey
+                }),
+                '成员已保存',
                 { reloadProjects: true }
-              )
-            }
+              );
+              event.currentTarget.reset();
+            }}
           >
-            {projectPermissions.map((permission) => <option key={permission} value={permission}>{labelOf(permission)}</option>)}
-          </select>,
-          <select
-            value={member.businessRoleKey || businessRoleOf(member.role)}
-            aria-label={`${member.username} 业务角色`}
-            onChange={(event) =>
-              props.mutate(
-                () => api.upsertProjectMember(props.project.id, { userId: member.userId, projectPermission: member.projectPermission || permissionOf(member.role), businessRoleKey: event.target.value as BusinessRoleKey }),
-                '成员业务角色已更新',
-                { reloadProjects: true }
-              )
-            }
-          >
-            {businessRoles.map((role) => <option key={role.key} value={role.key}>{role.name}</option>)}
-          </select>,
-          member.userId === props.project.ownerId ? '负责人' : (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => props.mutate(() => api.removeProjectMember(props.project.id, member.userId), '成员已移除', { reloadProjects: true })}
-            >
-              <Trash2 size={14} /> 移除
-            </Button>
-          )
-        ])}
-      />
-      {requests.length > 0 && (
-        <>
-          <div className="sub-title"><Users size={16} /> 待审批申请</div>
+            <Field>
+              <FieldLabel>用户邮箱</FieldLabel>
+              <Input name="email" placeholder="user@example.com" list="user-emails" required />
+            </Field>
+            <Field>
+              <FieldLabel>项目权限</FieldLabel>
+              <select name="projectPermission" defaultValue="normal">
+                {projectPermissions.map((permission) => <option key={permission} value={permission}>{labelOf(permission)}</option>)}
+              </select>
+            </Field>
+            <Field>
+              <FieldLabel>业务角色</FieldLabel>
+              <select name="businessRoleKey" defaultValue="viewer">
+                {businessRoles.map((role) => <option key={role.key} value={role.key}>{role.name}</option>)}
+              </select>
+            </Field>
+            <Button><Plus size={15} /> 添加</Button>
+          </form>
+          <datalist id="user-emails">
+            {props.users.map((user) => <option key={user.id} value={user.email}>{user.username}</option>)}
+          </datalist>
           <DataTable
-            headers={['用户', '邮箱', '申请时间', '项目权限', '业务角色', '审批']}
-            rows={requests.map((request) => {
-              const decision = decisionOf(request.id);
-              return [
-                request.username,
-                request.email,
-                new Date(request.createdAt).toLocaleString('zh-CN'),
-                <select
-                  value={decision.projectPermission}
-                  aria-label={`${request.username} 审批项目权限`}
-                  onChange={(event) => updateDecision(request.id, { projectPermission: event.target.value as ProjectPermission })}
+            headers={['成员', '邮箱', '项目权限', '业务角色', '操作']}
+            rows={props.project.members.map((member) => [
+              member.username,
+              member.email,
+              <select
+                value={member.projectPermission || (member.role === 'owner' ? 'manage' : member.role === 'tester' || member.role === 'developer' ? 'maintain' : 'normal')}
+                aria-label={`${member.username} 项目权限`}
+                onChange={(event) =>
+                  props.mutate(
+                    () => api.upsertProjectMember(props.project.id, { userId: member.userId, projectPermission: event.target.value as ProjectPermission, businessRoleKey: member.businessRoleKey || businessRoleOf(member.role) }),
+                    '成员项目权限已更新',
+                    { reloadProjects: true }
+                  )
+                }
+              >
+                {projectPermissions.map((permission) => <option key={permission} value={permission}>{labelOf(permission)}</option>)}
+              </select>,
+              <select
+                value={member.businessRoleKey || businessRoleOf(member.role)}
+                aria-label={`${member.username} 业务角色`}
+                onChange={(event) =>
+                  props.mutate(
+                    () => api.upsertProjectMember(props.project.id, { userId: member.userId, projectPermission: member.projectPermission || permissionOf(member.role), businessRoleKey: event.target.value as BusinessRoleKey }),
+                    '成员业务角色已更新',
+                    { reloadProjects: true }
+                  )
+                }
+              >
+                {businessRoles.map((role) => <option key={role.key} value={role.key}>{role.name}</option>)}
+              </select>,
+              member.userId === props.project.ownerId ? '负责人' : (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => props.mutate(() => api.removeProjectMember(props.project.id, member.userId), '成员已移除', { reloadProjects: true })}
                 >
-                  {projectPermissions.map((permission) => <option key={permission} value={permission}>{labelOf(permission)}</option>)}
-                </select>,
-                <select
-                  value={decision.businessRoleKey}
-                  aria-label={`${request.username} 审批业务角色`}
-                  onChange={(event) => updateDecision(request.id, { businessRoleKey: event.target.value as BusinessRoleKey })}
-                >
-                  {businessRoles.map((role) => <option key={role.key} value={role.key}>{role.name}</option>)}
-                </select>,
-                <div className="row-actions">
-                  <Button type="button" size="sm" onClick={() => props.mutate(() => api.approveProjectJoinRequest(props.project.id, request.id, decision), '申请已通过', { reloadProjects: true })}>通过</Button>
-                  <Button type="button" size="sm" variant="destructive" onClick={() => props.mutate(() => api.rejectProjectJoinRequest(props.project.id, request.id), '申请已驳回', { reloadProjects: true })}>驳回</Button>
-                </div>
-              ];
-            })}
+                  <Trash2 size={14} /> 移除
+                </Button>
+              )
+            ])}
           />
-        </>
+        </section>
       )}
-      <BusinessRoleEditor project={props.project} mutate={props.mutate} />
+      {activeTab === 'requests' && (
+        <section className="member-manager-pane" role="tabpanel" aria-label="加入申请">
+          <div className="sub-title"><Users size={16} /> 待审批申请</div>
+          {requests.length === 0 ? (
+            <EmptyState text="暂无待审批申请" detail="开启项目申请加入后，普通用户提交的申请会出现在这里。" />
+          ) : (
+            <DataTable
+              headers={['用户', '邮箱', '申请时间', '项目权限', '业务角色', '审批']}
+              rows={requests.map((request) => {
+                const decision = decisionOf(request.id);
+                return [
+                  request.username,
+                  request.email,
+                  new Date(request.createdAt).toLocaleString('zh-CN'),
+                  <select
+                    value={decision.projectPermission}
+                    aria-label={`${request.username} 审批项目权限`}
+                    onChange={(event) => updateDecision(request.id, { projectPermission: event.target.value as ProjectPermission })}
+                  >
+                    {projectPermissions.map((permission) => <option key={permission} value={permission}>{labelOf(permission)}</option>)}
+                  </select>,
+                  <select
+                    value={decision.businessRoleKey}
+                    aria-label={`${request.username} 审批业务角色`}
+                    onChange={(event) => updateDecision(request.id, { businessRoleKey: event.target.value as BusinessRoleKey })}
+                  >
+                    {businessRoles.map((role) => <option key={role.key} value={role.key}>{role.name}</option>)}
+                  </select>,
+                  <div className="row-actions">
+                    <Button type="button" size="sm" onClick={() => props.mutate(() => api.approveProjectJoinRequest(props.project.id, request.id, decision), '申请已通过', { reloadProjects: true })}>通过</Button>
+                    <Button type="button" size="sm" variant="destructive" onClick={() => props.mutate(() => api.rejectProjectJoinRequest(props.project.id, request.id), '申请已驳回', { reloadProjects: true })}>驳回</Button>
+                  </div>
+                ];
+              })}
+            />
+          )}
+        </section>
+      )}
+      {activeTab === 'permissions' && (
+        <BusinessRoleEditor project={props.project} mutate={props.mutate} />
+      )}
     </div>
   );
 }
@@ -466,26 +483,28 @@ function BusinessRoleEditor(props: { project: Project; mutate: (action: () => Pr
   return (
     <section className="business-role-editor">
       <div className="sub-title"><Users size={16} /> 业务角色权限矩阵</div>
-      <DataTable
-        headers={['业务角色', ...permissionModules.map((module) => module.label)]}
-        rows={roles.map((role) => [
-          <div className="cell-main"><strong>{role.name}</strong><span>{role.description || role.key}</span></div>,
-          ...permissionModules.map((module) => (
-            <div key={`${role.key}-${module.key}`} className="permission-chip-grid">
-              {module.actions.map((action) => (
-                <label key={action} className="check-row compact-check-row">
-                  <input
-                    type="checkbox"
-                    checked={(role.permissions?.[module.key] || []).includes(action)}
-                    onChange={(event) => toggle(role.key, module.key, action, event.target.checked)}
-                  />
-                  <span>{actionLabels[action]}</span>
-                </label>
-              ))}
-            </div>
-          ))
-        ])}
-      />
+      <div className="permission-matrix-table">
+        <DataTable
+          headers={['业务角色', ...permissionModules.map((module) => module.label)]}
+          rows={roles.map((role) => [
+            <div className="cell-main"><strong>{role.name}</strong><span>{role.description || role.key}</span></div>,
+            ...permissionModules.map((module) => (
+              <div key={`${role.key}-${module.key}`} className="permission-chip-grid">
+                {module.actions.map((action) => (
+                  <label key={action} className="check-row compact-check-row">
+                    <input
+                      type="checkbox"
+                      checked={(role.permissions?.[module.key] || []).includes(action)}
+                      onChange={(event) => toggle(role.key, module.key, action, event.target.checked)}
+                    />
+                    <span>{actionLabels[action]}</span>
+                  </label>
+                ))}
+              </div>
+            ))
+          ])}
+        />
+      </div>
       <div className="form-actions">
         <Button type="button" variant="primary" onClick={() => props.mutate(() => api.updateProject(props.project.id, { businessRoles: roles }), '业务角色权限已保存', { reloadProjects: true })}>
           <Save size={15} /> 保存角色权限

@@ -2204,6 +2204,19 @@ tr:last-child td {
   gap: 14px;
 }
 
+.member-manager-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: rgba(246, 248, 251, 0.96);
+  padding-top: 2px;
+}
+
+.member-manager-pane {
+  display: grid;
+  gap: 14px;
+}
+
 .member-context {
   display: grid;
   grid-template-columns: 1.4fr 1.2fr 0.7fr;
@@ -2222,7 +2235,7 @@ tr:last-child td {
 
 .member-toolbar {
   display: grid;
-  grid-template-columns: minmax(240px, 1fr) minmax(150px, 0.45fr) auto;
+  grid-template-columns: minmax(240px, 1fr) minmax(150px, 0.35fr) minmax(150px, 0.35fr) auto;
   gap: 10px;
   align-items: end;
   border: 1px solid var(--line);
@@ -3146,6 +3159,41 @@ tbody tr:hover {
 .business-role-editor {
   display: grid;
   gap: 12px;
+  min-height: 0;
+}
+
+.permission-matrix-table .table-wrap {
+  max-height: min(68vh, 720px);
+}
+
+.permission-matrix-table table {
+  min-width: 1160px;
+}
+
+.permission-matrix-table thead {
+  z-index: 4;
+}
+
+.permission-matrix-table th {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+}
+
+.permission-matrix-table th:first-child,
+.permission-matrix-table td:first-child {
+  position: sticky;
+  left: 0;
+  min-width: 168px;
+  max-width: 220px;
+  background: white;
+  z-index: 3;
+  box-shadow: 1px 0 0 var(--line);
+}
+
+.permission-matrix-table th:first-child {
+  background: #f1eee7;
+  z-index: 5;
 }
 
 .permission-chip-grid {
