@@ -453,7 +453,7 @@ function BusinessRoleEditor(props: { project: Project; mutate: (action: () => Pr
   const [roles, setRoles] = useState<BusinessRoleConfig[]>(() => normalizedBusinessRoles(props.project.businessRoles));
   useEffect(() => {
     setRoles(normalizedBusinessRoles(props.project.businessRoles));
-  }, [props.project.businessRoles]);
+  }, [props.project.id]);
   const toggle = (roleKey: string, module: PermissionModule, action: PermissionAction, checked: boolean) => {
     setRoles((current) => current.map((role) => {
       if (role.key !== roleKey) return role;
@@ -471,7 +471,7 @@ function BusinessRoleEditor(props: { project: Project; mutate: (action: () => Pr
         rows={roles.map((role) => [
           <div className="cell-main"><strong>{role.name}</strong><span>{role.description || role.key}</span></div>,
           ...permissionModules.map((module) => (
-            <div className="permission-chip-grid">
+            <div key={`${role.key}-${module.key}`} className="permission-chip-grid">
               {module.actions.map((action) => (
                 <label key={action} className="check-row compact-check-row">
                   <input
