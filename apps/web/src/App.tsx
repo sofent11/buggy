@@ -44,7 +44,7 @@ export function App() {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('register');
   const authForm = useForm<AuthFormValues>({
-    defaultValues: { username: 'admin', email: 'admin@example.com', password: '123456' }
+    defaultValues: { username: '', email: '', password: '' }
   });
   const [projects, setProjects] = useState<Project[]>([]);
   const [currentProjectId, setCurrentProjectId] = useState('');
