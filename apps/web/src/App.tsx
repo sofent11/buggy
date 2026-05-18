@@ -20,7 +20,7 @@ import {
   ShieldCheck,
   Users,
 } from 'lucide-react';
-import type { BusinessRoleConfig, Notification, Project, ProjectRole, SavedView, SavedViewFilters, UserProfile } from '@buggy/shared-types';
+import type { BusinessRoleConfig, Notification, PermissionAction, PermissionModule, Project, ProjectRole, SavedView, SavedViewFilters, UserProfile } from '@buggy/shared-types';
 import { api } from './api.js';
 import { Button } from './components/ui/button.js';
 import { Field, FieldLabel } from './components/ui/form.js';
@@ -322,8 +322,15 @@ export function App() {
     : currentMember?.businessRoleKey || (projectRole === 'owner' ? 'manager' : projectRole || 'viewer');
   const businessRole = currentProject?.businessRoles?.find((role) => role.key === businessRoleKey);
   const canManageProject = systemPermission === 'admin' || projectPermission === 'manage' || currentProject?.ownerId === user?.id;
+  const canUseModuleAction = (module: PermissionModule, action: PermissionAction) =>
+    canManageProject ||
+    (projectPermission === 'maintain' && action !== 'delete' && action !== 'signoff') ||
+    hasBusinessPermission(businessRole, module, action);
   const canWriteProject = canManageProject || projectPermission === 'maintain' || hasBusinessPermission(businessRole, 'requirements', 'edit');
-  const canExecute = canManageProject || projectPermission === 'maintain' || hasBusinessPermission(businessRole, 'plans', 'execute');
+  const canExecute = canUseModuleAction('plans', 'execute');
+  const canCreateBug = canUseModuleAction('bugs', 'create');
+  const canEditBug = canUseModuleAction('bugs', 'edit');
+  const canDeleteBug = canUseModuleAction('bugs', 'delete');
   const unreadCount = data.notifications.filter((item) => item.status === 'unread').length;
   const openEntity = useCallback((entityType: string, entityId?: string) => {
     const nextTab = tabOfEntity(entityType);
@@ -634,8 +641,9 @@ export function App() {
                 projectMembers={currentProject.members}
                 rows={data.bugs}
                 globalKeyword={deferredGlobalKeyword}
-                canWrite={canWriteProject}
-                canManage={canManageProject}
+                canCreate={canCreateBug}
+                canWrite={canEditBug}
+                canManage={canDeleteBug}
                 mutate={mutate}
                 onOpenEntity={openEntity}
               />
@@ -1023,6 +1031,6 @@ function tabOfEntity(entityType: string): Tab | undefined {
   return undefined;
 }
 
-function hasBusinessPermission(role: BusinessRoleConfig | undefined, module: keyof BusinessRoleConfig['permissions'], action: string) {
-  return Boolean(role?.permissions?.[module]?.includes(action as never));
+function hasBusinessPermission(role: BusinessRoleConfig | undefined, module: PermissionModule, action: PermissionAction) {
+  return Boolean(role?.permissions?.[module]?.includes(action));
 }

@@ -40,6 +40,7 @@ export function BugSection(props: {
   projectMembers?: ProjectMember[];
   rows: Bug[];
   globalKeyword?: string;
+  canCreate?: boolean;
   canWrite?: boolean;
   canManage?: boolean;
   mutate: (action: () => Promise<unknown>, message: string) => Promise<void>;
@@ -181,7 +182,7 @@ export function BugSection(props: {
         </select>
         <ColumnChooser columns={bugColumns} visible={visibleColumns} onChange={setVisibleColumns} />
         <span className="toolbar-summary">{loadingPage ? '加载中...' : `${pageResult.total} 个缺陷`}</span>
-        {props.canWrite && <button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建缺陷</button>}
+        {props.canCreate && <button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建缺陷</button>}
       </Toolbar>
       <FilterChips filters={[
         { label: '本页搜索', value: keyword, onClear: () => setKeyword('') },
@@ -231,10 +232,10 @@ export function BugSection(props: {
         <EmptyState
           text="暂无缺陷"
           detail="执行失败或线上问题都可以在这里沉淀，并关联到需求、用例和测试计划。"
-          action={props.canWrite ? <button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建缺陷</button> : undefined}
+          action={props.canCreate ? <button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建缺陷</button> : undefined}
         />
       )}
-      <BugDrawer title="新建缺陷" open={creating} requirements={props.requirements} cases={props.cases} plans={props.plans} bugs={props.rows} users={memberUsers} canWrite={props.canWrite} onClose={() => setCreating(false)} onSubmit={async (form) => {
+      <BugDrawer title="新建缺陷" open={creating} requirements={props.requirements} cases={props.cases} plans={props.plans} bugs={props.rows} users={memberUsers} canWrite={props.canCreate} onClose={() => setCreating(false)} onSubmit={async (form) => {
         await props.mutate(() => api.createBug(bugPayload(form, props.projectId)), '缺陷已创建');
         setCreating(false);
       }} />
