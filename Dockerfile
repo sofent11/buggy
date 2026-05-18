@@ -12,7 +12,9 @@ RUN --mount=type=cache,target=/root/.npm npm install
 
 FROM deps AS builder
 ARG VITE_API_BASE=/api
+ARG VITE_BASE=/
 ENV VITE_API_BASE=$VITE_API_BASE
+ENV VITE_BASE=$VITE_BASE
 COPY tsconfig.base.json ./
 COPY packages ./packages
 COPY apps ./apps

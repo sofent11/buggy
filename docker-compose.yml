@@ -15,6 +15,7 @@ services:
       target: api
       args:
         VITE_API_BASE: ${VITE_API_BASE:-/api}
+        VITE_BASE: ${VITE_BASE:-/}
     restart: always
     ports:
       - "3400:3400"
@@ -33,6 +34,7 @@ services:
       target: web
       args:
         VITE_API_BASE: ${VITE_API_BASE:-/api}
+        VITE_BASE: ${VITE_BASE:-/}
     restart: always
     ports:
       - "28090:80"
