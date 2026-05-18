@@ -40,8 +40,22 @@ import { ReportSection } from './components/workspace/reports.js';
 const LAST_PROJECT_KEY = 'buggy_last_project_id';
 const RECENT_PROJECTS_KEY = 'buggy_recent_project_ids';
 const SAVED_VIEW_TABS: Tab[] = ['requirements', 'cases', 'plans', 'bugs'];
+const TAB_ROUTES: Record<Tab, string> = {
+  overview: '/overview',
+  projects: '/projects',
+  iterations: '/iterations',
+  requirements: '/requirements',
+  cases: '/cases',
+  plans: '/plans',
+  bugs: '/bugs',
+  reports: '/reports',
+  users: '/users',
+  settings: '/settings'
+};
+const ROUTE_TABS = Object.fromEntries(Object.entries(TAB_ROUTES).map(([tabKey, route]) => [route.replace(/^\//, ''), tabKey])) as Record<string, Tab>;
 type WorkspaceLoadIssue = { key: keyof WorkspaceData; label: string; message: string };
 type WorkspaceRole = UserProfile['role'] | ProjectRole;
+type TabRouteOptions = { replace?: boolean; preserveSearch?: boolean; scroll?: boolean; viewKey?: string | null };
 type ChangePasswordFormValues = {
   currentPassword: string;
   newPassword: string;
@@ -57,7 +71,7 @@ export function App() {
   });
   const [projects, setProjects] = useState<Project[]>([]);
   const [currentProjectId, setCurrentProjectId] = useState('');
-  const [tab, setTab] = useState<Tab>('overview');
+  const [tab, setTab] = useState<Tab>(() => tabFromLocation(window.location));
   const [globalKeyword, setGlobalKeyword] = useState('');
   const [data, setData] = useState<WorkspaceData>(emptyData);
   const [workspaceIssues, setWorkspaceIssues] = useState<WorkspaceLoadIssue[]>([]);
@@ -223,9 +237,24 @@ export function App() {
     if (projectId) localStorage.setItem(LAST_PROJECT_KEY, projectId);
   }, []);
 
-  const changeTab = useCallback((nextTab: Tab) => {
+  const navigateToTab = useCallback((nextTab: Tab, options?: TabRouteOptions) => {
     setTab(nextTab);
-    window.setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 0);
+    updateBrowserTabRoute(nextTab, options);
+    if (options?.scroll !== false) window.setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 0);
+  }, []);
+
+  const changeTab = useCallback((nextTab: Tab) => {
+    navigateToTab(nextTab);
+  }, [navigateToTab]);
+
+  useEffect(() => {
+    if (!isKnownTabRoute(window.location)) updateBrowserTabRoute(tabFromLocation(window.location), { replace: true, preserveSearch: true, scroll: false });
+    const handlePopState = () => {
+      setTab(tabFromLocation(window.location));
+      window.setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 0);
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
   useEffect(() => {
@@ -249,8 +278,8 @@ export function App() {
 
   useEffect(() => {
     const permission = user?.systemPermission || user?.role;
-    if (tab === 'users' && permission !== 'admin' && permission !== 'maintainer') setTab('overview');
-  }, [tab, user?.role, user?.systemPermission]);
+    if (tab === 'users' && permission !== 'admin' && permission !== 'maintainer') navigateToTab('overview', { replace: true });
+  }, [navigateToTab, tab, user?.role, user?.systemPermission]);
 
   useEffect(() => {
     const permission = user?.systemPermission || user?.role;
@@ -273,15 +302,17 @@ export function App() {
     return () => window.removeEventListener('buggy:filters-change', handleFiltersChange);
   }, []);
 
-  const applySavedView = useCallback((view: SavedView) => {
+  const applySavedView = useCallback((view: SavedView, options?: { updateUrl?: boolean; replace?: boolean }) => {
     const filters = view.filters || {};
+    const nextTab = view.tab as Tab;
     if (typeof filters.globalKeyword === 'string') setGlobalKeyword(filters.globalKeyword);
-    setTab(view.tab as Tab);
-    setTabFilters((current) => ({ ...current, [view.tab as Tab]: filters }));
+    if (options?.updateUrl) navigateToTab(nextTab, { replace: options.replace, viewKey: view.id, scroll: false });
+    else setTab(nextTab);
+    setTabFilters((current) => ({ ...current, [nextTab]: filters }));
     window.setTimeout(() => {
       window.dispatchEvent(new CustomEvent('buggy:apply-view', { detail: { tab: view.tab, filters } }));
     }, 0);
-  }, []);
+  }, [navigateToTab]);
 
   useEffect(() => {
     const viewKey = new URL(window.location.href).searchParams.get('view');
@@ -290,7 +321,7 @@ export function App() {
     if (!view) return;
     if (!isSavedViewSupported(view.tab as Tab)) return;
     setAppliedUrlViewKey(viewKey);
-    applySavedView(view);
+    applySavedView(view, { updateUrl: true, replace: true });
   }, [appliedUrlViewKey, applySavedView, currentProject, data.savedViews]);
 
   useEffect(() => {
@@ -471,7 +502,7 @@ export function App() {
                 value=""
                 onChange={(event) => {
                   const view = data.savedViews.find((item) => item.id === event.target.value);
-                  if (view) applySavedView(view);
+                  if (view) applySavedView(view, { updateUrl: true });
                 }}
               >
                 <option value="">常用筛选</option>
@@ -759,6 +790,33 @@ export function App() {
       )}
     </main>
   );
+}
+
+function tabFromLocation(location: Location): Tab {
+  const segment = location.pathname.replace(/^\/+|\/+$/g, '').split('/')[0];
+  if (!segment) return 'overview';
+  return ROUTE_TABS[segment] || 'overview';
+}
+
+function isKnownTabRoute(location: Location) {
+  const segment = location.pathname.replace(/^\/+|\/+$/g, '').split('/')[0];
+  return !segment || Boolean(ROUTE_TABS[segment]);
+}
+
+function updateBrowserTabRoute(tab: Tab, options?: TabRouteOptions) {
+  const url = new URL(window.location.href);
+  url.pathname = TAB_ROUTES[tab];
+  if (options?.viewKey !== undefined) {
+    if (options.viewKey) url.searchParams.set('view', options.viewKey);
+    else url.searchParams.delete('view');
+  } else if (!options?.preserveSearch) {
+    url.searchParams.delete('view');
+  }
+  const nextUrl = `${url.pathname}${url.search}${url.hash}`;
+  const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  if (nextUrl === currentUrl) return;
+  const method = options?.replace ? 'replaceState' : 'pushState';
+  window.history[method]({ tab }, '', nextUrl);
 }
 
 async function chooseDefaultProject(rows: Project[], user?: UserProfile) {
