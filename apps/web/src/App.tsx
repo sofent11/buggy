@@ -248,7 +248,6 @@ export function App() {
   }, [navigateToTab]);
 
   useEffect(() => {
-    if (!isKnownTabRoute(window.location)) updateBrowserTabRoute(tabFromLocation(window.location), { replace: true, preserveSearch: true, scroll: false });
     const handlePopState = () => {
       setTab(tabFromLocation(window.location));
       window.setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 0);
@@ -794,10 +793,6 @@ export function App() {
 
 function tabFromLocation(location: Location): Tab {
   return routeFromLocation(location).tab;
-}
-
-function isKnownTabRoute(location: Location) {
-  return routeFromLocation(location).routeIndex >= 0 || location.pathname === '/' || currentRouteBase(location) !== '';
 }
 
 function updateBrowserTabRoute(tab: Tab, options?: TabRouteOptions) {
