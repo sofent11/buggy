@@ -1,7 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import type { Bug, BugAttachment, BugComment, BugStatusHistory, PageResult, ProjectSlaPolicy, SlaLevel } from '@buggy/shared-types';
+import { AcceptanceScopeEntity } from '../database/acceptance-scope.schema.js';
 import { BugEntity } from '../database/bug.schema.js';
 import { ProjectEntity } from '../database/project.schema.js';
 import { TestPlanEntity } from '../database/test-plan.schema.js';
@@ -18,6 +19,7 @@ import { TestPlanService } from './test-plan.service.js';
 export class BugService {
   constructor(
     @InjectModel(BugEntity.name) private readonly bugs: Model<BugEntity>,
+    @InjectModel(AcceptanceScopeEntity.name) private readonly scopes: Model<AcceptanceScopeEntity>,
     @InjectModel(ProjectEntity.name) private readonly projects: Model<ProjectEntity>,
     @InjectModel(TestPlanEntity.name) private readonly plans: Model<TestPlanEntity>,
     private readonly testPlanService: TestPlanService,
@@ -324,9 +326,31 @@ export class BugService {
     return this.toDto(row);
   }
 
-  async remove(id: string): Promise<{ deleted: true }> {
-    await this.bugs.findByIdAndDelete(id);
+  async remove(id: string, user?: SessionUser): Promise<{ deleted: true }> {
+    const row = await this.bugs.findById(id).select('projectId title');
+    if (!row) throw new NotFoundException('Bug 不存在');
+    const objectId = new Types.ObjectId(id);
+    await Promise.all([
+      this.bugs.findByIdAndDelete(id),
+      this.plans.updateMany({ 'runItems.bugIds': objectId }, { $pull: { 'runItems.$[].bugIds': objectId } }),
+      this.scopes.updateMany({ bugIds: objectId }, { $pull: { bugIds: objectId } })
+    ]);
+    await this.activities.record({
+      projectId: idOf(row.projectId),
+      entityType: 'bug',
+      entityId: id,
+      action: 'deleted',
+      title: `删除 Bug：${row.title}`,
+      actor: user
+    });
     return { deleted: true };
+  }
+
+  async assertReporter(id: string, user: SessionUser): Promise<void> {
+    const row = await this.bugs.findById(id).select('reporterId');
+    if (!row) throw new NotFoundException('Bug 不存在');
+    if (row.reporterId && idOf(row.reporterId) === user.id) return;
+    throw new ForbiddenException('只能删除自己创建的缺陷');
   }
 
   async projectIdOf(id: string): Promise<string> {

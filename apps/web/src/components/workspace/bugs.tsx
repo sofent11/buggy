@@ -37,6 +37,7 @@ export function BugSection(props: {
   cases: TestCase[];
   plans: TestPlan[];
   users: UserProfile[];
+  currentUser: UserProfile;
   projectMembers?: ProjectMember[];
   rows: Bug[];
   globalKeyword?: string;
@@ -217,7 +218,7 @@ export function BugSection(props: {
             actions: <BugRowActions
               row={row}
               canWrite={props.canWrite}
-              canManage={props.canManage}
+              canManage={props.canManage || (row.reporterId === props.currentUser.id && (props.canCreate || props.canWrite))}
               onTransition={(action) => setTransition({ bug: row, status: action.status, label: action.label })}
               onEdit={() => setEditing(row)}
               onDuplicate={() => setDuplicate(row)}

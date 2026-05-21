@@ -289,7 +289,8 @@ export function RowMoreMenu(props: { label: string; trigger: ReactNode; children
       </button>
       {open && createPortal(
         <div ref={menuRef} className="row-more-popover" role="menu" style={{ top: position.top, left: position.left }} onClick={(event) => {
-          if ((event.target as HTMLElement).closest('button')) setOpen(false);
+          const button = (event.target as HTMLElement).closest('button');
+          if (button && !button.hasAttribute('data-keep-menu-open')) setOpen(false);
         }}>
           {props.children}
         </div>,
@@ -420,7 +421,7 @@ export function DangerButton(props: { onConfirm?: () => void; title?: string; de
   const confirm = props.onConfirm || props.onClick;
   return (
     <>
-      <button type="button" className="danger" onClick={() => setOpen(true)}>
+      <button type="button" className="danger" data-keep-menu-open onClick={() => setOpen(true)}>
         <Trash2 size={15} /> {props.children || '删除'}
       </button>
       <ConfirmDialog

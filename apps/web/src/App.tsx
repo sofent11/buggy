@@ -668,6 +668,7 @@ export function App() {
                 cases={data.cases}
                 plans={data.plans}
                 users={data.users}
+                currentUser={user}
                 projectMembers={currentProject.members}
                 rows={data.bugs}
                 globalKeyword={deferredGlobalKeyword}

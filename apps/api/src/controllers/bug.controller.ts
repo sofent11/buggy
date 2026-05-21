@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, ForbiddenException, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { AddBugAttachmentDto, AddBugCommentDto, CreateBugDto, CreateBugFromRunDto, MarkDuplicateBugDto, TransitionBugDto, UpdateBugDto } from '../dto/bug.dto.js';
 import { ListQueryDto } from '../dto/common.dto.js';
@@ -80,7 +80,19 @@ export class BugController {
 
   @Delete(':id')
   async remove(@Param('id') id: string, @CurrentUser() user: SessionUser) {
-    await this.projects.assertModuleAction(await this.bugs.projectIdOf(id), user, 'bugs', 'delete');
-    return this.bugs.remove(id);
+    const projectId = await this.bugs.projectIdOf(id);
+    try {
+      await this.projects.assertModuleAction(projectId, user, 'bugs', 'delete');
+    } catch (error) {
+      if (!(error instanceof ForbiddenException)) throw error;
+      try {
+        await this.projects.assertModuleAction(projectId, user, 'bugs', 'edit');
+      } catch (fallbackError) {
+        if (!(fallbackError instanceof ForbiddenException)) throw fallbackError;
+        await this.projects.assertModuleAction(projectId, user, 'bugs', 'create');
+      }
+      await this.bugs.assertReporter(id, user);
+    }
+    return this.bugs.remove(id, user);
   }
 }
