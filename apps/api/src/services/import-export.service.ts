@@ -9,6 +9,15 @@ import type { SessionUser } from './auth.service.js';
 import { TestPlanService } from './test-plan.service.js';
 
 const testRunStatuses = ['untested', 'passed', 'failed', 'blocked', 'skipped'] as const;
+const priorityValues = ['P0', 'P1', 'P2', 'P3'] as const;
+
+type WorkbookFormat = 'standard' | 'test-case-attachment';
+type ParsedWorkbookRow = { rowNumber: number; data: Record<string, unknown> };
+type ParsedWorkbook = {
+  format: WorkbookFormat;
+  headers: string[];
+  rows: ParsedWorkbookRow[];
+};
 
 @Injectable()
 export class ImportExportService {
@@ -58,6 +67,7 @@ export class ImportExportService {
     const errors: Array<{ row: number; message: string }> = [];
     let imported = 0;
     for (const [index, row] of dto.rows.entries()) {
+      const rowNumber = importedRowNumber(row) || index + 1;
       try {
         if (dto.type === 'requirements') {
           await this.requirements.create({
@@ -79,7 +89,7 @@ export class ImportExportService {
             preconditions: String(row.preconditions || row['前置条件'] || ''),
             steps,
             expectedResult: String(row.expectedResult || row['预期结果'] || ''),
-            priority: (row.priority || row['优先级'] || 'P2') as never,
+            priority: normalizePriority(row.priority || row['优先级'] || 'P2') as never,
             status: (row.status || row['状态'] || 'ready') as never,
             module: String(row.module || row['模块'] || ''),
             suiteId: String(row.suiteId || row['用例集'] || ''),
@@ -133,7 +143,7 @@ export class ImportExportService {
         }
         imported += 1;
       } catch (error) {
-        errors.push({ row: index + 1, message: (error as Error).message });
+        errors.push({ row: rowNumber, message: (error as Error).message });
       }
     }
     return { imported, errors };
@@ -149,19 +159,8 @@ export class ImportExportService {
     await workbook.xlsx.load(buffer as unknown as ArrayBuffer);
     const sheet = workbook.worksheets[0];
     if (!sheet) return { imported: 0, errors: [{ row: 0, message: 'Excel 文件没有工作表' }] };
-    const headerRow = sheet.getRow(1);
-    const headers = headerRow.values as Array<string | undefined>;
-    const rows: Array<Record<string, unknown>> = [];
-    sheet.eachRow((row, rowNumber) => {
-      if (rowNumber === 1) return;
-      const item: Record<string, unknown> = {};
-      row.eachCell((cell, columnNumber) => {
-        const header = headers[columnNumber];
-        if (!header) return;
-        item[String(header)] = cell.text || cell.value;
-      });
-      if (Object.keys(item).length > 0) rows.push(item);
-    });
+    const parsed = this.parseWorkbook(sheet, type);
+    const rows = parsed.rows.map((row) => ({ ...row.data, __rowNumber: row.rowNumber }));
     return this.importRows({ projectId, type, rows }, user);
   }
 
@@ -172,38 +171,30 @@ export class ImportExportService {
     if (!sheet) {
       return { headers: [], mappings: [], totalRows: 0, validRows: 0, duplicateRows: [], errors: [{ row: 0, message: 'Excel 文件没有工作表' }] };
     }
-    const headerRow = sheet.getRow(1);
-    const headers = (headerRow.values as Array<string | undefined>).filter(Boolean).map(String);
+    const parsed = this.parseWorkbook(sheet, type);
+    const headers = parsed.headers;
     const mappings = this.expectedFields(type).map((field) => ({
       ...field,
-      sourceHeader: headers.find((header) => header === field.label || header === field.field)
+      sourceHeader: this.sourceHeaderForField(type, field.field, field.label, headers, parsed.format)
     }));
-    const rows: Array<{ row: number; data: Record<string, string> }> = [];
-    sheet.eachRow((row, rowNumber) => {
-      if (rowNumber === 1) return;
-      const data: Record<string, string> = {};
-      row.eachCell((cell, columnNumber) => {
-        const header = (headerRow.values as Array<string | undefined>)[columnNumber];
-        if (header) data[String(header)] = cell.text || String(cell.value || '');
-      });
-      if (Object.keys(data).length > 0) rows.push({ row: rowNumber, data });
-    });
+    const rows = parsed.rows.map((row) => ({ row: row.rowNumber, data: stringifyRow(row.data) }));
     const errors: ImportPreview['errors'] = [];
     const seen = new Map<string, number>();
     const duplicateRows: ImportPreview['duplicateRows'] = [];
     const validStatuses = type === 'run-results' ? testRunStatuses : undefined;
     for (const row of rows) {
       for (const field of mappings.filter((item) => item.required)) {
-        const value = field.sourceHeader ? row.data[field.sourceHeader] : '';
+        const value = row.data[field.field] || (field.sourceHeader ? row.data[field.sourceHeader] : '');
         if (!value) errors.push({ row: row.row, field: field.field, message: `${field.label}不能为空` });
       }
       const statusHeader = mappings.find((item) => item.field === 'status')?.sourceHeader;
-      const status = statusHeader ? row.data[statusHeader] : '';
+      const status = row.data.status || (statusHeader ? row.data[statusHeader] : '');
       if (validStatuses && status && !validStatuses.includes(status as TestRunStatus)) {
         errors.push({ row: row.row, field: 'status', message: `执行状态无效：${status}` });
       }
       const keyHeader = mappings.find((item) => item.field === 'title' || item.field === 'runItemId')?.sourceHeader;
-      const key = keyHeader ? row.data[keyHeader]?.trim() : '';
+      const keyField = mappings.find((item) => item.field === 'title' || item.field === 'runItemId')?.field;
+      const key = String((keyField ? row.data[keyField] : '') || (keyHeader ? row.data[keyHeader] : '') || '').trim();
       if (key) {
         if (seen.has(key)) duplicateRows.push({ row: row.row, key, message: `与第 ${seen.get(key)} 行重复` });
         else seen.set(key, row.row);
@@ -307,6 +298,120 @@ export class ImportExportService {
       { field: 'actualResult', label: '实际结果' }
     ];
   }
+
+  private parseWorkbook(sheet: ExcelJS.Worksheet, type: ImportRowsDto['type']): ParsedWorkbook {
+    const standardHeaders = this.headersByColumn(sheet.getRow(1), sheet.columnCount);
+    if (this.hasStandardHeader(type, standardHeaders)) return this.parseStandardWorkbook(sheet, standardHeaders);
+    if (type === 'test-cases' && this.isTestCaseAttachment(sheet)) return this.parseTestCaseAttachment(sheet);
+    return this.parseStandardWorkbook(sheet, standardHeaders);
+  }
+
+  private parseStandardWorkbook(sheet: ExcelJS.Worksheet, headersByColumn: Array<string | undefined>): ParsedWorkbook {
+    const rows: ParsedWorkbookRow[] = [];
+    sheet.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) return;
+      const item: Record<string, unknown> = {};
+      row.eachCell((cell, columnNumber) => {
+        const header = headersByColumn[columnNumber];
+        if (!header) return;
+        item[header] = cellText(cell);
+      });
+      if (Object.keys(item).length > 0) rows.push({ rowNumber, data: item });
+    });
+    return {
+      format: 'standard',
+      headers: headersByColumn.filter((header): header is string => Boolean(header)),
+      rows
+    };
+  }
+
+  private parseTestCaseAttachment(sheet: ExcelJS.Worksheet): ParsedWorkbook {
+    const headersByColumn = this.attachmentHeadersByColumn(sheet);
+    const rows: ParsedWorkbookRow[] = [];
+    for (let rowNumber = 4; rowNumber <= sheet.rowCount; rowNumber += 1) {
+      const row = sheet.getRow(rowNumber);
+      const testNo = cellText(row.getCell(1));
+      const module = cellText(row.getCell(2));
+      const step = cellText(row.getCell(3));
+      const expected = cellText(row.getCell(4));
+      const priority = normalizePriority(cellText(row.getCell(8)));
+      const remark = cellText(row.getCell(9));
+      if (!hasAttachmentCaseContent({ testNo, module, step, expected, remark })) continue;
+      const title = testNo || truncateTitle(step) || fallbackAttachmentTitle(module, rowNumber);
+      rows.push({
+        rowNumber,
+        data: {
+          title,
+          标题: title,
+          module,
+          模块: module,
+          step,
+          步骤: step,
+          expected,
+          预期: expected,
+          expectedResult: expected,
+          预期结果: expected,
+          ...(priority ? { priority, 优先级: priority } : {}),
+          测试编号: testNo,
+          所属模块: module,
+          测试步骤: step,
+          备注: remark
+        }
+      });
+    }
+    return {
+      format: 'test-case-attachment',
+      headers: headersByColumn.filter((header): header is string => Boolean(header)),
+      rows
+    };
+  }
+
+  private headersByColumn(row: ExcelJS.Row, columnCount: number): Array<string | undefined> {
+    const headers: Array<string | undefined> = [];
+    for (let columnNumber = 1; columnNumber <= columnCount; columnNumber += 1) {
+      const text = cellText(row.getCell(columnNumber));
+      headers[columnNumber] = text || undefined;
+    }
+    return headers;
+  }
+
+  private attachmentHeadersByColumn(sheet: ExcelJS.Worksheet): Array<string | undefined> {
+    const headers: Array<string | undefined> = [];
+    const row2 = sheet.getRow(2);
+    const row3 = sheet.getRow(3);
+    for (let columnNumber = 1; columnNumber <= sheet.columnCount; columnNumber += 1) {
+      const top = cellText(row2.getCell(columnNumber));
+      const bottom = cellText(row3.getCell(columnNumber));
+      headers[columnNumber] = top && bottom && top !== bottom ? `${top}/${bottom}` : top || bottom || undefined;
+    }
+    return headers;
+  }
+
+  private hasStandardHeader(type: ImportRowsDto['type'], headersByColumn: Array<string | undefined>): boolean {
+    const headers = new Set(headersByColumn.filter((header): header is string => Boolean(header)));
+    return this.expectedFields(type).some((field) => headers.has(field.label) || headers.has(field.field));
+  }
+
+  private isTestCaseAttachment(sheet: ExcelJS.Worksheet): boolean {
+    const headers = new Set(this.attachmentHeadersByColumn(sheet).filter((header): header is string => Boolean(header)));
+    return ['测试编号', '所属模块', '测试步骤', '预期结果', '优先级'].every((header) => headers.has(header));
+  }
+
+  private sourceHeaderForField(type: ImportRowsDto['type'], field: string, label: string, headers: string[], format: WorkbookFormat): string | undefined {
+    if (format === 'test-case-attachment' && type === 'test-cases') {
+      const attachmentMap: Record<string, string> = {
+        title: '测试编号',
+        module: '所属模块',
+        step: '测试步骤',
+        expected: '预期结果',
+        expectedResult: '预期结果',
+        priority: '优先级'
+      };
+      const attachmentHeader = attachmentMap[field];
+      if (attachmentHeader && headers.includes(attachmentHeader)) return attachmentHeader;
+    }
+    return headers.find((header) => header === label || header === field);
+  }
 }
 
 function parseImportedSteps(stepsJson: unknown, fallbackAction: unknown, fallbackExpected: unknown) {
@@ -346,4 +451,35 @@ function parseImportedStepResults(value: unknown) {
   } catch {
     return undefined;
   }
+}
+
+function cellText(cell: ExcelJS.Cell): string {
+  return String(cell.text || cell.value || '').trim();
+}
+
+function stringifyRow(row: Record<string, unknown>): Record<string, string> {
+  return Object.fromEntries(Object.entries(row).map(([key, value]) => [key, String(value || '')]));
+}
+
+function importedRowNumber(row: Record<string, unknown>): number | undefined {
+  const value = row.__rowNumber;
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function normalizePriority(value: unknown): string {
+  const raw = String(value || '').trim();
+  const priority = raw.toUpperCase();
+  return priorityValues.includes(priority as (typeof priorityValues)[number]) ? priority : raw;
+}
+
+function hasAttachmentCaseContent(row: { testNo: string; module: string; step: string; expected: string; remark: string }): boolean {
+  return Boolean(row.testNo || row.module || row.step || row.expected || row.remark);
+}
+
+function truncateTitle(value: string): string {
+  return value.length > 40 ? value.slice(0, 40) : value;
+}
+
+function fallbackAttachmentTitle(module: string, rowNumber: number): string {
+  return module ? `${module} 第 ${rowNumber} 行` : `第 ${rowNumber} 行`;
 }
