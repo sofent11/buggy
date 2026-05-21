@@ -627,6 +627,8 @@ export function App() {
                 canWrite={canWriteProject}
                 canManage={canManageProject}
                 mutate={mutate}
+                mutateWithResult={mutateWithResult}
+                onNotice={setNotice}
               />
             )}
             {tab === 'cases' && currentProject && (
@@ -641,6 +643,8 @@ export function App() {
                 canWrite={canWriteProject}
                 canManage={canManageProject}
                 mutate={mutate}
+                mutateWithResult={mutateWithResult}
+                onNotice={setNotice}
               />
             )}
             {tab === 'plans' && currentProject && (
@@ -676,6 +680,8 @@ export function App() {
                 canWrite={canEditBug}
                 canManage={canDeleteBug}
                 mutate={mutate}
+                mutateWithResult={mutateWithResult}
+                onNotice={setNotice}
                 onOpenEntity={openEntity}
               />
             )}

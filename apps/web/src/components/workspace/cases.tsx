@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ClipboardCheck, Copy, GitBranch, MoreHorizontal, Pencil, Plus, Save } from 'lucide-react';
+import { ClipboardCheck, Copy, GitBranch, MoreHorizontal, Pencil, Plus, Save, Upload } from 'lucide-react';
 import type { Bug, PageResult, Requirement, TestCase, TestPlan, UserProfile } from '@buggy/shared-types';
 import type { UseFormRegister } from 'react-hook-form';
 import { api } from '../../api.js';
@@ -11,6 +11,7 @@ import { automationStatuses, caseReviewStatuses, caseStatuses, priorities } from
 import type { StringFormValues } from '../../app/types.js';
 import { matchKeyword, requirementTitle, shortDate, testCasePayload, userName } from '../../app/workspace-utils.js';
 import { ColumnChooser, DataPage, DataTable, DangerButton, Drawer, EmptyState, FilterChips, HookForm, MetricCard, Pagination, registerField, SearchBox, Select, StatusBadge, StepEditor, TextConfirmDialog, Toolbar, RowMoreMenu } from './common.js';
+import { ExcelImportDrawer } from './excelImport.js';
 
 const caseColumns = [
   { key: 'case', label: '用例', locked: true, sortKey: 'title' },
@@ -43,6 +44,8 @@ export function CaseSection(props: {
   canWrite?: boolean;
   canManage?: boolean;
   mutate: (action: () => Promise<unknown>, message: string) => Promise<void>;
+  mutateWithResult: <T>(action: () => Promise<T>, resolveMessage: (result: T) => string) => Promise<void>;
+  onNotice: (message: string) => void;
 }) {
   const [keyword, setKeyword] = useState('');
   const [requirementId, setRequirementId] = useState('');
@@ -62,6 +65,7 @@ export function CaseSection(props: {
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<TestCase | null>(null);
   const [selectedCaseIds, setSelectedCaseIds] = useState<string[]>([]);
+  const [importOpen, setImportOpen] = useState(false);
   const [bulkReviewStatus, setBulkReviewStatus] = useState<TestCase['reviewStatus']>('in_review');
   const [bulkAutomationStatus, setBulkAutomationStatus] = useState<TestCase['automationStatus']>('manual');
   const [caseStatusChange, setCaseStatusChange] = useState<{ row: TestCase; status: TestCase['status'] } | null>(null);
@@ -243,6 +247,7 @@ export function CaseSection(props: {
             </select>
             <ColumnChooser columns={caseColumns} visible={visibleColumns} onChange={setVisibleColumns} />
             <span className="toolbar-summary">{loadingPage ? '加载中...' : `${rows.length}/${pageResult.total} 条用例`}</span>
+            {props.canWrite && <Button type="button" onClick={() => setImportOpen(true)}><Upload size={15} /> 导入用例</Button>}
             {props.canWrite && <button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建用例</button>}
           </Toolbar>
           <FilterChips filters={[
@@ -345,6 +350,17 @@ export function CaseSection(props: {
         await props.mutate(() => api.createTestCase(testCasePayload(form, props.projectId)), '用例已创建');
         setCreating(false);
       }} />
+      <ExcelImportDrawer
+        open={importOpen}
+        title="导入用例"
+        subtitle="下载用例模板后，按表头批量导入当前项目用例。"
+        projectId={props.projectId}
+        type="test-cases"
+        templateLabel="用例模板"
+        onClose={() => setImportOpen(false)}
+        onNotice={props.onNotice}
+        mutateWithResult={props.mutateWithResult}
+      />
       <TestCaseDrawer title="编辑用例" row={editing || undefined} open={Boolean(editing)} requirements={props.requirements} users={props.users} plans={props.plans} bugs={props.bugs} canWrite={props.canWrite} onClose={() => setEditing(null)} onSubmit={async (form) => {
         if (!editing) return;
         await props.mutate(() => api.updateTestCase(editing.id, testCasePayload(form, props.projectId)), '用例已保存');

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Bug as BugIcon, CheckCircle2, GitMerge, MessageSquare, MoreHorizontal, Paperclip, Pencil, PlayCircle, Plus, RotateCcw, Save, Trash2, UploadCloud } from 'lucide-react';
+import { Bug as BugIcon, CheckCircle2, GitMerge, MessageSquare, MoreHorizontal, Paperclip, Pencil, PlayCircle, Plus, RotateCcw, Save, Trash2, Upload, UploadCloud } from 'lucide-react';
 import type { Bug, BugAttachment, BugStatus, PageResult, ProjectMember, Requirement, TestCase, TestPlan, UserProfile } from '@buggy/shared-types';
 import type { UseFormRegister } from 'react-hook-form';
 import { api } from '../../api.js';
@@ -12,6 +12,7 @@ import { bugStatuses, bugTeams, priorities, severities, triageStatuses } from '.
 import type { StringFormValues } from '../../app/types.js';
 import { bugPayload, matchKeyword, requirementTitle, shortDate, userName } from '../../app/workspace-utils.js';
 import { ColumnChooser, DataPage, DataTable, DangerButton, Drawer, EmptyState, FilterChips, HookForm, MetricCard, Pagination, registerField, SearchBox, Select, StatusBadge, TextConfirmDialog, Toolbar, RowMoreMenu } from './common.js';
+import { ExcelImportDrawer } from './excelImport.js';
 
 const bugColumns = [
   { key: 'bug', label: '缺陷', locked: true, sortKey: 'title' },
@@ -45,6 +46,8 @@ export function BugSection(props: {
   canWrite?: boolean;
   canManage?: boolean;
   mutate: (action: () => Promise<unknown>, message: string) => Promise<void>;
+  mutateWithResult: <T>(action: () => Promise<T>, resolveMessage: (result: T) => string) => Promise<void>;
+  onNotice: (message: string) => void;
   onOpenEntity?: (entityType: string, entityId?: string) => void;
 }) {
   const [keyword, setKeyword] = useState('');
@@ -63,6 +66,7 @@ export function BugSection(props: {
   const [transition, setTransition] = useState<{ bug: Bug; status: BugStatus; label: string } | null>(null);
   const [duplicate, setDuplicate] = useState<Bug | null>(null);
   const [creating, setCreating] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing] = useState<Bug | null>(null);
   const editingRow = editing ? props.rows.find((row) => row.id === editing.id) || editing : null;
   const effectiveKeyword = keyword || props.globalKeyword || '';
@@ -183,6 +187,7 @@ export function BugSection(props: {
         </select>
         <ColumnChooser columns={bugColumns} visible={visibleColumns} onChange={setVisibleColumns} />
         <span className="toolbar-summary">{loadingPage ? '加载中...' : `${pageResult.total} 个缺陷`}</span>
+        {props.canWrite && <Button type="button" onClick={() => setImportOpen(true)}><Upload size={15} /> 导入缺陷</Button>}
         {props.canCreate && <button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建缺陷</button>}
       </Toolbar>
       <FilterChips filters={[
@@ -243,6 +248,17 @@ export function BugSection(props: {
         await props.mutate(() => api.createBug(bugPayload(form, props.projectId, attachments)), '缺陷已创建');
         setCreating(false);
       }} />
+      <ExcelImportDrawer
+        open={importOpen}
+        title="导入缺陷"
+        subtitle="下载缺陷模板后，按表头批量导入当前项目缺陷。"
+        projectId={props.projectId}
+        type="bugs"
+        templateLabel="缺陷模板"
+        onClose={() => setImportOpen(false)}
+        onNotice={props.onNotice}
+        mutateWithResult={props.mutateWithResult}
+      />
       <BugDrawer title="编辑缺陷" projectId={props.projectId} row={editingRow || undefined} open={Boolean(editing)} requirements={props.requirements} cases={props.cases} plans={props.plans} bugs={props.rows} users={memberUsers} canWrite={props.canWrite} onClose={() => setEditing(null)} onSubmit={async (form) => {
         if (!editingRow) return;
         await props.mutate(() => api.updateBug(editingRow.id, bugPayload(form, props.projectId)), '缺陷已保存');

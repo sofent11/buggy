@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { FileText, Flag, MoreHorizontal, Pencil, Plus, Save, Send } from 'lucide-react';
+import { FileText, Flag, MoreHorizontal, Pencil, Plus, Save, Send, Upload } from 'lucide-react';
 import type { Bug, Iteration, Requirement, TestCase, UserProfile } from '@buggy/shared-types';
 import type { UseFormRegister } from 'react-hook-form';
 import { api } from '../../api.js';
@@ -12,6 +12,7 @@ import { acceptanceStatuses, priorities, requirementStatuses } from '../../app/c
 import type { StringFormValues } from '../../app/types.js';
 import { iterationName, matchKeyword, requirementPayload, shortDate, testCasePayload, userName } from '../../app/workspace-utils.js';
 import { DataPage, DataTable, DangerButton, Drawer, EmptyState, FilterChips, HookForm, MetricCard, registerField, SearchBox, Select, StatusBadge, TextConfirmDialog, Toolbar, RowMoreMenu } from './common.js';
+import { ExcelImportDrawer } from './excelImport.js';
 import { TestCaseDrawer } from './cases.js';
 import { ScopedReportDrawer } from './reportsSettings.js';
 
@@ -25,6 +26,8 @@ export function RequirementSection(props: {
   canWrite?: boolean;
   canManage?: boolean;
   mutate: (action: () => Promise<unknown>, message: string) => Promise<void>;
+  mutateWithResult: <T>(action: () => Promise<T>, resolveMessage: (result: T) => string) => Promise<void>;
+  onNotice: (message: string) => void;
 }) {
   const [keyword, setKeyword] = useState('');
   const [status, setStatus] = useState('');
@@ -32,6 +35,7 @@ export function RequirementSection(props: {
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Requirement | null>(null);
   const [caseRequirement, setCaseRequirement] = useState<Requirement | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
   const [reporting, setReporting] = useState<Requirement | null>(null);
   const [statusChange, setStatusChange] = useState<{ row: Requirement; status: Requirement['status'] } | null>(null);
   const [acceptanceChange, setAcceptanceChange] = useState<{ row: Requirement; action: ReturnType<typeof requirementAcceptanceActions>[number] } | null>(null);
@@ -93,6 +97,7 @@ export function RequirementSection(props: {
           {props.users.map((user) => <option key={user.id} value={user.id}>{user.username}</option>)}
         </select>
         <span className="toolbar-summary">{rows.length} / {props.rows.length} 个需求</span>
+        {props.canWrite && <Button type="button" onClick={() => setImportOpen(true)}><Upload size={15} /> 导入需求</Button>}
         {props.canWrite && <button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={16} /> 新建需求</button>}
       </Toolbar>
       <FilterChips filters={[
@@ -148,6 +153,17 @@ export function RequirementSection(props: {
         await props.mutate(() => api.createRequirement(requirementPayload(form, props.projectId)), '需求已创建');
         setCreating(false);
       }} />
+      <ExcelImportDrawer
+        open={importOpen}
+        title="导入需求"
+        subtitle="下载需求模板后，按表头批量导入当前项目需求。"
+        projectId={props.projectId}
+        type="requirements"
+        templateLabel="需求模板"
+        onClose={() => setImportOpen(false)}
+        onNotice={props.onNotice}
+        mutateWithResult={props.mutateWithResult}
+      />
       <RequirementDrawer title="编辑需求" row={editing || undefined} open={Boolean(editing)} iterations={props.iterations} users={props.users} canWrite={props.canWrite} onClose={() => setEditing(null)} onSubmit={async (form) => {
         if (!editing) return;
         await props.mutate(() => api.updateRequirement(editing.id, requirementPayload(form, props.projectId)), '需求已保存');
