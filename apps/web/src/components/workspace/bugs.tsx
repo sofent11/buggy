@@ -630,11 +630,7 @@ function BugAttachmentDraft(props: {
       <div className="sub-title"><Paperclip size={16} /> 附件</div>
       <div className="draft-attachment-list">
         {props.attachments.length === 0 ? <span className="muted">可在创建缺陷时一并上传截图、日志或补充链接。</span> : props.attachments.map((attachment) => (
-          <article key={attachment.id}>
-            <a href={attachment.url} target="_blank" rel="noreferrer">{attachment.name}</a>
-            <small>{attachment.size ? `${Math.round(attachment.size / 1024)}KB` : '链接附件'}</small>
-            <button type="button" title={`移除附件 ${attachment.name}`} onClick={() => remove(attachment.id)}><Trash2 size={14} /></button>
-          </article>
+          <AttachmentCard key={attachment.id} attachment={attachment} onRemove={() => remove(attachment.id)} />
         ))}
       </div>
       {props.canWrite && (
@@ -772,7 +768,7 @@ function BugCollaboration(props: { row: Bug; canWrite?: boolean; onComment?: (bo
         <div className="sub-title"><Paperclip size={16} /> 附件链接</div>
         <div className="attachment-list">
           {(props.row.attachments || []).length === 0 ? <span className="muted">暂无附件</span> : (props.row.attachments || []).map((attachment) => (
-            <a key={attachment.id} href={attachment.url} target="_blank" rel="noreferrer">{attachment.name}{attachment.size ? ` · ${Math.round(attachment.size / 1024)}KB` : ''}</a>
+            <AttachmentCard key={attachment.id} attachment={attachment} />
           ))}
         </div>
         {props.canWrite && <div className="inline-form compact">
@@ -796,6 +792,35 @@ function BugCollaboration(props: { row: Bug; canWrite?: boolean; onComment?: (bo
       </section>
     </div>
   );
+}
+
+function AttachmentCard(props: { attachment: BugAttachment; onRemove?: () => void }) {
+  const image = isImageAttachment(props.attachment);
+  return (
+    <article className={`attachment-card${image ? ' image' : ''}`}>
+      {image && (
+        <a className="attachment-preview" href={props.attachment.url} target="_blank" rel="noreferrer" title={`预览 ${props.attachment.name}`}>
+          <img src={props.attachment.url} alt={props.attachment.name} loading="lazy" />
+        </a>
+      )}
+      <div className="attachment-copy">
+        <a className="attachment-title" href={props.attachment.url} target="_blank" rel="noreferrer">{props.attachment.name}</a>
+        <small>{attachmentMeta(props.attachment, image)}</small>
+      </div>
+      {props.onRemove && <button type="button" title={`移除附件 ${props.attachment.name}`} onClick={props.onRemove}><Trash2 size={14} /></button>}
+    </article>
+  );
+}
+
+function isImageAttachment(attachment: Pick<BugAttachment, 'mimeType' | 'name' | 'url'>) {
+  if (attachment.mimeType?.startsWith('image/')) return true;
+  return [attachment.url, attachment.name].some((value) => /\.(apng|avif|bmp|gif|jpe?g|png|svg|webp)$/i.test((value || '').split(/[?#]/)[0]));
+}
+
+function attachmentMeta(attachment: Pick<BugAttachment, 'size'>, image: boolean) {
+  const size = attachment.size ? `${Math.max(1, Math.round(attachment.size / 1024))}KB` : '链接附件';
+  if (image) return `图片 · ${size}`;
+  return size;
 }
 
 function BugStatusTimeline(props: { row: Bug }) {

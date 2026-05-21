@@ -9,24 +9,28 @@ import type { SessionUser } from './auth.service.js';
 
 const moduleDir = dirname(fileURLToPath(import.meta.url));
 const uploadRoot = process.env.UPLOAD_DIR || join(moduleDir, '../../uploads');
+const uploadPublicBaseUrl = (process.env.UPLOAD_PUBLIC_BASE_URL || 'https://cdn.alvinclub.com/decom/pub').replace(/\/+$/, '');
 
 @Injectable()
 export class UploadService {
   async save(file: MultipartFile, projectId: string | undefined, _user: SessionUser): Promise<UploadAsset> {
     const buffer = await file.toBuffer();
     const id = randomUUID();
-    const name = safeName(file.filename || `attachment${extname(file.mimetype || '')}`);
-    const dir = join(uploadRoot, id);
+    const name = safeName(file.filename || `attachment${extensionOf(file.mimetype)}`);
+    const uploadedAt = new Date();
+    const datePath = datePathOf(uploadedAt);
+    const objectName = `${id.replace(/-/g, '')}${extname(name) || extensionOf(file.mimetype)}`;
+    const dir = join(uploadRoot, datePath);
     await mkdir(dir, { recursive: true });
-    await writeFile(join(dir, name), buffer);
+    await writeFile(join(dir, objectName), buffer);
     return {
       id,
       projectId,
       name,
-      url: `/api/uploads/${id}/${encodeURIComponent(name)}`,
+      url: `${uploadPublicBaseUrl}/${datePath}/${encodeURIComponent(objectName)}`,
       size: buffer.byteLength,
       mimeType: file.mimetype || 'application/octet-stream',
-      createdAt: new Date().toISOString()
+      createdAt: uploadedAt.toISOString()
     };
   }
 
@@ -61,4 +65,26 @@ function mimeOf(name: string) {
     '.zip': 'application/zip'
   };
   return mimes[ext] || 'application/octet-stream';
+}
+
+function extensionOf(mimeType = '') {
+  const extensions: Record<string, string> = {
+    'image/png': '.png',
+    'image/jpeg': '.jpg',
+    'image/gif': '.gif',
+    'image/webp': '.webp',
+    'application/pdf': '.pdf',
+    'text/plain': '.txt',
+    'application/json': '.json',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': '.xlsx',
+    'application/zip': '.zip'
+  };
+  return extensions[mimeType.toLowerCase()] || '';
+}
+
+function datePathOf(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }

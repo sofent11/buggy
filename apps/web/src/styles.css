@@ -2854,7 +2854,7 @@ tbody tr:hover {
   overflow: auto;
 }
 
-.attachment-list a {
+.attachment-list > a {
   width: fit-content;
   color: var(--primary);
   font-weight: 750;
@@ -3643,7 +3643,48 @@ tbody tr:hover {
   padding: 9px 10px;
 }
 
-.draft-attachment-list a {
+.attachment-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  padding: 9px 10px;
+}
+
+.attachment-card.image {
+  grid-template-columns: 92px minmax(0, 1fr) auto;
+  align-items: stretch;
+}
+
+.attachment-preview {
+  display: block;
+  width: 92px;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-soft);
+}
+
+.attachment-preview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.attachment-copy {
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.draft-attachment-list a,
+.attachment-title {
   min-width: 0;
   overflow: hidden;
   color: var(--primary);
@@ -3652,12 +3693,13 @@ tbody tr:hover {
   white-space: nowrap;
 }
 
-.draft-attachment-list small {
+.draft-attachment-list small,
+.attachment-copy small {
   color: var(--muted);
   font-weight: 700;
 }
 
-.draft-attachment-list button,
+.attachment-card button,
 .file-pick-button {
   display: inline-flex;
   align-items: center;
@@ -3672,7 +3714,7 @@ tbody tr:hover {
   cursor: pointer;
 }
 
-.draft-attachment-list button {
+.attachment-card button {
   width: 36px;
   padding: 0;
 }
@@ -3754,6 +3796,14 @@ tbody tr:hover {
 
   .draft-attachment-list article {
     grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .attachment-card.image {
+    grid-template-columns: 76px minmax(0, 1fr) auto;
+  }
+
+  .attachment-preview {
+    width: 76px;
   }
 
   .draft-attachment-list small {
