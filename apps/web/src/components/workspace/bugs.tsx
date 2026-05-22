@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Bug as BugIcon, CheckCircle2, GitMerge, MessageSquare, MoreHorizontal, Paperclip, Pencil, PlayCircle, Plus, RotateCcw, Save, Trash2, Upload, UploadCloud } from 'lucide-react';
+import { Bug as BugIcon, CheckCircle2, Eye, GitMerge, MessageSquare, MoreHorizontal, Paperclip, Pencil, PlayCircle, Plus, RotateCcw, Save, Trash2, Upload, UploadCloud } from 'lucide-react';
 import type { Bug, BugAttachment, BugStatus, PageResult, ProjectMember, Requirement, TestCase, TestPlan, UserProfile } from '@buggy/shared-types';
 import type { UseFormRegister } from 'react-hook-form';
 import { api } from '../../api.js';
@@ -246,7 +246,12 @@ export function BugSection(props: {
               onDelete={() => props.mutate(() => api.deleteBug(row.id), '缺陷已删除')}
             />
           };
-          return visibleDefinitions.map((column) => cells[column.key]);
+          return {
+            key: row.id,
+            cells: visibleDefinitions.map((column) => cells[column.key]),
+            onOpen: () => openBug(row),
+            openLabel: `打开缺陷详情：${row.title}`
+          };
         })}
       />
       <Pagination page={pageResult.page} pageSize={pageResult.pageSize} total={pageResult.total} onPage={setPage} />
@@ -400,8 +405,8 @@ function BugRowActions(props: {
           <primaryAction.icon size={14} /> {primaryAction.label}
         </Button>
       )}
+      <Button type="button" size="sm" onClick={props.onEdit}><Eye size={14} /> 详情</Button>
       <RowMoreMenu label={`更多操作：${props.row.title}`} trigger={<MoreHorizontal size={15} />}>
-        <Button type="button" size="sm" onClick={props.onEdit}><Pencil size={14} /> 编辑详情</Button>
         {props.canWrite && <Button type="button" size="sm" onClick={props.onDuplicate}><GitMerge size={14} /> 标记重复</Button>}
         {secondaryActions.map((action) => (
           <Button key={action.status} type="button" size="sm" onClick={() => props.onTransition(action)}>

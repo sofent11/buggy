@@ -153,24 +153,74 @@ export function QualityCommandCenter(props: { data: WorkspaceData; user: UserPro
   const riskList = props.data.report?.charts?.riskList || [];
 
   const todoRows = [
-    ...myUntested.slice(0, 4).map(({ plan, item }) => ['记录执行', item.caseTitle, plan.name, <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('run_item', item.id)}>记录结果</button>]),
-    ...assignedBugs.slice(0, 4).map((bugItem) => ['处理缺陷', bugItem.title, bugItem.actualResult || '指派给我', <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('bug', bugItem.id)}>处理</button>]),
-    ...triageBugs.slice(0, 3).map((bugItem) => ['分诊缺陷', bugItem.title, bugItem.assigneeId ? '已指派' : '未指派', <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('bug', bugItem.id)}>分诊</button>]),
-    ...retestBugs.slice(0, 3).map((bugItem) => ['复测缺陷', bugItem.title, bugItem.resolution || '等待验证结论', <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('bug', bugItem.id)}>复测</button>])
+    ...myUntested.slice(0, 4).map(({ plan, item }) => ({
+      key: `todo-run-${item.id}`,
+      onOpen: () => props.onOpenEntity?.('run_item', item.id),
+      openLabel: `打开执行项：${item.caseTitle}`,
+      cells: ['记录执行', item.caseTitle, plan.name, <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('run_item', item.id)}>记录结果</button>]
+    })),
+    ...assignedBugs.slice(0, 4).map((bugItem) => ({
+      key: `todo-assigned-bug-${bugItem.id}`,
+      onOpen: () => props.onOpenEntity?.('bug', bugItem.id),
+      openLabel: `打开缺陷：${bugItem.title}`,
+      cells: ['处理缺陷', bugItem.title, bugItem.actualResult || '指派给我', <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('bug', bugItem.id)}>处理</button>]
+    })),
+    ...triageBugs.slice(0, 3).map((bugItem) => ({
+      key: `todo-triage-bug-${bugItem.id}`,
+      onOpen: () => props.onOpenEntity?.('bug', bugItem.id),
+      openLabel: `打开缺陷：${bugItem.title}`,
+      cells: ['分诊缺陷', bugItem.title, bugItem.assigneeId ? '已指派' : '未指派', <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('bug', bugItem.id)}>分诊</button>]
+    })),
+    ...retestBugs.slice(0, 3).map((bugItem) => ({
+      key: `todo-retest-bug-${bugItem.id}`,
+      onOpen: () => props.onOpenEntity?.('bug', bugItem.id),
+      openLabel: `打开缺陷：${bugItem.title}`,
+      cells: ['复测缺陷', bugItem.title, bugItem.resolution || '等待验证结论', <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('bug', bugItem.id)}>复测</button>]
+    }))
   ];
   const blockerRows = [
-    ...uncoveredRequirements.slice(0, 4).map((item) => ['未覆盖需求', item.title, '缺少可执行用例', <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('requirement', item.id)}>补用例</button>]),
-    ...orphanCases.slice(0, 4).map((item) => ['孤立用例', item.title, '未绑定有效需求', <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('test_case', item.id)}>绑定需求</button>]),
-    ...orphanBugs.slice(0, 4).map((item) => ['孤立缺陷', item.title, '缺少需求/用例/计划来源', <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('bug', item.id)}>补来源</button>]),
-    ...failedWithoutBug.slice(0, 4).map(({ plan, item }) => ['失败未建缺陷', item.caseTitle, plan.name, <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('run_item', item.id)}>建缺陷</button>]),
-    ...severeActiveBugs.slice(0, 4).map((item) => ['高危活跃缺陷', item.title, labelOf(item.severity), <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('bug', item.id)}>分诊</button>])
+    ...uncoveredRequirements.slice(0, 4).map((item) => ({
+      key: `blocker-req-${item.id}`,
+      onOpen: () => props.onOpenEntity?.('requirement', item.id),
+      openLabel: `打开需求：${item.title}`,
+      cells: ['未覆盖需求', item.title, '缺少可执行用例', <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('requirement', item.id)}>补用例</button>]
+    })),
+    ...orphanCases.slice(0, 4).map((item) => ({
+      key: `blocker-case-${item.id}`,
+      onOpen: () => props.onOpenEntity?.('test_case', item.id),
+      openLabel: `打开用例：${item.title}`,
+      cells: ['孤立用例', item.title, '未绑定有效需求', <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('test_case', item.id)}>绑定需求</button>]
+    })),
+    ...orphanBugs.slice(0, 4).map((item) => ({
+      key: `blocker-bug-${item.id}`,
+      onOpen: () => props.onOpenEntity?.('bug', item.id),
+      openLabel: `打开缺陷：${item.title}`,
+      cells: ['孤立缺陷', item.title, '缺少需求/用例/计划来源', <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('bug', item.id)}>补来源</button>]
+    })),
+    ...failedWithoutBug.slice(0, 4).map(({ plan, item }) => ({
+      key: `blocker-run-${item.id}`,
+      onOpen: () => props.onOpenEntity?.('run_item', item.id),
+      openLabel: `打开执行项：${item.caseTitle}`,
+      cells: ['失败未建缺陷', item.caseTitle, plan.name, <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('run_item', item.id)}>建缺陷</button>]
+    })),
+    ...severeActiveBugs.slice(0, 4).map((item) => ({
+      key: `blocker-severe-bug-${item.id}`,
+      onOpen: () => props.onOpenEntity?.('bug', item.id),
+      openLabel: `打开缺陷：${item.title}`,
+      cells: ['高危活跃缺陷', item.title, labelOf(item.severity), <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('bug', item.id)}>分诊</button>]
+    }))
   ];
-  const riskRows = riskList.slice(0, 5).map((item) => [
-    riskTypeLabel(item.type),
-    item.title,
-    item.reason,
-    <button className="linkish" type="button" onClick={() => props.onOpenEntity?.(riskEntity(item.type), item.id)}>定位处理</button>
-  ]);
+  const riskRows = riskList.slice(0, 5).map((item) => ({
+    key: `risk-${item.type}-${item.id}`,
+    onOpen: () => props.onOpenEntity?.(riskEntity(item.type), item.id),
+    openLabel: `打开风险对象：${item.title}`,
+    cells: [
+      riskTypeLabel(item.type),
+      item.title,
+      item.reason,
+      <button className="linkish" type="button" onClick={() => props.onOpenEntity?.(riskEntity(item.type), item.id)}>定位处理</button>
+    ]
+  }));
   const roleFocus = roleFocusFor(role, {
     myUntested: myUntested.length,
     failedWithoutBug: failedWithoutBug.length,
@@ -343,11 +393,36 @@ export function QualityHealthCenter(props: { data: WorkspaceData; onJump?: (tab:
   const failedItems = props.data.plans.flatMap((plan) => plan.runItems.filter((item) => ['failed', 'blocked'].includes(item.status)).map((item) => ({ plan, item })));
   const severeActiveBugs = props.data.bugs.filter((bugItem) => ['S0', 'S1'].includes(bugItem.severity) && !['verified', 'closed'].includes(bugItem.status));
   const rows = [
-    ...uncoveredRequirements.slice(0, 4).map((item) => ['未覆盖需求', item.title, '缺少可执行用例', <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('requirement', item.id)}>补用例</button>]),
-    ...orphanCases.slice(0, 4).map((item) => ['孤立用例', item.title, '未绑定有效需求', <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('test_case', item.id)}>绑定需求</button>]),
-    ...orphanBugs.slice(0, 4).map((item) => ['孤立缺陷', item.title, '缺少需求/用例/计划来源', <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('bug', item.id)}>补来源</button>]),
-    ...failedItems.slice(0, 4).map(({ plan, item }) => ['失败执行项', item.caseTitle, plan.name, <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('run_item', item.id)}>{item.bugIds.length ? '进入执行' : '建缺陷'}</button>]),
-    ...severeActiveBugs.slice(0, 4).map((item) => ['严重活跃缺陷', item.title, labelOf(item.severity), <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('bug', item.id)}>分诊</button>])
+    ...uncoveredRequirements.slice(0, 4).map((item) => ({
+      key: `health-req-${item.id}`,
+      onOpen: () => props.onOpenEntity?.('requirement', item.id),
+      openLabel: `打开需求：${item.title}`,
+      cells: ['未覆盖需求', item.title, '缺少可执行用例', <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('requirement', item.id)}>补用例</button>]
+    })),
+    ...orphanCases.slice(0, 4).map((item) => ({
+      key: `health-case-${item.id}`,
+      onOpen: () => props.onOpenEntity?.('test_case', item.id),
+      openLabel: `打开用例：${item.title}`,
+      cells: ['孤立用例', item.title, '未绑定有效需求', <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('test_case', item.id)}>绑定需求</button>]
+    })),
+    ...orphanBugs.slice(0, 4).map((item) => ({
+      key: `health-bug-${item.id}`,
+      onOpen: () => props.onOpenEntity?.('bug', item.id),
+      openLabel: `打开缺陷：${item.title}`,
+      cells: ['孤立缺陷', item.title, '缺少需求/用例/计划来源', <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('bug', item.id)}>补来源</button>]
+    })),
+    ...failedItems.slice(0, 4).map(({ plan, item }) => ({
+      key: `health-run-${item.id}`,
+      onOpen: () => props.onOpenEntity?.('run_item', item.id),
+      openLabel: `打开执行项：${item.caseTitle}`,
+      cells: ['失败执行项', item.caseTitle, plan.name, <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('run_item', item.id)}>{item.bugIds.length ? '进入执行' : '建缺陷'}</button>]
+    })),
+    ...severeActiveBugs.slice(0, 4).map((item) => ({
+      key: `health-severe-bug-${item.id}`,
+      onOpen: () => props.onOpenEntity?.('bug', item.id),
+      openLabel: `打开缺陷：${item.title}`,
+      cells: ['严重活跃缺陷', item.title, labelOf(item.severity), <button className="linkish" type="button" onClick={() => props.onOpenEntity?.('bug', item.id)}>分诊</button>]
+    }))
   ];
   return (
     <section className="panel wide health-center">
@@ -385,12 +460,17 @@ export function RiskBoard(props: { report: ReportSummary | null; onOpenEntity?: 
     return (
       <DataTable
         headers={['类型', '事项', '原因', '下一步']}
-        rows={report.charts.riskList.slice(0, 8).map((item) => [
-          riskTypeLabel(item.type),
-          item.title,
-          item.reason,
-          <button className="linkish" type="button" onClick={() => props.onOpenEntity?.(riskEntity(item.type), item.id)}>{item.dueDate ? item.dueDate.slice(0, 10) : '定位处理'}</button>
-        ])}
+        rows={report.charts.riskList.slice(0, 8).map((item) => ({
+          key: `risk-board-${item.type}-${item.id}`,
+          onOpen: () => props.onOpenEntity?.(riskEntity(item.type), item.id),
+          openLabel: `打开风险对象：${item.title}`,
+          cells: [
+            riskTypeLabel(item.type),
+            item.title,
+            item.reason,
+            <button className="linkish" type="button" onClick={() => props.onOpenEntity?.(riskEntity(item.type), item.id)}>{item.dueDate ? item.dueDate.slice(0, 10) : '定位处理'}</button>
+          ]
+        }))}
       />
     );
   }

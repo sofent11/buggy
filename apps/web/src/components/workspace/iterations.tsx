@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { CalendarRange, FileText, MoreHorizontal, Pencil, Plus, Save } from 'lucide-react';
 import type { Bug, Iteration, Requirement, TestCase, TestPlan } from '@buggy/shared-types';
 import { api } from '../../api.js';
@@ -30,6 +30,17 @@ export function IterationSection(props: {
   const rows = useMemo(() => props.rows.filter((row) => (!status || row.status === status) && matchKeyword([row.name, row.goal || '', row.status], keyword)), [props.rows, keyword, status]);
   const active = props.rows.filter((row) => row.status === 'active').length;
 
+  useEffect(() => {
+    const open = (event: Event) => {
+      const detail = (event as CustomEvent<{ entityType?: string; entityId?: string }>).detail;
+      if (detail?.entityType !== 'iteration' || !detail.entityId) return;
+      const row = props.rows.find((item) => item.id === detail.entityId);
+      if (row) setEditing(row);
+    };
+    window.addEventListener('buggy:open-entity', open);
+    return () => window.removeEventListener('buggy:open-entity', open);
+  }, [props.rows]);
+
   return (
     <DataPage
       title="迭代管理"
@@ -60,25 +71,30 @@ export function IterationSection(props: {
             const runItems = iterationPlans.flatMap((plan) => plan.runItems);
             const passed = runItems.filter((item) => item.status === 'passed').length;
             const activeBugs = (props.bugs || []).filter((bug) => bug.iterationId === row.id && !['verified', 'closed'].includes(bug.status)).length;
-            return [
-              <div className="cell-main"><strong>{row.name}</strong><span>{row.goal || '未设置目标'}</span></div>,
-              dateRange(row.startDate, row.endDate),
-              <StatusBadge value={row.status} dictionaryType="iterationStatus" />,
-              iterationRequirements.length,
-              (props.cases || []).filter((item) => item.requirementId && requirementIds.has(item.requirementId)).length,
-              `${passed}/${runItems.length}`,
-              activeBugs,
-              shortDate(row.updatedAt),
-              <div className="row-actions">
-                <Button type="button" size="sm" onClick={() => setEditing(row)}><Pencil size={14} /> 编辑</Button>
-                <Button type="button" size="sm" onClick={() => setReporting(row)}><FileText size={14} /> 报告</Button>
-                {props.canManage && (
-                  <RowMoreMenu label={`更多操作：${row.name}`} trigger={<MoreHorizontal size={15} />}>
-                    <DangerButton title={`删除迭代「${row.name}」？`} onConfirm={() => props.mutate(() => api.deleteIteration(row.id), '迭代已删除')} />
-                  </RowMoreMenu>
-                )}
-              </div>
-            ];
+            return {
+              key: row.id,
+              onOpen: () => setEditing(row),
+              openLabel: `打开迭代详情：${row.name}`,
+              cells: [
+                <div className="cell-main"><strong>{row.name}</strong><span>{row.goal || '未设置目标'}</span></div>,
+                dateRange(row.startDate, row.endDate),
+                <StatusBadge value={row.status} dictionaryType="iterationStatus" />,
+                iterationRequirements.length,
+                (props.cases || []).filter((item) => item.requirementId && requirementIds.has(item.requirementId)).length,
+                `${passed}/${runItems.length}`,
+                activeBugs,
+                shortDate(row.updatedAt),
+                <div className="row-actions">
+                  <Button type="button" size="sm" onClick={() => setEditing(row)}><Pencil size={14} /> 详情</Button>
+                  <Button type="button" size="sm" onClick={() => setReporting(row)}><FileText size={14} /> 报告</Button>
+                  {props.canManage && (
+                    <RowMoreMenu label={`更多操作：${row.name}`} trigger={<MoreHorizontal size={15} />}>
+                      <DangerButton title={`删除迭代「${row.name}」？`} onConfirm={() => props.mutate(() => api.deleteIteration(row.id), '迭代已删除')} />
+                    </RowMoreMenu>
+                  )}
+                </div>
+              ]
+            };
           })}
         />
         <aside className="side-summary">

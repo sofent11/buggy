@@ -1103,13 +1103,18 @@ function NotificationCenter(props: {
         <DataTable
           headers={['状态', '通知', '来源', '时间', '操作']}
           emptyText="暂无通知"
-          rows={props.notifications.map((notification) => [
-            <StatusBadge value={notification.status === 'unread' ? '未读' : '已读'} />,
-            <div className="cell-main"><strong>{notification.title}</strong><span>{notification.body || '系统提醒'}</span></div>,
-            notification.entityType || '-',
-            new Date(notification.createdAt).toLocaleString('zh-CN'),
-            <Button type="button" size="sm" onClick={() => props.onOpenNotification(notification)}>打开</Button>
-          ])}
+          rows={props.notifications.map((notification) => ({
+            key: notification.id,
+            onOpen: () => props.onOpenNotification(notification),
+            openLabel: `打开通知：${notification.title}`,
+            cells: [
+              <StatusBadge value={notification.status === 'unread' ? '未读' : '已读'} />,
+              <div className="cell-main"><strong>{notification.title}</strong><span>{notification.body || '系统提醒'}</span></div>,
+              notification.entityType || '-',
+              new Date(notification.createdAt).toLocaleString('zh-CN'),
+              <Button type="button" size="sm" onClick={() => props.onOpenNotification(notification)}>打开</Button>
+            ]
+          }))}
         />
       </div>
     </Drawer>

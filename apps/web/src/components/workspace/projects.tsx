@@ -47,6 +47,17 @@ export function ProjectSection(props: {
   const systemPermission = props.user.systemPermission || props.user.role;
   const canCreateProject = systemPermission === 'admin' || systemPermission === 'maintainer';
 
+  useEffect(() => {
+    const open = (event: Event) => {
+      const detail = (event as CustomEvent<{ entityType?: string; entityId?: string }>).detail;
+      if (detail?.entityType !== 'project' || !detail.entityId) return;
+      const project = props.projects.find((item) => item.id === detail.entityId);
+      if (project && isProjectManager(project, props.user.id, systemPermission)) setEditing(project);
+    };
+    window.addEventListener('buggy:open-entity', open);
+    return () => window.removeEventListener('buggy:open-entity', open);
+  }, [props.projects, props.user.id, systemPermission]);
+
   return (
     <DataPage
       title="项目管理"
@@ -77,41 +88,49 @@ export function ProjectSection(props: {
       <DataTable
         headers={['项目', '代号', '成员', '负责人', '治理状态', '更新时间', '状态', '操作']}
         emptyText="暂无项目"
-        rows={filtered.map((project) => [
-          <div className="cell-main"><strong>{project.name}</strong><span>{project.description || '未填写描述'}</span></div>,
-          project.code || '-',
-          `${project.members.length} 人`,
-          project.members.find((member) => (member.projectPermission || (member.role === 'owner' ? 'manage' : undefined)) === 'manage')?.username || '-',
-          <ProjectGovernanceCell project={project} />,
-          shortDate(project.updatedAt),
-          project.id === props.currentProjectId ? <StatusBadge value="当前项目" /> : <span className="muted">{isArchivedProject(project) ? '不可默认展示' : '可选'}</span>,
-          <div className="row-actions">
-            {!isArchivedProject(project) && (isProjectMember(project, props.user.id) || systemPermission === 'admin' || systemPermission === 'maintainer') && (
-              <Button type="button" size="sm" onClick={() => props.onSelect(project.id)}><Check size={14} /> 选中</Button>
-            )}
-            {isProjectMember(project, props.user.id) ? (
-              <Button type="button" size="sm" onClick={() => setManagingMembers(project)}><Users size={14} /> 成员</Button>
-            ) : project.joinRequestsEnabled ? (
-              <Button type="button" size="sm" disabled={project.joinRequestStatus === 'pending'} onClick={() => props.mutate(() => api.requestProjectJoin(project.id), '加入申请已提交', { reloadProjects: true })}>
-                <Users size={14} /> {project.joinRequestStatus === 'pending' ? '已申请' : '申请加入'}
-              </Button>
-            ) : null}
-            <RowMoreMenu label={`更多操作：${project.name}`} trigger={<MoreHorizontal size={15} />}>
-              {isProjectManager(project, props.user.id, systemPermission) && <Button type="button" size="sm" onClick={() => setEditing(project)}><Pencil size={14} /> 编辑档案</Button>}
-              {project.status === 'archived' ? (
-                <Button type="button" size="sm" onClick={() => props.mutate(() => api.updateProject(project.id, { status: 'active' }), '项目已恢复为活跃', { reloadProjects: true })}>恢复活跃</Button>
-              ) : (
-                <Button type="button" size="sm" onClick={() => props.mutate(() => api.updateProject(project.id, { status: 'archived' }), '项目已归档', { reloadProjects: true })}>归档项目</Button>
-              )}
-              {project.category !== 'test' && <Button type="button" size="sm" onClick={() => props.mutate(() => api.updateProject(project.id, { category: 'test' }), '项目已标记为测试数据', { reloadProjects: true })}>标记测试数据</Button>}
-              {isProjectManager(project, props.user.id, systemPermission) && <DangerButton
-                title={`删除项目「${project.name}」？`}
-                description="项目下的迭代、需求、用例、执行计划、缺陷和报告数据都会被删除。"
-                onConfirm={() => props.mutate(() => api.deleteProject(project.id), '项目已删除', { reloadProjects: true })}
-              />}
-            </RowMoreMenu>
-          </div>
-        ])}
+        rows={filtered.map((project) => {
+          const canManageThisProject = isProjectManager(project, props.user.id, systemPermission);
+          return {
+            key: project.id,
+            onOpen: canManageThisProject ? () => setEditing(project) : undefined,
+            openLabel: `打开项目详情：${project.name}`,
+            cells: [
+              <div className="cell-main"><strong>{project.name}</strong><span>{project.description || '未填写描述'}</span></div>,
+              project.code || '-',
+              `${project.members.length} 人`,
+              project.members.find((member) => (member.projectPermission || (member.role === 'owner' ? 'manage' : undefined)) === 'manage')?.username || '-',
+              <ProjectGovernanceCell project={project} />,
+              shortDate(project.updatedAt),
+              project.id === props.currentProjectId ? <StatusBadge value="当前项目" /> : <span className="muted">{isArchivedProject(project) ? '不可默认展示' : '可选'}</span>,
+              <div className="row-actions">
+                {!isArchivedProject(project) && (isProjectMember(project, props.user.id) || systemPermission === 'admin' || systemPermission === 'maintainer') && (
+                  <Button type="button" size="sm" onClick={() => props.onSelect(project.id)}><Check size={14} /> 选中</Button>
+                )}
+                {canManageThisProject && <Button type="button" size="sm" onClick={() => setEditing(project)}><Pencil size={14} /> 详情</Button>}
+                {isProjectMember(project, props.user.id) ? (
+                  <Button type="button" size="sm" onClick={() => setManagingMembers(project)}><Users size={14} /> 成员</Button>
+                ) : project.joinRequestsEnabled ? (
+                  <Button type="button" size="sm" disabled={project.joinRequestStatus === 'pending'} onClick={() => props.mutate(() => api.requestProjectJoin(project.id), '加入申请已提交', { reloadProjects: true })}>
+                    <Users size={14} /> {project.joinRequestStatus === 'pending' ? '已申请' : '申请加入'}
+                  </Button>
+                ) : null}
+                <RowMoreMenu label={`更多操作：${project.name}`} trigger={<MoreHorizontal size={15} />}>
+                  {project.status === 'archived' ? (
+                    <Button type="button" size="sm" onClick={() => props.mutate(() => api.updateProject(project.id, { status: 'active' }), '项目已恢复为活跃', { reloadProjects: true })}>恢复活跃</Button>
+                  ) : (
+                    <Button type="button" size="sm" onClick={() => props.mutate(() => api.updateProject(project.id, { status: 'archived' }), '项目已归档', { reloadProjects: true })}>归档项目</Button>
+                  )}
+                  {project.category !== 'test' && <Button type="button" size="sm" onClick={() => props.mutate(() => api.updateProject(project.id, { category: 'test' }), '项目已标记为测试数据', { reloadProjects: true })}>标记测试数据</Button>}
+                  {canManageThisProject && <DangerButton
+                    title={`删除项目「${project.name}」？`}
+                    description="项目下的迭代、需求、用例、执行计划、缺陷和报告数据都会被删除。"
+                    onConfirm={() => props.mutate(() => api.deleteProject(project.id), '项目已删除', { reloadProjects: true })}
+                  />}
+                </RowMoreMenu>
+              </div>
+            ]
+          };
+        })}
       />
       {filtered.length === 0 && (
         <EmptyState

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type Key, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useForm, type UseFormRegister } from 'react-hook-form';
 import { ChevronDown, ChevronUp, Download, FolderKanban, Plus, Search, Trash2, X } from 'lucide-react';
@@ -176,15 +176,23 @@ export function MetricCard(props: { label: string; value: string | number; detai
   );
 }
 
+type DataTableRow = Array<ReactNode> | {
+  key?: Key;
+  cells: Array<ReactNode>;
+  onOpen?: () => void;
+  openLabel?: string;
+};
+
 export function DataTable(props: {
   headers: string[];
-  rows: Array<Array<ReactNode>>;
+  rows: DataTableRow[];
   emptyText?: string;
   onSort?: (key: string) => void;
   sortKeys?: string[];
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
 }) {
+  const rows = props.rows.map((row, index) => Array.isArray(row) ? { key: index, cells: row } : { key: row.key ?? index, ...row });
   return (
     <div className="table-wrap data-table-wrap">
       <table>
@@ -208,9 +216,25 @@ export function DataTable(props: {
           {props.rows.length === 0 ? (
             <tr><td colSpan={props.headers.length}>{props.emptyText || '暂无数据'}</td></tr>
           ) : (
-            props.rows.map((row, index) => (
-              <tr key={index}>
-                {row.map((cell, cellIndex) => <td key={cellIndex} data-label={props.headers[cellIndex] || ''}>{cell}</td>)}
+            rows.map((row) => (
+              <tr
+                key={row.key}
+                className={row.onOpen ? 'data-row-openable' : undefined}
+                tabIndex={row.onOpen ? 0 : undefined}
+                role={row.onOpen ? 'button' : undefined}
+                aria-label={row.onOpen ? row.openLabel || '打开详情' : undefined}
+                onClick={(event) => {
+                  if (!row.onOpen || isInteractiveTableTarget(event.target)) return;
+                  row.onOpen();
+                }}
+                onKeyDown={(event) => {
+                  if (!row.onOpen || isInteractiveTableTarget(event.target)) return;
+                  if (event.key !== 'Enter' && event.key !== ' ') return;
+                  event.preventDefault();
+                  row.onOpen();
+                }}
+              >
+                {row.cells.map((cell, cellIndex) => <td key={cellIndex} data-label={props.headers[cellIndex] || ''}>{cell}</td>)}
               </tr>
             ))
           )}
@@ -218,6 +242,11 @@ export function DataTable(props: {
       </table>
     </div>
   );
+}
+
+function isInteractiveTableTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) return false;
+  return Boolean(target.closest('button,a,input,select,textarea,label,summary,[contenteditable="true"],[data-row-open-ignore],.row-more-menu,.row-more-popover'));
 }
 
 export function RowMoreMenu(props: { label: string; trigger: ReactNode; children: ReactNode }) {

@@ -352,12 +352,17 @@ function ReportDecision(props: { report: ReportSummary | null; onOpenEntity?: Op
       <DataTable
         headers={['风险类型', '对象', '原因', '下一步']}
         emptyText="暂无风险"
-        rows={riskRows.slice(0, 8).map((item) => [
-          riskTypeLabel(item.type),
-          item.title,
-          item.reason,
-          <Button type="button" size="sm" onClick={() => props.onOpenEntity?.(entityTypeOfRisk(item.type), item.id)}>定位处理</Button>
-        ])}
+        rows={riskRows.slice(0, 8).map((item) => ({
+          key: `${item.type}-${item.id}`,
+          onOpen: () => props.onOpenEntity?.(entityTypeOfRisk(item.type), item.id),
+          openLabel: `打开风险对象：${item.title}`,
+          cells: [
+            riskTypeLabel(item.type),
+            item.title,
+            item.reason,
+            <Button type="button" size="sm" onClick={() => props.onOpenEntity?.(entityTypeOfRisk(item.type), item.id)}>定位处理</Button>
+          ]
+        }))}
       />
       <DataTable
         headers={['根因分类', '数量']}
@@ -530,14 +535,19 @@ function RootCauseAnalysisPanel(props: { report: ReportSummary | null; onOpenEnt
         rows={bugs
           .filter((bug) => !bug.rootCause?.trim())
           .slice(0, 10)
-          .map((bug) => [
-            bug.title,
-            <StatusBadge value={bug.severity} dictionaryType="severity" />,
-            <StatusBadge value={bug.status} dictionaryType="bugStatus" />,
-            bug.environment || '-',
-            bug.foundVersion || '-',
-            <Button type="button" size="sm" onClick={() => props.onOpenEntity?.('bug', bug.id)}>补根因</Button>
-          ])}
+          .map((bug) => ({
+            key: bug.id,
+            onOpen: () => props.onOpenEntity?.('bug', bug.id),
+            openLabel: `打开缺陷详情：${bug.title}`,
+            cells: [
+              bug.title,
+              <StatusBadge value={bug.severity} dictionaryType="severity" />,
+              <StatusBadge value={bug.status} dictionaryType="bugStatus" />,
+              bug.environment || '-',
+              bug.foundVersion || '-',
+              <Button type="button" size="sm" onClick={() => props.onOpenEntity?.('bug', bug.id)}>补根因</Button>
+            ]
+          }))}
       />
     </section>
   );

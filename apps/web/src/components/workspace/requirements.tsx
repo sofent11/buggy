@@ -107,40 +107,45 @@ export function RequirementSection(props: {
       <DataTable
         headers={['需求', '迭代', '负责人', '准入', '风险', '优先级', '状态', '用例', '缺陷', '更新时间', '操作']}
         emptyText="暂无需求"
-        rows={rows.map((row) => [
-          <div className="cell-main"><strong>{row.title}</strong><span>{row.description || '未填写描述'}</span></div>,
-          row.iterationId ? iterationName(props.iterations, row.iterationId) : '-',
-          row.ownerId ? userName(props.users, row.ownerId) : '-',
-          <div className="cell-main">
-            <StatusBadge value={row.qualityGateResult?.status === 'pass' ? 'approved' : row.acceptanceStatus || 'not_ready'} />
-            <span>{row.qualityGateResult?.summary || '待检查'}</span>
-          </div>,
-          <div className="cell-main"><strong>{row.riskOwnerId ? userName(props.users, row.riskOwnerId) : '-'}</strong><span>{row.dueDate ? `截止 ${shortDate(row.dueDate)}` : row.riskNote || '暂无风险'}</span></div>,
-          <StatusBadge value={row.priority} dictionaryType="priority" />,
-          <StatusBadge value={row.status} dictionaryType="requirementStatus" />,
-          (props.cases || []).filter((item) => item.requirementId === row.id).length,
-          (props.bugs || []).filter((item) => item.requirementId === row.id).length,
-          shortDate(row.updatedAt),
-          <div className="row-actions">
-            <Button type="button" size="sm" onClick={() => setReporting(row)}><FileText size={14} /> 验收报告</Button>
-            {props.canWrite && <Button type="button" size="sm" onClick={() => setCaseRequirement(row)}><Plus size={14} /> 建用例</Button>}
-            <RowMoreMenu label={`更多操作：${row.title}`} trigger={<MoreHorizontal size={15} />}>
-              <Button type="button" size="sm" onClick={() => setEditing(row)}><Pencil size={14} /> 编辑需求</Button>
-              {props.canWrite && requirementStatuses.filter((item) => item !== row.status).map((nextStatus) => (
-                <Button key={nextStatus} type="button" size="sm" onClick={() => setStatusChange({ row, status: nextStatus })}>
-                  流转为 {labelOf(nextStatus)}
-                </Button>
-              ))}
-              {props.canWrite && requirementAcceptanceActions(row.acceptanceStatus || 'not_ready').map((action) => (
-                <Button key={action.status} type="button" size="sm" onClick={() => setAcceptanceChange({ row, action })}>
-                  {action.label}
-                </Button>
-              ))}
-              {props.canWrite && <Button type="button" size="sm" onClick={() => props.mutate(() => api.sendLark(row.id), 'Lark 日报已发送')}><Send size={14} /> Lark</Button>}
-              {props.canManage && <DangerButton title={`删除需求「${row.title}」？`} description={`关联 ${(props.cases || []).filter((item) => item.requirementId === row.id).length} 条用例、${(props.bugs || []).filter((item) => item.requirementId === row.id).length} 个缺陷。有关联数据时系统会阻止删除，请先迁移或清理。`} onConfirm={() => props.mutate(() => api.deleteRequirement(row.id), '需求已删除')} />}
-            </RowMoreMenu>
-          </div>
-        ])}
+        rows={rows.map((row) => ({
+          key: row.id,
+          onOpen: () => setEditing(row),
+          openLabel: `打开需求详情：${row.title}`,
+          cells: [
+            <div className="cell-main"><strong>{row.title}</strong><span>{row.description || '未填写描述'}</span></div>,
+            row.iterationId ? iterationName(props.iterations, row.iterationId) : '-',
+            row.ownerId ? userName(props.users, row.ownerId) : '-',
+            <div className="cell-main">
+              <StatusBadge value={row.qualityGateResult?.status === 'pass' ? 'approved' : row.acceptanceStatus || 'not_ready'} />
+              <span>{row.qualityGateResult?.summary || '待检查'}</span>
+            </div>,
+            <div className="cell-main"><strong>{row.riskOwnerId ? userName(props.users, row.riskOwnerId) : '-'}</strong><span>{row.dueDate ? `截止 ${shortDate(row.dueDate)}` : row.riskNote || '暂无风险'}</span></div>,
+            <StatusBadge value={row.priority} dictionaryType="priority" />,
+            <StatusBadge value={row.status} dictionaryType="requirementStatus" />,
+            (props.cases || []).filter((item) => item.requirementId === row.id).length,
+            (props.bugs || []).filter((item) => item.requirementId === row.id).length,
+            shortDate(row.updatedAt),
+            <div className="row-actions">
+              <Button type="button" size="sm" onClick={() => setEditing(row)}><Pencil size={14} /> 详情</Button>
+              <Button type="button" size="sm" onClick={() => setReporting(row)}><FileText size={14} /> 验收报告</Button>
+              {props.canWrite && <Button type="button" size="sm" onClick={() => setCaseRequirement(row)}><Plus size={14} /> 建用例</Button>}
+              <RowMoreMenu label={`更多操作：${row.title}`} trigger={<MoreHorizontal size={15} />}>
+                {props.canWrite && requirementStatuses.filter((item) => item !== row.status).map((nextStatus) => (
+                  <Button key={nextStatus} type="button" size="sm" onClick={() => setStatusChange({ row, status: nextStatus })}>
+                    流转为 {labelOf(nextStatus)}
+                  </Button>
+                ))}
+                {props.canWrite && requirementAcceptanceActions(row.acceptanceStatus || 'not_ready').map((action) => (
+                  <Button key={action.status} type="button" size="sm" onClick={() => setAcceptanceChange({ row, action })}>
+                    {action.label}
+                  </Button>
+                ))}
+                {props.canWrite && <Button type="button" size="sm" onClick={() => props.mutate(() => api.sendLark(row.id), 'Lark 日报已发送')}><Send size={14} /> Lark</Button>}
+                {props.canManage && <DangerButton title={`删除需求「${row.title}」？`} description={`关联 ${(props.cases || []).filter((item) => item.requirementId === row.id).length} 条用例、${(props.bugs || []).filter((item) => item.requirementId === row.id).length} 个缺陷。有关联数据时系统会阻止删除，请先迁移或清理。`} onConfirm={() => props.mutate(() => api.deleteRequirement(row.id), '需求已删除')} />}
+              </RowMoreMenu>
+            </div>
+          ]
+        }))}
       />
       {rows.length === 0 && (
         <EmptyState

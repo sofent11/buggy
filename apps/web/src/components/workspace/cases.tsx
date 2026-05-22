@@ -314,15 +314,20 @@ export function CaseSection(props: {
                   onDelete={() => props.mutate(() => api.deleteTestCase(row.id), '用例已删除')}
                 />
               };
-              return [
-                <input
-                  type="checkbox"
-                  aria-label={`选择 ${row.title}`}
-                  checked={selectedCaseIds.includes(row.id)}
-                  onChange={(event) => setSelectedCaseIds((current) => event.target.checked ? [...new Set([...current, row.id])] : current.filter((id) => id !== row.id))}
-                />,
-                ...visibleDefinitions.map((column) => cells[column.key])
-              ];
+              return {
+                key: row.id,
+                onOpen: () => setEditing(row),
+                openLabel: `打开用例详情：${row.title}`,
+                cells: [
+                  <input
+                    type="checkbox"
+                    aria-label={`选择 ${row.title}`}
+                    checked={selectedCaseIds.includes(row.id)}
+                    onChange={(event) => setSelectedCaseIds((current) => event.target.checked ? [...new Set([...current, row.id])] : current.filter((id) => id !== row.id))}
+                  />,
+                  ...visibleDefinitions.map((column) => cells[column.key])
+                ]
+              };
             })}
           />
           {rows.length > 0 && (
@@ -487,13 +492,13 @@ function CaseRowActions(props: {
   const secondaryActions = reviewActions.slice(1);
   return (
     <div className="row-actions compact-row-actions">
+      <Button type="button" size="sm" onClick={props.onEdit}><Pencil size={14} /> 详情</Button>
       {primaryAction && (
         <Button type="button" size="sm" onClick={() => { void props.onReview(primaryAction); }}>
           {primaryAction.label}
         </Button>
       )}
       <RowMoreMenu label={`更多操作：${props.row.title}`} trigger={<MoreHorizontal size={15} />}>
-        <Button type="button" size="sm" onClick={props.onEdit}><Pencil size={14} /> 编辑详情</Button>
         {props.canWrite && caseStatuses.filter((status) => status !== props.row.status).map((status) => (
           <Button key={status} type="button" size="sm" onClick={() => props.onStatus(status)}>
             状态改为 {userNameOrLabel(status)}

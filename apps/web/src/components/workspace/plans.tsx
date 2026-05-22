@@ -125,41 +125,56 @@ function ExecutionWorkbench(props: { rows: TestPlan[]; bugs: Bug[]; users: UserP
         <QueueTable
           title="我的待执行"
           empty="暂无待执行项"
-          rows={myQueue.slice(0, 5).map(({ plan, item }) => [
-            item.caseTitle,
-            plan.name,
-            <StatusBadge value={item.status} dictionaryType="testRunStatus" />,
-            <RunItemActions planId={plan.id} item={item} users={props.users} canWrite={props.canWrite} mutate={props.mutate} />
-          ])}
+          rows={myQueue.slice(0, 5).map(({ plan, item }) => ({
+            key: item.id,
+            onOpen: () => props.onOpenEntity?.('run_item', item.id),
+            openLabel: `打开执行项详情：${item.caseTitle}`,
+            cells: [
+              item.caseTitle,
+              plan.name,
+              <StatusBadge value={item.status} dictionaryType="testRunStatus" />,
+              <RunItemActions planId={plan.id} item={item} users={props.users} canWrite={props.canWrite} mutate={props.mutate} />
+            ]
+          }))}
         />
         <QueueTable
           title="失败/阻塞待处理"
           empty="暂无失败或阻塞项"
-          rows={failedQueue.slice(0, 5).map(({ plan, item }) => [
-            item.caseTitle,
-            item.actualResult || '暂无记录',
-            <StatusBadge value={item.status} dictionaryType="testRunStatus" />,
-            <RunItemActions planId={plan.id} item={item} users={props.users} canWrite={props.canWrite} mutate={props.mutate} />
-          ])}
+          rows={failedQueue.slice(0, 5).map(({ plan, item }) => ({
+            key: item.id,
+            onOpen: () => props.onOpenEntity?.('run_item', item.id),
+            openLabel: `打开执行项详情：${item.caseTitle}`,
+            cells: [
+              item.caseTitle,
+              item.actualResult || '暂无记录',
+              <StatusBadge value={item.status} dictionaryType="testRunStatus" />,
+              <RunItemActions planId={plan.id} item={item} users={props.users} canWrite={props.canWrite} mutate={props.mutate} />
+            ]
+          }))}
         />
         <QueueTable
           title="已解决待复测"
           empty="暂无待复测缺陷"
-          rows={retestQueue.slice(0, 5).map((bug) => [
-            bug.title,
-            bug.resolution || bug.actualResult || '暂无修复说明',
-            <StatusBadge value={bug.status} dictionaryType="bugStatus" />,
-            <Button type="button" size="sm" onClick={() => bug.runItemId ? props.onOpenEntity?.('run_item', bug.runItemId) : props.onOpenEntity?.('bug', bug.id)}>
-              进入复测
-            </Button>
-          ])}
+          rows={retestQueue.slice(0, 5).map((bug) => ({
+            key: bug.id,
+            onOpen: () => bug.runItemId ? props.onOpenEntity?.('run_item', bug.runItemId) : props.onOpenEntity?.('bug', bug.id),
+            openLabel: `打开复测详情：${bug.title}`,
+            cells: [
+              bug.title,
+              bug.resolution || bug.actualResult || '暂无修复说明',
+              <StatusBadge value={bug.status} dictionaryType="bugStatus" />,
+              <Button type="button" size="sm" onClick={() => bug.runItemId ? props.onOpenEntity?.('run_item', bug.runItemId) : props.onOpenEntity?.('bug', bug.id)}>
+                进入复测
+              </Button>
+            ]
+          }))}
         />
       </div>
     </section>
   );
 }
 
-function QueueTable(props: { title: string; empty: string; rows: Array<Array<ReactNode>> }) {
+function QueueTable(props: { title: string; empty: string; rows: Parameters<typeof DataTable>[0]['rows'] }) {
   return (
     <article className="queue-card">
       <strong>{props.title}</strong>
@@ -260,7 +275,7 @@ export function PlanCard(props: { plan: TestPlan; iterations: Iteration[]; requi
             <Button type="button" size="sm" onClick={() => setBatchStatus('failed')}>{selectedRunItemIds.length ? '所选失败' : '全部失败'}</Button>
           </>
         )}
-        <Button type="button" size="sm" onClick={() => setEditing(true)}><Pencil size={14} /> 编辑计划</Button>
+        <Button type="button" size="sm" onClick={() => setEditing(true)}><Pencil size={14} /> 详情</Button>
         {props.canManage && (
           <RowMoreMenu label={`更多操作：${props.plan.name}`} trigger={<MoreHorizontal size={15} />}>
             <DangerButton title={`删除测试计划「${props.plan.name}」？`} description={`关联 ${props.bugs.filter((bug) => bug.testPlanId === props.plan.id).length} 个缺陷。有关联缺陷时系统会阻止删除，请先迁移或关闭。`} onConfirm={() => props.mutate(() => api.deleteTestPlan(props.plan.id), '测试计划已删除')} />
@@ -272,20 +287,25 @@ export function PlanCard(props: { plan: TestPlan; iterations: Iteration[]; requi
         rows={props.plan.runItems.map((item) => {
           const currentCase = casesById.get(item.caseId);
           const snapshotChanged = Boolean(currentCase && item.caseVersion && item.caseVersion !== (currentCase.version || 'v1'));
-          return [
-          <input
-            type="checkbox"
-            aria-label={`选择 ${item.caseTitle}`}
-            checked={selectedRunItemIds.includes(item.id)}
-            onChange={(event) => setSelectedRunItemIds((current) => event.target.checked ? [...current, item.id] : current.filter((id) => id !== item.id))}
-          />,
-          <div className="cell-main"><strong>{item.caseTitle}</strong><span>{item.steps.map((step, index) => `${index + 1}. ${step.action}`).join(' / ') || '无步骤快照'}</span><span className={snapshotChanged ? 'snapshot-drift is-stale' : 'snapshot-drift'}>{snapshotChanged ? `快照 ${item.caseVersion}，当前 ${currentCase?.version || 'v1'}` : `快照 ${item.caseVersion || 'v1'}`}</span></div>,
-          <StatusBadge value={item.status} dictionaryType="testRunStatus" />,
-          item.actualResult || '-',
-          item.executedAt ? new Date(item.executedAt).toLocaleString('zh-CN') : '-',
-          props.bugs.filter((bug) => item.bugIds.includes(bug.id)).map((bug) => bug.title).join('、') || '-',
-          <RunItemActions planId={props.plan.id} item={item} users={props.users} canWrite={props.canWrite} mutate={props.mutate} />
-        ];
+          return {
+            key: item.id,
+            onOpen: () => window.dispatchEvent(new CustomEvent('buggy:open-entity', { detail: { entityType: 'run_item', entityId: item.id } })),
+            openLabel: `打开执行项详情：${item.caseTitle}`,
+            cells: [
+              <input
+                type="checkbox"
+                aria-label={`选择 ${item.caseTitle}`}
+                checked={selectedRunItemIds.includes(item.id)}
+                onChange={(event) => setSelectedRunItemIds((current) => event.target.checked ? [...current, item.id] : current.filter((id) => id !== item.id))}
+              />,
+              <div className="cell-main"><strong>{item.caseTitle}</strong><span>{item.steps.map((step, index) => `${index + 1}. ${step.action}`).join(' / ') || '无步骤快照'}</span><span className={snapshotChanged ? 'snapshot-drift is-stale' : 'snapshot-drift'}>{snapshotChanged ? `快照 ${item.caseVersion}，当前 ${currentCase?.version || 'v1'}` : `快照 ${item.caseVersion || 'v1'}`}</span></div>,
+              <StatusBadge value={item.status} dictionaryType="testRunStatus" />,
+              item.actualResult || '-',
+              item.executedAt ? new Date(item.executedAt).toLocaleString('zh-CN') : '-',
+              props.bugs.filter((bug) => item.bugIds.includes(bug.id)).map((bug) => bug.title).join('、') || '-',
+              <RunItemActions planId={props.plan.id} item={item} users={props.users} canWrite={props.canWrite} mutate={props.mutate} />
+            ]
+          };
         })}
       />
       <Drawer title="编辑测试计划" subtitle={props.plan.name} open={editing} onClose={() => setEditing(false)}>
@@ -354,7 +374,7 @@ function RunItemActions(props: { planId: string; item: TestRunItem; users: UserP
       {props.canWrite && (['passed', 'failed', 'blocked'] as const).map((status) => (
         <Button key={status} type="button" size="sm" onClick={() => setQuickStatus(status)}>{labelOf(status)}</Button>
       ))}
-      {props.canWrite && <Button type="button" size="sm" onClick={() => setEditing(true)}><Pencil size={14} /> 记录</Button>}
+      <Button type="button" size="sm" onClick={() => setEditing(true)}><Pencil size={14} /> 详情</Button>
       {props.canWrite && <Button type="button" size="sm" onClick={() => setBugOpen(true)}><BugIcon size={14} /> 建缺陷</Button>}
       <Drawer title="从执行项创建缺陷" subtitle={props.item.caseTitle} open={bugOpen} onClose={() => setBugOpen(false)}>
         <HookForm
