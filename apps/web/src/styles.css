@@ -5292,12 +5292,24 @@ html {
   box-shadow: 0 1px 0 rgba(16, 24, 40, 0.03);
 }
 
+.topbar .workspace-tabs {
+  flex: 1 1 auto;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
 .workspace-tab-strip {
   display: flex;
   gap: 6px;
   overflow-x: auto;
   padding: 7px;
   scrollbar-width: thin;
+}
+
+.topbar .workspace-tab-strip {
+  padding: 0;
 }
 
 .workspace-tab {
@@ -5727,6 +5739,11 @@ button.entity-metric:focus-visible {
 
   .workspace-tabs {
     margin-top: 0;
+  }
+
+  .topbar .workspace-tabs {
+    grid-column: 1 / -1;
+    width: 100%;
   }
 
   .workspace-tab span {

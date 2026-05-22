@@ -558,11 +558,18 @@ export function App() {
       <DictionaryProvider dictionaries={data.dictionaries}>
       <section className="workspace">
         <header className="topbar">
-          <button type="button" className="global-search-trigger" aria-label="全局搜索" onClick={() => setGlobalSearchOpen(true)}>
-            <Search size={18} />
-            <span>全局搜索</span>
-          </button>
+          <WorkspaceTabBar
+            tabs={workspaceTabs}
+            activeId={activeWorkspaceTab?.id || activeWorkspaceTabId}
+            projects={projects}
+            onActivate={activateWorkspaceTab}
+            onClose={closeWorkspaceTab}
+          />
           <div className="top-actions">
+            <button type="button" className="global-search-trigger" aria-label="全局搜索" onClick={() => setGlobalSearchOpen(true)}>
+              <Search size={18} />
+              <span>全局搜索</span>
+            </button>
             <button
               type="button"
               className={unreadCount ? 'notification-chip has-unread' : 'notification-chip'}
@@ -583,14 +590,6 @@ export function App() {
             <span className="user-pill">{user.username} · {labelOf(workspaceRole)}</span>
           </div>
         </header>
-
-        <WorkspaceTabBar
-          tabs={workspaceTabs}
-          activeId={activeWorkspaceTab?.id || activeWorkspaceTabId}
-          projects={projects}
-          onActivate={activateWorkspaceTab}
-          onClose={closeWorkspaceTab}
-        />
 
         <section className="page-title">
           <div>

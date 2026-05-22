@@ -94,7 +94,7 @@ export function WorkspaceTabBar(props: {
                 <Icon size={14} />
                 <span>{tab.title}</span>
                 {tab.kind === 'entity' && <small>{entityTypeText(tab.entityType)}</small>}
-                {project && tab.module !== 'users' && <em>{project.code || project.name}</em>}
+                {project && tab.kind === 'entity' && <em>{project.code || project.name}</em>}
               </button>
               {tab.closable && props.tabs.length > 1 && (
                 <button type="button" className="workspace-tab-close" aria-label={`关闭 ${tab.title}`} onClick={() => props.onClose(tab.id)}>
