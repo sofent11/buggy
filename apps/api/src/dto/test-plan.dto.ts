@@ -73,9 +73,9 @@ export class BatchUpdateRunItemsDto {
   @IsIn(['untested', 'passed', 'failed', 'blocked', 'skipped'])
   status!: TestRunStatus;
 
+  @IsOptional()
   @IsString()
-  @MinLength(2)
-  actualResult!: string;
+  actualResult?: string;
 
   @IsOptional()
   @IsMongoId()

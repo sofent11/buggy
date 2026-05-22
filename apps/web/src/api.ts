@@ -141,7 +141,7 @@ export const api = {
   bugs: async (projectId: string, params?: ListParams) => itemsOf(await request<PageResult<Bug> | Bug[]>(`/bugs${queryString({ projectId, pageSize: 500, ...params })}`)),
   createBug: (body: Partial<Bug>) => request<Bug>('/bugs', { method: 'POST', body: JSON.stringify(body) }),
   updateBug: (id: string, body: Partial<Bug>) => request<Bug>(`/bugs/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
-  transitionBug: (id: string, body: { nextStatus: string; reason: string; assigneeId?: string; dueAt?: string; resolution?: string; verifyResult?: string }) =>
+  transitionBug: (id: string, body: { nextStatus: string; reason?: string; assigneeId?: string; dueAt?: string; resolution?: string; verifyResult?: string }) =>
     request<Bug>(`/bugs/${id}/transition`, { method: 'POST', body: JSON.stringify(body) }),
   addBugComment: (id: string, body: string) => request<Bug>(`/bugs/${id}/comments`, { method: 'POST', body: JSON.stringify({ body }) }),
   addBugAttachment: (id: string, attachment: { name: string; url: string; size?: number; mimeType?: string }) =>

@@ -157,7 +157,7 @@ export class TestPlanService {
     for (const item of row.runItems) {
       if (!targetIds.has(idOf(item._id))) continue;
       item.status = dto.status;
-      item.actualResult = dto.actualResult;
+      item.actualResult = dto.actualResult || '';
       item.executorId = new Types.ObjectId(dto.executorId || user.id);
       if (dto.status !== 'untested') item.executedAt = new Date();
       updated += 1;
@@ -170,7 +170,7 @@ export class TestPlanService {
       entityId: planId,
       action: 'status_changed',
       title: `批量记录执行结果：${row.name}`,
-      detail: `${updated} 个执行项 -> ${dto.status}：${dto.actualResult}`,
+      detail: `${updated} 个执行项 -> ${dto.status}${dto.actualResult ? `：${dto.actualResult}` : ''}`,
       actor: user
     });
     return { updated, plan: this.toDto(row) };

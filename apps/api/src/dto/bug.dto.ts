@@ -249,9 +249,9 @@ export class TransitionBugDto {
   @IsIn(['open', 'in_progress', 'resolved', 'verified', 'closed', 'reopened'])
   nextStatus!: BugStatus;
 
+  @IsOptional()
   @IsString()
-  @MinLength(2)
-  reason!: string;
+  reason?: string;
 
   @IsOptional()
   @IsMongoId()

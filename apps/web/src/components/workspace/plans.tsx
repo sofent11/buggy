@@ -271,7 +271,13 @@ export function PlanCard(props: { plan: TestPlan; iterations: Iteration[]; requi
         <span className="progress-pill">{executionProgress(props.plan.runItems)}</span>
         {props.canWrite && props.plan.runItems.length > 0 && (
           <>
-            <Button type="button" size="sm" onClick={() => setBatchStatus('passed')}>{selectedRunItemIds.length ? '所选通过' : '全部通过'}</Button>
+            <Button type="button" size="sm" onClick={() => {
+              void props.mutate(
+                () => api.batchUpdateRunItems(props.plan.id, { runItemIds: batchTargets, status: 'passed', actualResult: '' }),
+                selectedRunItemIds.length ? '所选执行项已通过' : '执行项已全部通过'
+              );
+              setSelectedRunItemIds([]);
+            }}>{selectedRunItemIds.length ? '所选通过' : '全部通过'}</Button>
             <Button type="button" size="sm" onClick={() => setBatchStatus('failed')}>{selectedRunItemIds.length ? '所选失败' : '全部失败'}</Button>
           </>
         )}
@@ -358,7 +364,6 @@ export function PlanCard(props: { plan: TestPlan; iterations: Iteration[]; requi
 function RunItemActions(props: { planId: string; item: TestRunItem; users: UserProfile[]; canWrite?: boolean; mutate: (action: () => Promise<unknown>, message: string) => Promise<void> }) {
   const [editing, setEditing] = useState(false);
   const [bugOpen, setBugOpen] = useState(false);
-  const [quickStatus, setQuickStatus] = useState<TestRunStatus | null>(null);
   const [stepResults, setStepResults] = useState(() => initialStepResults(props.item));
   useEffect(() => setStepResults(initialStepResults(props.item)), [props.item]);
   useEffect(() => {
@@ -371,9 +376,15 @@ function RunItemActions(props: { planId: string; item: TestRunItem; users: UserP
   }, [props.item.id]);
   return (
     <div className="row-actions">
-      {props.canWrite && (['passed', 'failed', 'blocked'] as const).map((status) => (
-        <Button key={status} type="button" size="sm" onClick={() => setQuickStatus(status)}>{labelOf(status)}</Button>
-      ))}
+      {props.canWrite && (
+        <RunStatusSelect
+          item={props.item}
+          onChange={async (status) => {
+            await props.mutate(() => api.updateRunItem(props.planId, props.item.id, { status, actualResult: props.item.actualResult || '' }), '执行结果已更新');
+            if ((status === 'failed' || status === 'blocked') && props.item.bugIds.length === 0) setBugOpen(true);
+          }}
+        />
+      )}
       <Button type="button" size="sm" onClick={() => setEditing(true)}><Pencil size={14} /> 详情</Button>
       {props.canWrite && <Button type="button" size="sm" onClick={() => setBugOpen(true)}><BugIcon size={14} /> 建缺陷</Button>}
       <Drawer title="从执行项创建缺陷" subtitle={props.item.caseTitle} open={bugOpen} onClose={() => setBugOpen(false)}>
@@ -468,23 +479,23 @@ function RunItemActions(props: { planId: string; item: TestRunItem; users: UserP
           )}
         </HookForm>
       </Drawer>
-      <TextConfirmDialog
-        open={Boolean(quickStatus)}
-        title={quickStatus ? `确认执行结果为「${labelOf(quickStatus)}」？` : '确认执行结果？'}
-        description={props.item.caseTitle}
-        label={quickStatus === 'failed' || quickStatus === 'blocked' ? '问题说明' : '验证说明'}
-        placeholder={quickStatus === 'failed' || quickStatus === 'blocked' ? '说明失败/阻塞现象、环境或依赖' : '说明通过依据、验证环境或数据范围'}
-        confirmText={quickStatus === 'failed' || quickStatus === 'blocked' ? (props.item.bugIds.length ? '确认记录' : '确认并补缺陷') : '确认记录'}
-        destructive={quickStatus === 'failed' || quickStatus === 'blocked'}
-        onCancel={() => setQuickStatus(null)}
-        onConfirm={async (note) => {
-          if (!quickStatus) return;
-          await props.mutate(() => api.updateRunItem(props.planId, props.item.id, { status: quickStatus, actualResult: note }), '执行结果已更新');
-          if ((quickStatus === 'failed' || quickStatus === 'blocked') && props.item.bugIds.length === 0) setBugOpen(true);
-          setQuickStatus(null);
-        }}
-      />
     </div>
+  );
+}
+
+function RunStatusSelect(props: { item: TestRunItem; onChange: (status: TestRunStatus) => Promise<void> | void }) {
+  return (
+    <select
+      className="inline-status-select"
+      value={props.item.status}
+      aria-label={`修改执行状态：${props.item.caseTitle}`}
+      onChange={(event) => {
+        const status = event.target.value as TestRunStatus;
+        if (status !== props.item.status) void props.onChange(status);
+      }}
+    >
+      {runStatuses.map((status) => <option key={status} value={status}>{labelOf(status)}</option>)}
+    </select>
   );
 }
 

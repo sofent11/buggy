@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Bug as BugIcon, CheckCircle2, Eye, GitMerge, MessageSquare, MoreHorizontal, Paperclip, Pencil, PlayCircle, Plus, RotateCcw, Save, Trash2, Upload, UploadCloud } from 'lucide-react';
+import { Bug as BugIcon, Eye, GitMerge, MessageSquare, MoreHorizontal, Paperclip, PlayCircle, Plus, Save, Trash2, Upload, UploadCloud } from 'lucide-react';
 import type { Bug, BugAttachment, BugStatus, PageResult, ProjectMember, Requirement, TestCase, TestPlan, UserProfile } from '@buggy/shared-types';
 import type { UseFormRegister } from 'react-hook-form';
 import { api } from '../../api.js';
@@ -11,7 +11,7 @@ import { labelOf } from '../../labels.js';
 import { bugStatuses, bugTeams, priorities, severities, triageStatuses } from '../../app/constants.js';
 import type { StringFormValues } from '../../app/types.js';
 import { bugPayload, matchKeyword, requirementTitle, shortDate, userName } from '../../app/workspace-utils.js';
-import { ColumnChooser, DataPage, DataTable, DangerButton, Drawer, EmptyState, FilterChips, HookForm, MetricCard, Pagination, registerField, SearchBox, Select, StatusBadge, TextConfirmDialog, Toolbar, RowMoreMenu } from './common.js';
+import { ColumnChooser, DataPage, DataTable, DangerButton, Drawer, EmptyState, FilterChips, HookForm, MetricCard, Pagination, registerField, SearchBox, Select, StatusBadge, Toolbar, RowMoreMenu } from './common.js';
 import { ExcelImportDrawer } from './excelImport.js';
 
 const bugColumns = [
@@ -65,7 +65,6 @@ export function BugSection(props: {
   const [visibleColumns, setVisibleColumns] = useState(defaultBugColumns);
   const [pageResult, setPageResult] = useState<PageResult<Bug>>({ total: props.rows.length, page: 1, pageSize, items: props.rows.slice(0, pageSize) });
   const [loadingPage, setLoadingPage] = useState(false);
-  const [transition, setTransition] = useState<{ bug: Bug; status: BugStatus; label: string } | null>(null);
   const [duplicate, setDuplicate] = useState<Bug | null>(null);
   const [creating, setCreating] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -234,13 +233,20 @@ export function BugSection(props: {
             sla: <SlaCell row={row} />,
             severity: <StatusBadge value={row.severity} dictionaryType="severity" />,
             priority: <StatusBadge value={row.priority} dictionaryType="priority" />,
-            status: <StatusBadge value={row.status} dictionaryType="bugStatus" />,
+            status: props.canWrite ? (
+              <BugStatusSelect
+                row={row}
+                onChange={(nextStatus) => props.mutate(
+                  () => api.transitionBug(row.id, { nextStatus }),
+                  `缺陷状态已改为${labelOf(nextStatus)}`
+                )}
+              />
+            ) : <StatusBadge value={row.status} dictionaryType="bugStatus" />,
             updatedAt: shortDate(row.updatedAt),
             actions: <BugRowActions
               row={row}
               canWrite={props.canWrite}
               canManage={props.canManage || (row.reporterId === props.currentUser.id && (props.canCreate || props.canWrite))}
-              onTransition={(action) => setTransition({ bug: row, status: action.status, label: action.label })}
               onEdit={() => openBug(row)}
               onDuplicate={() => setDuplicate(row)}
               onDelete={() => props.mutate(() => api.deleteBug(row.id), '缺陷已删除')}
@@ -303,26 +309,6 @@ export function BugSection(props: {
           if (!duplicate) return;
           await props.mutate(() => api.markDuplicateBug(duplicate.id, { duplicateOfId, reason }), '缺陷已标记为重复并关闭');
           setDuplicate(null);
-        }}
-      />
-      <TextConfirmDialog
-        open={Boolean(transition)}
-        title={transition ? `确认${transition.label}缺陷？` : '确认流转缺陷？'}
-        description={transition ? `${transition.bug.title} · ${labelOf(transition.bug.status)} -> ${labelOf(transition.status)}。${bugTransitionImpact(transition.status)}` : undefined}
-        label={transition?.status === 'resolved' ? '修复说明' : transition?.status === 'verified' ? '验证结论' : '流转原因'}
-        placeholder={transition?.status === 'resolved' ? '说明根因、修复版本和修复范围' : transition?.status === 'verified' ? '说明复测环境、数据和验证结论' : '填写处理说明或重开原因'}
-        confirmText={transition?.label || '确认'}
-        destructive={transition?.status === 'reopened'}
-        onCancel={() => setTransition(null)}
-        onConfirm={async (reason) => {
-          if (!transition) return;
-          await props.mutate(() => api.transitionBug(transition.bug.id, {
-            nextStatus: transition.status,
-            reason,
-            resolution: transition.status === 'resolved' ? reason : undefined,
-            verifyResult: ['verified', 'closed'].includes(transition.status) ? reason : undefined
-          }), '缺陷状态已流转');
-          setTransition(null);
         }}
       />
     </DataPage>
@@ -390,32 +376,35 @@ function BugRowActions(props: {
   row: Bug;
   canWrite?: boolean;
   canManage?: boolean;
-  onTransition: (action: ReturnType<typeof nextBugActions>[number]) => void;
   onEdit: () => void;
   onDuplicate: () => void;
   onDelete: () => void | Promise<void>;
 }) {
-  const actions = nextBugActions(props.row.status);
-  const primaryAction = props.canWrite ? actions[0] : undefined;
-  const secondaryActions = props.canWrite ? actions.slice(1) : [];
   return (
     <div className="row-actions compact-row-actions">
-      {primaryAction && (
-        <Button type="button" size="sm" onClick={() => props.onTransition(primaryAction)}>
-          <primaryAction.icon size={14} /> {primaryAction.label}
-        </Button>
-      )}
       <Button type="button" size="sm" onClick={props.onEdit}><Eye size={14} /> 详情</Button>
       <RowMoreMenu label={`更多操作：${props.row.title}`} trigger={<MoreHorizontal size={15} />}>
         {props.canWrite && <Button type="button" size="sm" onClick={props.onDuplicate}><GitMerge size={14} /> 标记重复</Button>}
-        {secondaryActions.map((action) => (
-          <Button key={action.status} type="button" size="sm" onClick={() => props.onTransition(action)}>
-            <action.icon size={14} /> {action.label}
-          </Button>
-        ))}
         {props.canManage && <DangerButton title={`删除缺陷「${props.row.title}」？`} onConfirm={() => { void props.onDelete(); }} />}
       </RowMoreMenu>
     </div>
+  );
+}
+
+function BugStatusSelect(props: { row: Bug; onChange: (status: BugStatus) => Promise<void> | void }) {
+  const values = [props.row.status, ...nextBugStatuses(props.row.status)].filter((value, index, rows) => rows.indexOf(value) === index);
+  return (
+    <select
+      className="inline-status-select"
+      value={props.row.status}
+      aria-label={`修改缺陷状态：${props.row.title}`}
+      onChange={(event) => {
+        const nextStatus = event.target.value as BugStatus;
+        if (nextStatus !== props.row.status) void props.onChange(nextStatus);
+      }}
+    >
+      {values.map((status) => <option key={status} value={status}>{labelOf(status)}</option>)}
+    </select>
   );
 }
 
@@ -885,22 +874,12 @@ function BugStatusTimeline(props: { row: Bug }) {
   );
 }
 
-function nextBugActions(status: BugStatus): Array<{ status: BugStatus; label: string; message: string; icon: typeof CheckCircle2 }> {
-  if (status === 'open' || status === 'reopened') return [{ status: 'in_progress', label: '处理', message: '缺陷已进入处理', icon: Pencil }];
-  if (status === 'in_progress') return [{ status: 'resolved', label: '解决', message: '缺陷已标记解决', icon: CheckCircle2 }];
-  if (status === 'resolved') return [
-    { status: 'verified', label: '验证', message: '缺陷已验证', icon: CheckCircle2 },
-    { status: 'reopened', label: '重开', message: '缺陷已重新打开', icon: RotateCcw }
-  ];
-  if (status === 'verified') return [{ status: 'closed', label: '关闭', message: '缺陷已关闭', icon: CheckCircle2 }];
+function nextBugStatuses(status: BugStatus): BugStatus[] {
+  if (status === 'open') return ['in_progress', 'reopened'];
+  if (status === 'in_progress') return ['resolved', 'reopened'];
+  if (status === 'resolved') return ['verified', 'reopened', 'in_progress'];
+  if (status === 'verified') return ['closed', 'reopened'];
+  if (status === 'closed') return ['reopened'];
+  if (status === 'reopened') return ['in_progress', 'resolved'];
   return [];
-}
-
-function bugTransitionImpact(status: BugStatus) {
-  if (status === 'in_progress') return '进入处理中后会继续计入活跃缺陷和验收风险。';
-  if (status === 'resolved') return '解决后会进入待复测队列，仍会提醒验证负责人。';
-  if (status === 'verified') return '验证后不再作为待复测项，但关闭前仍保留历史证据。';
-  if (status === 'closed') return '关闭后不再计入活跃缺陷和验收阻塞。';
-  if (status === 'reopened') return '重开后会重新计入活跃缺陷和质量风险。';
-  return '状态变更会记录到历史并通知相关成员。';
 }

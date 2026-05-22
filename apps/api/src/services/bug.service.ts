@@ -219,7 +219,7 @@ export class BugService {
   async transition(id: string, dto: TransitionBugDto, user: SessionUser): Promise<Bug> {
     const row = await this.bugs.findById(id).select('fixVersion foundVersion rootCause resolution');
     if (!row) throw new NotFoundException('Bug 不存在');
-    const reason = dto.reason.trim();
+    const reason = dto.reason?.trim() || defaultTransitionReason(dto.nextStatus);
     return this.update(
       id,
       {
@@ -630,4 +630,13 @@ function slaLevelOf(severity: Bug['severity']): SlaLevel {
   if (severity === 'S1') return 'high';
   if (severity === 'S3') return 'low';
   return 'normal';
+}
+
+function defaultTransitionReason(status: Bug['status']) {
+  if (status === 'in_progress') return '开始处理';
+  if (status === 'resolved') return '已解决';
+  if (status === 'verified') return '验证通过';
+  if (status === 'closed') return '已关闭';
+  if (status === 'reopened') return '重新打开';
+  return '状态更新';
 }

@@ -3180,6 +3180,25 @@ tbody tr:hover {
   align-items: center;
 }
 
+.inline-status-select {
+  min-width: 104px;
+  min-height: 30px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: white;
+  padding: 0 26px 0 10px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 30px;
+}
+
+.inline-status-select:focus {
+  border-color: var(--primary);
+  outline: 2px solid rgba(35, 93, 86, 0.16);
+  outline-offset: 1px;
+}
+
 .metric-action {
   min-height: 0;
   display: block;
