@@ -23,6 +23,7 @@ services:
       - PORT=3400
       - MONGO_URL=mongodb://mongo:27017/buggy
       - SESSION_SECRET=${SESSION_SECRET:-buggy-local-session-secret}
+      - UPLOAD_PROXY_URL=${UPLOAD_PROXY_URL:-https://www.cn2u.xyz/proxy-upload/gcp-image}
       - LARK_DAILY_CRON=${LARK_DAILY_CRON:-0 18 * * *}
       - TZ=Asia/Shanghai
     depends_on:

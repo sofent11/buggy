@@ -1,5 +1,5 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { BadGatewayException, Injectable, NotFoundException } from '@nestjs/common';
+import { readFile } from 'node:fs/promises';
 import { dirname, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
@@ -9,7 +9,17 @@ import type { SessionUser } from './auth.service.js';
 
 const moduleDir = dirname(fileURLToPath(import.meta.url));
 const uploadRoot = process.env.UPLOAD_DIR || join(moduleDir, '../../uploads');
-const uploadPublicBaseUrl = (process.env.UPLOAD_PUBLIC_BASE_URL || 'https://cdn.alvinclub.com/decom/pub').replace(/\/+$/, '');
+const uploadProxyUrl = process.env.UPLOAD_PROXY_URL || 'https://www.cn2u.xyz/proxy-upload/gcp-image';
+const uploadCdnBaseUrl = (process.env.UPLOAD_CDN_BASE_URL || 'https://cdn.alvinclub.com').replace(/\/+$/, '');
+
+type UploadProxyResponse = {
+  code?: number;
+  data?: {
+    url?: string;
+    fullUrl?: string;
+  };
+  message?: string;
+};
 
 @Injectable()
 export class UploadService {
@@ -17,19 +27,16 @@ export class UploadService {
     const buffer = await file.toBuffer();
     const id = randomUUID();
     const name = safeName(file.filename || `attachment${extensionOf(file.mimetype)}`);
+    const mimeType = file.mimetype || 'application/octet-stream';
+    const uploaded = await uploadToProxy(buffer, name, mimeType);
     const uploadedAt = new Date();
-    const datePath = datePathOf(uploadedAt);
-    const objectName = `${id.replace(/-/g, '')}${extname(name) || extensionOf(file.mimetype)}`;
-    const dir = join(uploadRoot, datePath);
-    await mkdir(dir, { recursive: true });
-    await writeFile(join(dir, objectName), buffer);
     return {
       id,
       projectId,
       name,
-      url: `${uploadPublicBaseUrl}/${datePath}/${encodeURIComponent(objectName)}`,
+      url: uploaded.fullUrl || toCdnUrl(uploaded.url),
       size: buffer.byteLength,
-      mimeType: file.mimetype || 'application/octet-stream',
+      mimeType,
       createdAt: uploadedAt.toISOString()
     };
   }
@@ -82,9 +89,31 @@ function extensionOf(mimeType = '') {
   return extensions[mimeType.toLowerCase()] || '';
 }
 
-function datePathOf(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+async function uploadToProxy(buffer: Buffer, name: string, mimeType: string) {
+  const bytes = new Uint8Array(buffer.byteLength);
+  bytes.set(buffer);
+  const formData = new FormData();
+  formData.append('file', new Blob([bytes], { type: mimeType }), name);
+  formData.append('staticPath', 'false');
+
+  const response = await fetch(uploadProxyUrl, {
+    method: 'POST',
+    body: formData
+  });
+  const payload = (await response.json().catch(() => null)) as UploadProxyResponse | null;
+  if (!response.ok || !payload || payload.code !== 0 || !payload.data?.url) {
+    throw new BadGatewayException(payload?.message || '附件上传到对象存储失败');
+  }
+  return payload.data;
+}
+
+function toCdnUrl(url?: string) {
+  if (!url) return '';
+  if (/^https?:\/\//i.test(url)) {
+    return url
+      .split('?')[0]
+      .replace('decom-cdn.s3.us-east-1.amazonaws.com', 'cdn.alvinclub.com')
+      .replace('storage.googleapis.com/decom-cdn', 'cdn.alvinclub.com');
+  }
+  return `${uploadCdnBaseUrl}/${url.replace(/^\/+/, '')}`;
 }
