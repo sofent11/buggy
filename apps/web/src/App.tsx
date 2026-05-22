@@ -1,4 +1,4 @@
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import {
   Activity,
@@ -7,14 +7,12 @@ import {
   Bug as BugIcon,
   CalendarRange,
   ClipboardCheck,
-  Clock3,
   FileText,
   Flag,
   FolderKanban,
   HelpCircle,
   KeyRound,
   LogOut,
-  RefreshCw,
   Search,
   Settings,
   ShieldCheck,
@@ -27,8 +25,8 @@ import { Field, FieldLabel } from './components/ui/form.js';
 import { Input } from './components/ui/input.js';
 import { Textarea } from './components/ui/textarea.js';
 import { emptyData, LOGGED_OUT_KEY } from './app/constants.js';
-import type { AuthFormValues, MutationOptions, Tab, TabFilters, WorkspaceData } from './app/types.js';
-import { filterWorkspaceData, pageInfo } from './app/workspace-utils.js';
+import type { AuthFormValues, EntityWorkspaceTab, ModuleWorkspaceTab, MutationOptions, Tab, TabFilters, WorkspaceData, WorkspaceEntityType, WorkspaceTab } from './app/types.js';
+import { pageInfo } from './app/workspace-utils.js';
 import { labelOf } from './labels.js';
 import { DataTable, Drawer, NavButton, StatusBadge } from './components/workspace/common.js';
 import { DictionaryProvider } from './components/workspace/dictionary.js';
@@ -36,9 +34,11 @@ import { HelpCenter } from './components/workspace/help.js';
 import { QualityCommandCenter, QualityWorkflowNavigator, TraceabilityMatrix } from './components/workspace/overview.js';
 import { BugSection, CaseSection, IterationSection, PlanSection, ProjectSection, RequirementSection, SettingsSection, UserManagementSection } from './components/workspace/sections.js';
 import { ReportSection } from './components/workspace/reports.js';
+import { EntityWorkspacePane, GlobalSearchDialog, WorkspaceTabBar, moduleTabTitle } from './components/workspace/workspaceTabs.js';
 
 const LAST_PROJECT_KEY = 'buggy_last_project_id';
 const RECENT_PROJECTS_KEY = 'buggy_recent_project_ids';
+const WORKSPACE_TABS_KEY_PREFIX = 'buggy_workspace_tabs';
 const SAVED_VIEW_TABS: Tab[] = ['requirements', 'cases', 'plans', 'bugs'];
 const TAB_ROUTE_SEGMENTS: Record<Tab, string> = {
   overview: 'overview',
@@ -72,7 +72,10 @@ export function App() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [currentProjectId, setCurrentProjectId] = useState('');
   const [tab, setTab] = useState<Tab>(() => tabFromLocation(window.location));
+  const [workspaceTabs, setWorkspaceTabs] = useState<WorkspaceTab[]>([]);
+  const [activeWorkspaceTabId, setActiveWorkspaceTabId] = useState('');
   const [globalKeyword, setGlobalKeyword] = useState('');
+  const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
   const [data, setData] = useState<WorkspaceData>(emptyData);
   const [workspaceIssues, setWorkspaceIssues] = useState<WorkspaceLoadIssue[]>([]);
   const [notice, setNotice] = useState('');
@@ -88,11 +91,17 @@ export function App() {
   const [appliedUrlViewKey, setAppliedUrlViewKey] = useState('');
   const [appliedDefaultViewKeys, setAppliedDefaultViewKeys] = useState<string[]>([]);
   const [tabFilters, setTabFilters] = useState<TabFilters>({});
+  const restoredWorkspaceKeyRef = useRef('');
   const currentProject = useMemo(
     () => projects.find((project) => project.id === currentProjectId),
     [currentProjectId, projects]
   );
-  const deferredGlobalKeyword = useDeferredValue(globalKeyword);
+  const activeWorkspaceTab = useMemo(
+    () => workspaceTabs.find((item) => item.id === activeWorkspaceTabId) || workspaceTabs[0],
+    [activeWorkspaceTabId, workspaceTabs]
+  );
+  const activeModule = activeWorkspaceTab?.module || tab;
+  const isEntityWorkspace = activeWorkspaceTab?.kind === 'entity';
 
   useEffect(() => {
     userRef.current = user;
@@ -255,18 +264,87 @@ export function App() {
     if (options?.scroll !== false) window.setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 0);
   }, []);
 
+  const activateWorkspaceTab = useCallback((workspaceTabId: string) => {
+    const target = workspaceTabs.find((item) => item.id === workspaceTabId);
+    if (!target) return;
+    setActiveWorkspaceTabId(target.id);
+    if (target.projectId && target.projectId !== currentProjectId) selectProject(target.projectId);
+    navigateToTab(target.module);
+  }, [currentProjectId, navigateToTab, selectProject, workspaceTabs]);
+
+  const openWorkspaceTab = useCallback((nextTab: WorkspaceTab, options?: TabRouteOptions) => {
+    setWorkspaceTabs((current) => {
+      const existing = current.find((item) => item.id === nextTab.id);
+      if (existing) return current.map((item) => item.id === nextTab.id ? { ...item, title: nextTab.title } : item);
+      return [...current, nextTab];
+    });
+    setActiveWorkspaceTabId(nextTab.id);
+    if (nextTab.projectId && nextTab.projectId !== currentProjectId) selectProject(nextTab.projectId);
+    navigateToTab(nextTab.module, options);
+  }, [currentProjectId, navigateToTab, selectProject]);
+
+  const openModuleTab = useCallback((nextTab: Tab, projectId = currentProjectId, options?: TabRouteOptions) => {
+    const scopedProjectId = nextTab === 'users' ? undefined : projectId;
+    openWorkspaceTab(createModuleWorkspaceTab(nextTab, scopedProjectId), options);
+  }, [currentProjectId, openWorkspaceTab]);
+
   const changeTab = useCallback((nextTab: Tab) => {
-    navigateToTab(nextTab);
-  }, [navigateToTab]);
+    openModuleTab(nextTab);
+  }, [openModuleTab]);
+
+  const closeWorkspaceTab = useCallback((workspaceTabId: string) => {
+    const index = workspaceTabs.findIndex((item) => item.id === workspaceTabId);
+    if (index < 0) return;
+    const nextTabs = workspaceTabs.filter((item) => item.id !== workspaceTabId);
+    if (nextTabs.length === 0) return;
+    setWorkspaceTabs(nextTabs);
+    if (workspaceTabId === activeWorkspaceTabId) {
+      const nextActive = nextTabs[Math.min(index, nextTabs.length - 1)];
+      setActiveWorkspaceTabId(nextActive.id);
+      if (nextActive.projectId && nextActive.projectId !== currentProjectId) selectProject(nextActive.projectId);
+      navigateToTab(nextActive.module);
+    }
+  }, [activeWorkspaceTabId, currentProjectId, navigateToTab, selectProject, workspaceTabs]);
 
   useEffect(() => {
     const handlePopState = () => {
-      setTab(tabFromLocation(window.location));
+      const nextTab = tabFromLocation(window.location);
+      openModuleTab(nextTab, currentProjectId, { replace: true });
       window.setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 0);
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
+  }, [currentProjectId, openModuleTab]);
+
+  useEffect(() => {
+    if (!user) {
+      setWorkspaceTabs([]);
+      setActiveWorkspaceTabId('');
+      restoredWorkspaceKeyRef.current = '';
+      return;
+    }
+    if (projects.length === 0 && !currentProjectId) return;
+    const storageKey = workspaceTabsStorageKey(user.id);
+    if (restoredWorkspaceKeyRef.current === storageKey) return;
+    restoredWorkspaceKeyRef.current = storageKey;
+    const restored = readWorkspaceTabs(storageKey, projects);
+    if (restored.tabs.length > 0) {
+      setWorkspaceTabs(restored.tabs);
+      setActiveWorkspaceTabId(restored.activeId || restored.tabs[0].id);
+      const active = restored.tabs.find((item) => item.id === restored.activeId) || restored.tabs[0];
+      if (active.projectId) selectProject(active.projectId);
+      navigateToTab(active.module, { replace: true, scroll: false });
+      return;
+    }
+    const seed = createModuleWorkspaceTab(tabFromLocation(window.location), currentProjectId || undefined);
+    setWorkspaceTabs([seed]);
+    setActiveWorkspaceTabId(seed.id);
+  }, [currentProjectId, navigateToTab, projects, selectProject, user]);
+
+  useEffect(() => {
+    if (!user || workspaceTabs.length === 0) return;
+    localStorage.setItem(workspaceTabsStorageKey(user.id), JSON.stringify({ tabs: workspaceTabs, activeId: activeWorkspaceTabId }));
+  }, [activeWorkspaceTabId, user, workspaceTabs]);
 
   useEffect(() => {
     if (localStorage.getItem(LOGGED_OUT_KEY) === '1') {
@@ -289,13 +367,13 @@ export function App() {
 
   useEffect(() => {
     const permission = user?.systemPermission || user?.role;
-    if (tab === 'users' && permission !== 'admin' && permission !== 'maintainer') navigateToTab('overview', { replace: true });
-  }, [navigateToTab, tab, user?.role, user?.systemPermission]);
+    if (activeModule === 'users' && permission !== 'admin' && permission !== 'maintainer') openModuleTab('overview', currentProjectId, { replace: true });
+  }, [activeModule, currentProjectId, openModuleTab, user?.role, user?.systemPermission]);
 
   useEffect(() => {
     const permission = user?.systemPermission || user?.role;
-    if (tab === 'users' && (permission === 'admin' || permission === 'maintainer')) void loadUsers();
-  }, [loadUsers, tab, user?.role, user?.systemPermission]);
+    if (activeModule === 'users' && (permission === 'admin' || permission === 'maintainer')) void loadUsers();
+  }, [activeModule, loadUsers, user?.role, user?.systemPermission]);
 
   useEffect(() => {
     if (!notice) return;
@@ -316,14 +394,13 @@ export function App() {
   const applySavedView = useCallback((view: SavedView, options?: { updateUrl?: boolean; replace?: boolean }) => {
     const filters = view.filters || {};
     const nextTab = view.tab as Tab;
-    if (typeof filters.globalKeyword === 'string') setGlobalKeyword(filters.globalKeyword);
-    if (options?.updateUrl) navigateToTab(nextTab, { replace: options.replace, viewKey: view.id, scroll: false });
-    else setTab(nextTab);
+    if (options?.updateUrl) openModuleTab(nextTab, currentProjectId, { replace: options.replace, viewKey: view.id, scroll: false });
+    else openModuleTab(nextTab, currentProjectId, { scroll: false });
     setTabFilters((current) => ({ ...current, [nextTab]: filters }));
     window.setTimeout(() => {
       window.dispatchEvent(new CustomEvent('buggy:apply-view', { detail: { tab: view.tab, filters } }));
     }, 0);
-  }, [navigateToTab]);
+  }, [currentProjectId, openModuleTab]);
 
   useEffect(() => {
     const viewKey = new URL(window.location.href).searchParams.get('view');
@@ -337,17 +414,17 @@ export function App() {
 
   useEffect(() => {
     const hasUrlView = Boolean(new URL(window.location.href).searchParams.get('view'));
-    if (hasUrlView || !isSavedViewSupported(tab) || !currentProject || data.savedViews.length === 0) return;
-    const view = data.savedViews.find((item) => item.tab === tab && item.isDefault);
+    if (hasUrlView || isEntityWorkspace || !isSavedViewSupported(activeModule) || !currentProject || data.savedViews.length === 0) return;
+    const view = data.savedViews.find((item) => item.tab === activeModule && item.isDefault);
     if (!view) return;
     const key = `${currentProject.id}:${view.id}`;
     if (appliedDefaultViewKeys.includes(key)) return;
     setAppliedDefaultViewKeys((current) => [...current, key]);
     applySavedView(view);
-  }, [appliedDefaultViewKeys, applySavedView, currentProject, data.savedViews, tab]);
+  }, [activeModule, appliedDefaultViewKeys, applySavedView, currentProject, data.savedViews, isEntityWorkspace]);
 
-  const visibleData = useMemo(() => filterWorkspaceData(data, deferredGlobalKeyword), [data, deferredGlobalKeyword]);
-  const page = pageInfo(tab);
+  const visibleData = data;
+  const page = pageInfo(activeModule);
   const systemPermission = user?.systemPermission || user?.role;
   const currentMember = currentProject?.members.find((member) => member.userId === user?.id);
   const isCurrentProjectOwner = Boolean(currentProject && user && currentProject.ownerId === user.id);
@@ -377,12 +454,29 @@ export function App() {
   const newBugCount = data.bugs.filter((item) => item.isNewForCurrentUser).length;
   const openEntity = useCallback((entityType: string, entityId?: string) => {
     const nextTab = tabOfEntity(entityType);
-    if (nextTab) changeTab(nextTab);
-    if (!entityId) return;
-    window.setTimeout(() => {
-      window.dispatchEvent(new CustomEvent('buggy:open-entity', { detail: { entityType, entityId } }));
-    }, 80);
-  }, [changeTab]);
+    if (!nextTab) return;
+    if (!entityId) {
+      openModuleTab(nextTab);
+      return;
+    }
+    const projectId = resolveEntityProjectId(entityType, entityId, data, currentProjectId);
+    if (!isDetailWorkspaceEntity(entityType)) {
+      openModuleTab(nextTab, projectId);
+      return;
+    }
+    openWorkspaceTab(createEntityWorkspaceTab(entityType, entityId, nextTab, projectId, data, projects));
+  }, [currentProjectId, data, openModuleTab, openWorkspaceTab, projects]);
+
+  useEffect(() => {
+    const handleOpenEntity = (event: Event) => {
+      const detail = (event as CustomEvent<{ entityType?: string; entityId?: string }>).detail;
+      if (!detail?.entityType) return;
+      event.stopImmediatePropagation();
+      openEntity(detail.entityType, detail.entityId);
+    };
+    window.addEventListener('buggy:open-entity', handleOpenEntity, { capture: true });
+    return () => window.removeEventListener('buggy:open-entity', handleOpenEntity, { capture: true });
+  }, [openEntity]);
 
   if (loading) return <div className="boot">正在启动 Buggy...</div>;
 
@@ -438,17 +532,18 @@ export function App() {
             <span>质量管理系统</span>
           </div>
         </div>
+        <ProjectSwitcher projects={projects} currentProjectId={currentProjectId} currentUser={user} onSelect={(projectId) => openModuleTab('overview', projectId)} />
         <nav>
-          <NavButton tab="overview" current={tab} icon={BarChart3} index={1} label="工作台" onClick={changeTab} />
-          <NavButton tab="projects" current={tab} icon={FolderKanban} index={2} label="项目" onClick={changeTab} />
-          <NavButton tab="iterations" current={tab} icon={CalendarRange} index={3} label="迭代" onClick={changeTab} />
-          <NavButton tab="requirements" current={tab} icon={Flag} index={4} label="需求" onClick={changeTab} />
-          <NavButton tab="cases" current={tab} icon={ClipboardCheck} index={5} label="用例库" onClick={changeTab} />
-          <NavButton tab="plans" current={tab} icon={Activity} index={6} label="测试执行" onClick={changeTab} />
-          <NavButton tab="bugs" current={tab} icon={BugIcon} index={7} label="缺陷" count={newBugCount} onClick={changeTab} />
-          <NavButton tab="reports" current={tab} icon={FileText} index={8} label="报表" onClick={changeTab} />
-          {canUseUserAdmin && <NavButton tab="users" current={tab} icon={Users} index={9} label="用户管理" onClick={changeTab} />}
-          <NavButton tab="settings" current={tab} icon={Settings} index={canUseUserAdmin ? 10 : 9} label="配置" onClick={changeTab} />
+          <NavButton tab="overview" current={activeModule} icon={BarChart3} index={1} label="工作台" onClick={changeTab} />
+          <NavButton tab="projects" current={activeModule} icon={FolderKanban} index={2} label="项目" onClick={changeTab} />
+          <NavButton tab="iterations" current={activeModule} icon={CalendarRange} index={3} label="迭代" onClick={changeTab} />
+          <NavButton tab="requirements" current={activeModule} icon={Flag} index={4} label="需求" onClick={changeTab} />
+          <NavButton tab="cases" current={activeModule} icon={ClipboardCheck} index={5} label="用例库" onClick={changeTab} />
+          <NavButton tab="plans" current={activeModule} icon={Activity} index={6} label="测试执行" onClick={changeTab} />
+          <NavButton tab="bugs" current={activeModule} icon={BugIcon} index={7} label="缺陷" count={newBugCount} onClick={changeTab} />
+          <NavButton tab="reports" current={activeModule} icon={FileText} index={8} label="报表" onClick={changeTab} />
+          {canUseUserAdmin && <NavButton tab="users" current={activeModule} icon={Users} index={9} label="用户管理" onClick={changeTab} />}
+          <NavButton tab="settings" current={activeModule} icon={Settings} index={canUseUserAdmin ? 10 : 9} label="配置" onClick={changeTab} />
         </nav>
         <div className="sidebar-footer">
           <button type="button" className="ghost" onClick={() => setHelpOpen(true)}>
@@ -463,23 +558,11 @@ export function App() {
       <DictionaryProvider dictionaries={data.dictionaries}>
       <section className="workspace">
         <header className="topbar">
-          <label className="global-search" aria-label="全局搜索">
-            <Search size={20} />
-            <input
-              value={globalKeyword}
-              onChange={(event) => setGlobalKeyword(event.target.value)}
-              placeholder="全局搜索需求、用例、缺陷、项目..."
-            />
-          </label>
+          <button type="button" className="global-search-trigger" aria-label="全局搜索" onClick={() => setGlobalSearchOpen(true)}>
+            <Search size={18} />
+            <span>全局搜索</span>
+          </button>
           <div className="top-actions">
-            <ProjectSwitcher projects={projects} currentProjectId={currentProjectId} currentUser={user} onSelect={selectProject} />
-            <button className="refresh-button" title="刷新当前数据" onClick={() => tab === 'users' ? loadUsers() : loadWorkspace()} disabled={busy || (!currentProjectId && tab !== 'users')}>
-              <RefreshCw size={17} />
-              <span>{busy ? '同步中' : '刷新'}</span>
-            </button>
-            <span className={busy ? 'sync-status is-busy' : 'sync-status'}>
-              <Clock3 size={15} /> {busy ? '正在更新数据' : '数据已就绪'}
-            </span>
             <button
               type="button"
               className={unreadCount ? 'notification-chip has-unread' : 'notification-chip'}
@@ -501,13 +584,21 @@ export function App() {
           </div>
         </header>
 
+        <WorkspaceTabBar
+          tabs={workspaceTabs}
+          activeId={activeWorkspaceTab?.id || activeWorkspaceTabId}
+          projects={projects}
+          onActivate={activateWorkspaceTab}
+          onClose={closeWorkspaceTab}
+        />
+
         <section className="page-title">
           <div>
             <p className="eyebrow">{currentProject?.code || 'Buggy'}</p>
-            <h1>{page.title}</h1>
+            <h1>{isEntityWorkspace ? activeWorkspaceTab?.title || page.title : page.title}</h1>
             <p>{page.description(currentProject?.name || '当前项目')}</p>
           </div>
-          {currentProject && isSavedViewSupported(tab) && (
+          {currentProject && !isEntityWorkspace && isSavedViewSupported(activeModule) && (
             <div className="saved-view-tools">
               <select
                 aria-label="常用筛选"
@@ -518,7 +609,7 @@ export function App() {
                 }}
               >
                 <option value="">常用筛选</option>
-                {data.savedViews.filter((item) => item.tab === tab).map((view) => <option key={view.id} value={view.id}>{view.isDefault ? '默认 · ' : ''}{view.name}{view.visibility === 'project' ? ' · 团队' : ' · 我的'}</option>)}
+                {data.savedViews.filter((item) => item.tab === activeModule).map((view) => <option key={view.id} value={view.id}>{view.isDefault ? '默认 · ' : ''}{view.name}{view.visibility === 'project' ? ' · 团队' : ' · 我的'}</option>)}
               </select>
               <Button type="button" onClick={() => setSavedViewOpen(true)}>
                 管理常用筛选
@@ -527,7 +618,7 @@ export function App() {
           )}
         </section>
 
-        <section className={tab === 'overview' ? 'workspace-context' : 'workspace-context compact-context'} aria-label="当前工作区">
+        <section className={activeModule === 'overview' && !isEntityWorkspace ? 'workspace-context' : 'workspace-context compact-context'} aria-label="当前工作区">
           <div className="context-primary">
             <span>当前项目</span>
             <strong>{currentProject?.name || '尚未选择项目'}</strong>
@@ -560,32 +651,38 @@ export function App() {
           </section>
         )}
 
-        {globalKeyword && (
-          <section className="active-filter-bar" aria-label="当前全局筛选">
-            <span>全局条件</span>
-            <strong>{globalKeyword}</strong>
-            <button type="button" onClick={() => setGlobalKeyword('')}>清除</button>
-          </section>
-        )}
-
         {notice && <div className={isBlockingNotice(notice) ? 'notice notice-warning' : 'notice'}>{notice}</div>}
 
-        {tab === 'users' ? (
+        {isEntityWorkspace && activeWorkspaceTab?.kind === 'entity' ? (
+          <EntityWorkspacePane
+            key={activeWorkspaceTab.id}
+            tab={activeWorkspaceTab as EntityWorkspaceTab}
+            data={data}
+            projects={projects}
+            users={data.users}
+            canWriteProject={canWriteProject}
+            canManageProject={canManageProject}
+            canExecute={canExecute}
+            canEditBug={canEditBug}
+            mutate={mutate}
+            onOpenEntity={openEntity}
+          />
+        ) : activeModule === 'users' ? (
           <UserManagementSection currentUser={user} users={data.users} onRefresh={loadUsers} onNotice={setNotice} />
-        ) : !currentProject && tab !== 'projects' ? (
+        ) : !currentProject && activeModule !== 'projects' ? (
           <ProjectSection
             user={user}
             projects={projects}
-            searchKeyword={globalKeyword}
+            searchKeyword=""
             currentProjectId={currentProjectId}
             users={data.users}
-            onSelect={selectProject}
+            onSelect={(projectId) => openModuleTab('overview', projectId)}
             onNotice={setNotice}
             mutate={mutate}
           />
         ) : (
           <>
-            {tab === 'overview' && currentProject && (
+            {activeModule === 'overview' && currentProject && (
               <section className="grid role-dashboard-grid">
                 <QualityCommandCenter data={data} user={user} role={workspaceRole} onJump={changeTab} onOpenEntity={openEntity} />
                 <QualityWorkflowNavigator data={data} onJump={changeTab} />
@@ -604,19 +701,19 @@ export function App() {
                 </section>
               </section>
             )}
-            {tab === 'projects' && (
+            {activeModule === 'projects' && (
               <ProjectSection
                 user={user}
                 projects={projects}
-                searchKeyword={globalKeyword}
+                searchKeyword=""
                 currentProjectId={currentProjectId}
                 users={data.users}
-                onSelect={selectProject}
+                onSelect={(projectId) => openModuleTab('overview', projectId)}
                 onNotice={setNotice}
                 mutate={mutate}
               />
             )}
-            {tab === 'iterations' && currentProject && (
+            {activeModule === 'iterations' && currentProject && (
               <IterationSection
                 projectId={currentProject.id}
                 rows={visibleData.iterations}
@@ -629,7 +726,7 @@ export function App() {
                 mutate={mutate}
               />
             )}
-            {tab === 'requirements' && currentProject && (
+            {activeModule === 'requirements' && currentProject && (
               <RequirementSection
                 projectId={currentProject.id}
                 iterations={data.iterations}
@@ -644,7 +741,7 @@ export function App() {
                 onNotice={setNotice}
               />
             )}
-            {tab === 'cases' && currentProject && (
+            {activeModule === 'cases' && currentProject && (
               <CaseSection
                 projectId={currentProject.id}
                 requirements={data.requirements}
@@ -652,7 +749,7 @@ export function App() {
                 plans={data.plans}
                 bugs={data.bugs}
                 rows={data.cases}
-                globalKeyword={deferredGlobalKeyword}
+                globalKeyword=""
                 canWrite={canWriteProject}
                 canManage={canManageProject}
                 mutate={mutate}
@@ -660,7 +757,7 @@ export function App() {
                 onNotice={setNotice}
               />
             )}
-            {tab === 'plans' && currentProject && (
+            {activeModule === 'plans' && currentProject && (
               <PlanSection
                 projectId={currentProject.id}
                 requirements={data.requirements}
@@ -670,7 +767,7 @@ export function App() {
                 bugs={data.bugs}
                 users={data.users}
                 currentUser={user}
-                globalKeyword={deferredGlobalKeyword}
+                globalKeyword=""
                 canWrite={canExecute}
                 canManage={canManageProject}
                 mutate={mutate}
@@ -678,7 +775,7 @@ export function App() {
                 onOpenEntity={openEntity}
               />
             )}
-            {tab === 'bugs' && currentProject && (
+            {activeModule === 'bugs' && currentProject && (
               <BugSection
                 projectId={currentProject.id}
                 requirements={data.requirements}
@@ -688,7 +785,7 @@ export function App() {
                 currentUser={user}
                 projectMembers={currentProject.members}
                 rows={data.bugs}
-                globalKeyword={deferredGlobalKeyword}
+                globalKeyword=""
                 canCreate={canCreateBug}
                 canWrite={canEditBug}
                 canManage={canDeleteBug}
@@ -699,7 +796,7 @@ export function App() {
                 onOpenEntity={openEntity}
               />
             )}
-            {tab === 'reports' && currentProject && (
+            {activeModule === 'reports' && currentProject && (
               <ReportSection
                 projectId={currentProject.id}
                 currentProject={currentProject}
@@ -715,7 +812,7 @@ export function App() {
                 onOpenEntity={openEntity}
               />
             )}
-            {tab === 'settings' && currentProject && (
+            {activeModule === 'settings' && currentProject && (
               <SettingsSection
                 projectId={currentProject.id}
                 currentProject={currentProject}
@@ -748,15 +845,23 @@ export function App() {
         onMarkAllRead={() => mutate(() => api.markAllNotificationsRead(), '通知已全部标记已读')}
         onOpenNotification={(notification) => {
           if (notification.status === 'unread') void mutate(() => api.markNotificationRead(notification.id), '通知已标记已读');
-          const nextTab = tabOfNotification(notification);
-          if (nextTab) {
-            changeTab(nextTab);
-            setNotificationOpen(false);
-            window.setTimeout(() => {
-              window.dispatchEvent(new CustomEvent('buggy:open-entity', { detail: { entityType: notification.entityType, entityId: notification.entityId } }));
-            }, 80);
+          if (notification.entityType) openEntity(notification.entityType, notification.entityId);
+          else {
+            const nextTab = tabOfNotification(notification);
+            if (nextTab) changeTab(nextTab);
           }
+          setNotificationOpen(false);
         }}
+      />
+      <GlobalSearchDialog
+        open={globalSearchOpen}
+        query={globalKeyword}
+        data={data}
+        projects={projects}
+        onQueryChange={setGlobalKeyword}
+        onClose={() => setGlobalSearchOpen(false)}
+        onOpenModule={(module, projectId) => openModuleTab(module, projectId || currentProjectId)}
+        onOpenEntity={openEntity}
       />
       <Drawer title="修改密码" subtitle="验证当前密码后更新登录密码" open={passwordOpen} onClose={() => {
         setPasswordOpen(false);
@@ -786,21 +891,21 @@ export function App() {
           </div>
         </form>
       </Drawer>
-      {currentProject && isSavedViewSupported(tab) && (
+      {currentProject && !isEntityWorkspace && isSavedViewSupported(activeModule) && (
         <SavedViewDialog
           open={savedViewOpen}
-          tab={tab}
+          tab={activeModule}
           defaultName={`${page.title}常用筛选`}
-          views={data.savedViews.filter((item) => item.tab === tab)}
-          filterSummary={describeSavedViewFilters(tabFilters[tab] || {}, globalKeyword)}
+          views={data.savedViews.filter((item) => item.tab === activeModule)}
+          filterSummary={describeSavedViewFilters(tabFilters[activeModule] || {}, '')}
           onClose={() => setSavedViewOpen(false)}
           onDelete={(id) => mutate(() => api.deleteSavedView(id), '常用筛选已删除')}
           onSave={(name, options) => mutate(
             () => api.upsertSavedView({
               projectId: currentProject.id,
-              tab,
+              tab: activeModule,
               name,
-              filters: { ...(tabFilters[tab] || {}), globalKeyword },
+              filters: { ...(tabFilters[activeModule] || {}) },
               visibility: options.visibility,
               isDefault: options.isDefault
             }),
@@ -858,6 +963,90 @@ function normalizedViteBase() {
 function joinRoutePath(base: string, segment: string) {
   const normalizedBase = base.replace(/\/+$/g, '');
   return `${normalizedBase}/${segment}`;
+}
+
+function workspaceTabsStorageKey(userId: string) {
+  return `${WORKSPACE_TABS_KEY_PREFIX}:${userId}`;
+}
+
+function createModuleWorkspaceTab(module: Tab, projectId?: string): ModuleWorkspaceTab {
+  return {
+    kind: 'module',
+    id: moduleWorkspaceTabId(module, projectId),
+    projectId,
+    module,
+    title: moduleTabTitle(module),
+    closable: true
+  };
+}
+
+function createEntityWorkspaceTab(entityType: WorkspaceEntityType, entityId: string, module: Tab, projectId: string | undefined, data: WorkspaceData, projects: Project[]): EntityWorkspaceTab {
+  return {
+    kind: 'entity',
+    id: entityWorkspaceTabId(projectId, entityType, entityId),
+    projectId,
+    entityType,
+    entityId,
+    module,
+    title: entityWorkspaceTitle(entityType, entityId, data, projects),
+    closable: true
+  };
+}
+
+function moduleWorkspaceTabId(module: Tab, projectId?: string) {
+  return `module:${projectId || 'global'}:${module}`;
+}
+
+function entityWorkspaceTabId(projectId: string | undefined, entityType: string, entityId: string) {
+  return `entity:${projectId || 'global'}:${entityType}:${entityId}`;
+}
+
+function readWorkspaceTabs(storageKey: string, projects: Project[]) {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(storageKey) || '{}') as { tabs?: WorkspaceTab[]; activeId?: string };
+    const validProjectIds = new Set(projects.map((project) => project.id));
+    const tabs = (parsed.tabs || [])
+      .filter((item) => isWorkspaceTab(item))
+      .filter((item) => !item.projectId || projects.length === 0 || validProjectIds.has(item.projectId))
+      .slice(0, 12);
+    return { tabs, activeId: tabs.some((item) => item.id === parsed.activeId) ? parsed.activeId || '' : tabs[0]?.id || '' };
+  } catch {
+    return { tabs: [] as WorkspaceTab[], activeId: '' };
+  }
+}
+
+function isWorkspaceTab(value: unknown): value is WorkspaceTab {
+  if (!value || typeof value !== 'object') return false;
+  const item = value as Partial<WorkspaceTab>;
+  if (item.kind !== 'module' && item.kind !== 'entity') return false;
+  if (!item.id || !item.module || !item.title) return false;
+  return Boolean(TAB_ROUTE_SEGMENTS[item.module]);
+}
+
+function isDetailWorkspaceEntity(entityType: string): entityType is WorkspaceEntityType {
+  return ['iteration', 'requirement', 'test_case', 'test_plan', 'run_item', 'bug'].includes(entityType);
+}
+
+function resolveEntityProjectId(entityType: string, entityId: string, data: WorkspaceData, fallbackProjectId?: string) {
+  if (entityType === 'iteration') return data.iterations.find((item) => item.id === entityId)?.projectId || fallbackProjectId;
+  if (entityType === 'requirement') return data.requirements.find((item) => item.id === entityId)?.projectId || fallbackProjectId;
+  if (entityType === 'test_case') return data.cases.find((item) => item.id === entityId)?.projectId || fallbackProjectId;
+  if (entityType === 'test_plan') return data.plans.find((item) => item.id === entityId)?.projectId || fallbackProjectId;
+  if (entityType === 'run_item') return data.plans.find((plan) => plan.runItems.some((item) => item.id === entityId))?.projectId || fallbackProjectId;
+  if (entityType === 'bug') return data.bugs.find((item) => item.id === entityId)?.projectId || fallbackProjectId;
+  if (entityType === 'project') return entityId;
+  return fallbackProjectId;
+}
+
+function entityWorkspaceTitle(entityType: WorkspaceEntityType, entityId: string, data: WorkspaceData, projects: Project[]) {
+  if (entityType === 'iteration') return data.iterations.find((item) => item.id === entityId)?.name || '迭代详情';
+  if (entityType === 'requirement') return data.requirements.find((item) => item.id === entityId)?.title || '需求详情';
+  if (entityType === 'test_case') return data.cases.find((item) => item.id === entityId)?.title || '用例详情';
+  if (entityType === 'test_plan') return data.plans.find((item) => item.id === entityId)?.name || '测试计划详情';
+  if (entityType === 'run_item') return data.plans.flatMap((plan) => plan.runItems).find((item) => item.id === entityId)?.caseTitle || '执行项详情';
+  if (entityType === 'bug') return data.bugs.find((item) => item.id === entityId)?.title || '缺陷详情';
+  if (entityType === 'project') return projects.find((item) => item.id === entityId)?.name || '项目详情';
+  return '详情';
 }
 
 async function chooseDefaultProject(rows: Project[], user?: UserProfile) {

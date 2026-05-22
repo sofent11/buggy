@@ -16,6 +16,29 @@ import type {
 } from '@buggy/shared-types';
 
 export type Tab = 'overview' | 'projects' | 'iterations' | 'requirements' | 'cases' | 'plans' | 'bugs' | 'reports' | 'users' | 'settings';
+export type WorkspaceEntityType = 'project' | 'iteration' | 'requirement' | 'test_case' | 'test_plan' | 'run_item' | 'bug' | 'acceptance_scope';
+
+export type ModuleWorkspaceTab = {
+  kind: 'module';
+  id: string;
+  projectId?: string;
+  module: Tab;
+  title: string;
+  closable: boolean;
+};
+
+export type EntityWorkspaceTab = {
+  kind: 'entity';
+  id: string;
+  projectId?: string;
+  entityType: WorkspaceEntityType;
+  entityId: string;
+  module: Tab;
+  title: string;
+  closable: boolean;
+};
+
+export type WorkspaceTab = ModuleWorkspaceTab | EntityWorkspaceTab;
 
 export type WorkspaceData = {
   iterations: Iteration[];
