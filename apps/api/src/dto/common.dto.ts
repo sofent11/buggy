@@ -1,5 +1,5 @@
-import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsMongoId, IsOptional, IsString, Max, Min } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import { IsBoolean, IsIn, IsInt, IsMongoId, IsOptional, IsString, Max, Min } from 'class-validator';
 
 export class ProjectScopedQueryDto {
   @IsMongoId()
@@ -91,6 +91,11 @@ export class ListQueryDto {
   @IsOptional()
   @IsString()
   suiteId?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true' || value === '1')
+  @IsBoolean()
+  unreadOnly?: boolean;
 
   @IsOptional()
   @IsString()

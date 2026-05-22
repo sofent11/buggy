@@ -14,12 +14,13 @@ import { badgeTone, formDataFromValues, formValue } from '../../app/workspace-ut
 import type { StringFormValues, Tab } from '../../app/types.js';
 import { dictionaryLabel, dictionaryStyle, useDictionaryOptions, useDictionaryValue } from './dictionary.js';
 
-export function NavButton(props: { tab: Tab; current: Tab; label: string; icon: typeof FolderKanban; index?: number; onClick: (tab: Tab) => void }) {
+export function NavButton(props: { tab: Tab; current: Tab; label: string; icon: typeof FolderKanban; index?: number; count?: number; onClick: (tab: Tab) => void }) {
   return (
     <button className={props.current === props.tab ? 'active' : ''} onClick={() => props.onClick(props.tab)}>
       <span className="nav-index">{props.index}</span>
       <props.icon size={17} />
       <span>{props.label}</span>
+      {Boolean(props.count) && <span className="nav-count">{props.count}</span>}
     </button>
   );
 }

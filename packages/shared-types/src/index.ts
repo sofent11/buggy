@@ -514,6 +514,9 @@ export interface Bug {
   slaLevel?: SlaLevel;
   watcherIds?: Id[];
   triageStatus?: BugTriageStatus;
+  assignedAt?: string;
+  assigneeReadAt?: string;
+  isNewForCurrentUser?: boolean;
   resolvedAt?: string;
   verifiedAt?: string;
   comments?: BugComment[];

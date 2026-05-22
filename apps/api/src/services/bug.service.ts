@@ -27,7 +27,7 @@ export class BugService {
     private readonly notifications: NotificationService
   ) {}
 
-  async list(query: ListQueryDto): Promise<PageResult<Bug>> {
+  async list(query: ListQueryDto, user?: SessionUser): Promise<PageResult<Bug>> {
     const filter: Record<string, unknown> = {};
     if (query.projectId) filter.projectId = new Types.ObjectId(query.projectId);
     if (query.iterationId) filter.iterationId = new Types.ObjectId(query.iterationId);
@@ -37,6 +37,19 @@ export class BugService {
     if (query.severity) filter.severity = query.severity;
     if (query.triageStatus) filter.triageStatus = query.triageStatus;
     if (query.assigneeId) filter.assigneeId = new Types.ObjectId(query.assigneeId);
+    if (query.unreadOnly) {
+      if (!user) filter._id = { $exists: false };
+      else {
+        filter.assigneeId = new Types.ObjectId(user.id);
+        filter.assignedAt = { $exists: true };
+        filter.$expr = {
+          $or: [
+            { $eq: [{ $type: '$assigneeReadAt' }, 'missing'] },
+            { $lt: ['$assigneeReadAt', '$assignedAt'] }
+          ]
+        };
+      }
+    }
     if (query.team === '__unassigned') filter.team = { $in: ['', null] };
     else if (query.team) filter.team = query.team;
     if (query.keyword) {
@@ -55,13 +68,14 @@ export class BugService {
       this.bugs.countDocuments(filter),
       this.bugs.find(filter).sort(sort).skip((page - 1) * pageSize).limit(pageSize)
     ]);
-    return { total, page, pageSize, items: rows.map((row) => this.toDto(row)) };
+    return { total, page, pageSize, items: rows.map((row) => this.toDto(row, user)) };
   }
 
   async create(dto: CreateBugDto, user: SessionUser): Promise<Bug> {
     const status = dto.status || 'open';
     const qualitySettings = await this.projectQualitySettings(dto.projectId);
     const slaLevel = dto.slaLevel || slaLevelOf(dto.severity || 'S2');
+    const assignment = this.assignmentReadState(dto.assigneeId, user);
     const row = await this.bugs.create({
       projectId: new Types.ObjectId(dto.projectId),
       iterationId: toObjectId(dto.iterationId),
@@ -90,6 +104,8 @@ export class BugService {
       slaLevel,
       watcherIds: (dto.watcherIds || []).map((id) => new Types.ObjectId(id)),
       triageStatus: dto.triageStatus || (dto.assigneeId ? 'accepted' : 'new'),
+      assignedAt: assignment.assignedAt,
+      assigneeReadAt: assignment.assigneeReadAt,
       comments: [],
       attachments: (dto.attachments || []).map((attachment) => this.attachmentEntry(attachment, user)),
       statusHistory: [this.statusHistoryEntry(undefined, status, user, '创建缺陷')]
@@ -104,7 +120,7 @@ export class BugService {
       actor: user
     });
     await this.notifyAssignment(row, user);
-    return this.toDto(row);
+    return this.toDto(row, user);
   }
 
   async createFromRun(dto: CreateBugFromRunDto, user: SessionUser): Promise<Bug> {
@@ -162,7 +178,10 @@ export class BugService {
         row.verifiedAt = undefined;
       }
     }
-    if (dto.assigneeId !== undefined) row.assigneeId = toObjectId(dto.assigneeId);
+    if (dto.assigneeId !== undefined) {
+      row.assigneeId = toObjectId(dto.assigneeId);
+      this.refreshAssignmentReadState(row, previousAssigneeId, user);
+    }
     if (dto.team !== undefined) row.team = dto.team || '';
     if (dto.duplicateOfId !== undefined) row.duplicateOfId = toObjectId(dto.duplicateOfId);
     if (dto.dueAt !== undefined) row.dueAt = dto.dueAt ? new Date(dto.dueAt) : undefined;
@@ -194,7 +213,7 @@ export class BugService {
     });
     if ((dto.assigneeId !== undefined && dto.assigneeId !== previousAssigneeId) || !previousAssigneeId) await this.notifyAssignment(row, user);
     if (dto.status && dto.status !== previousStatus) await this.notifyStatus(row, previousStatus, user);
-    return this.toDto(row);
+    return this.toDto(row, user);
   }
 
   async transition(id: string, dto: TransitionBugDto, user: SessionUser): Promise<Bug> {
@@ -346,6 +365,16 @@ export class BugService {
     return { deleted: true };
   }
 
+  async markRead(id: string, user: SessionUser): Promise<Bug> {
+    const row = await this.bugs.findById(id);
+    if (!row) throw new NotFoundException('Bug 不存在');
+    if (row.assigneeId && idOf(row.assigneeId) === user.id) {
+      row.assigneeReadAt = new Date();
+      await row.save();
+    }
+    return this.toDto(row, user);
+  }
+
   async assertReporter(id: string, user: SessionUser): Promise<void> {
     const row = await this.bugs.findById(id).select('reporterId');
     if (!row) throw new NotFoundException('Bug 不存在');
@@ -359,7 +388,7 @@ export class BugService {
     return idOf(row.projectId);
   }
 
-  toDto(row: BugEntity & { _id: unknown; createdAt?: Date; updatedAt?: Date }): Bug {
+  toDto(row: BugEntity & { _id: unknown; createdAt?: Date; updatedAt?: Date }, user?: SessionUser): Bug {
     return {
       id: idOf(row._id),
       projectId: idOf(row.projectId),
@@ -389,6 +418,9 @@ export class BugService {
       slaLevel: row.slaLevel || slaLevelOf(row.severity),
       watcherIds: (row.watcherIds || []).map(idOf),
       triageStatus: row.triageStatus || 'new',
+      assignedAt: row.assignedAt?.toISOString(),
+      assigneeReadAt: row.assigneeReadAt?.toISOString(),
+      isNewForCurrentUser: this.isNewForUser(row, user),
       resolvedAt: row.resolvedAt?.toISOString(),
       verifiedAt: row.verifiedAt?.toISOString(),
       comments: this.normalizeComments(row.comments || []),
@@ -470,6 +502,34 @@ export class BugService {
         createdAt: String(row.createdAt || new Date().toISOString())
       }))
       .filter((row) => row.toStatus);
+  }
+
+  private assignmentReadState(assigneeId: string | undefined, user?: SessionUser) {
+    if (!assigneeId) return { assignedAt: undefined, assigneeReadAt: undefined };
+    const assignedAt = new Date();
+    return {
+      assignedAt,
+      assigneeReadAt: assigneeId === user?.id ? assignedAt : undefined
+    };
+  }
+
+  private refreshAssignmentReadState(row: BugEntity, previousAssigneeId: string | undefined, user?: SessionUser) {
+    const nextAssigneeId = row.assigneeId ? idOf(row.assigneeId) : undefined;
+    if (!nextAssigneeId) {
+      row.assignedAt = undefined;
+      row.assigneeReadAt = undefined;
+      return;
+    }
+    if (nextAssigneeId === previousAssigneeId) return;
+    const assignment = this.assignmentReadState(nextAssigneeId, user);
+    row.assignedAt = assignment.assignedAt;
+    row.assigneeReadAt = assignment.assigneeReadAt;
+  }
+
+  private isNewForUser(row: BugEntity, user?: SessionUser) {
+    if (!user || !row.assigneeId || idOf(row.assigneeId) !== user.id || !row.assignedAt) return false;
+    if (!row.assigneeReadAt) return true;
+    return row.assigneeReadAt.getTime() < row.assignedAt.getTime();
   }
 
   private sortOf(sortBy?: string, sortOrder?: 'asc' | 'desc'): Record<string, 1 | -1> {

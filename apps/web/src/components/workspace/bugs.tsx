@@ -48,6 +48,7 @@ export function BugSection(props: {
   mutate: (action: () => Promise<unknown>, message: string) => Promise<void>;
   mutateWithResult: <T>(action: () => Promise<T>, resolveMessage: (result: T) => string) => Promise<void>;
   onNotice: (message: string) => void;
+  onMarkRead?: (bugId: string) => Promise<void>;
   onOpenEntity?: (entityType: string, entityId?: string) => void;
 }) {
   const [keyword, setKeyword] = useState('');
@@ -56,6 +57,7 @@ export function BugSection(props: {
   const [triageStatus, setTriageStatus] = useState('');
   const [team, setTeam] = useState('');
   const [assigneeId, setAssigneeId] = useState('');
+  const [unreadOnly, setUnreadOnly] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [sortBy, setSortBy] = useState('updatedAt');
@@ -79,13 +81,13 @@ export function BugSection(props: {
 
   useEffect(() => {
     setPage(1);
-  }, [effectiveKeyword, status, severity, triageStatus, team, assigneeId, pageSize]);
+  }, [effectiveKeyword, status, severity, triageStatus, team, assigneeId, unreadOnly, pageSize]);
 
   useEffect(() => {
     let active = true;
     setLoadingPage(true);
     api
-      .bugPage(props.projectId, { page, pageSize, keyword: effectiveKeyword, status, severity, triageStatus, team, assigneeId, sortBy, sortOrder })
+      .bugPage(props.projectId, { page, pageSize, keyword: effectiveKeyword, status, severity, triageStatus, team, assigneeId, unreadOnly: unreadOnly ? true : undefined, sortBy, sortOrder })
       .then((result) => {
         if (active) setPageResult(result);
       })
@@ -97,6 +99,7 @@ export function BugSection(props: {
           (!triageStatus || row.triageStatus === triageStatus) &&
           matchesTeam(row, team) &&
           (!assigneeId || row.assigneeId === assigneeId) &&
+          (!unreadOnly || Boolean(row.isNewForCurrentUser)) &&
           matchKeyword([row.title, row.actualResult || '', row.reproduceSteps || '', row.severity, row.team || '', row.team ? labelOf(row.team) : '', row.environment || '', row.foundVersion || '', row.rootCause || ''], effectiveKeyword)
         );
         setPageResult({ total: fallback.length, page, pageSize, items: fallback.slice((page - 1) * pageSize, page * pageSize) });
@@ -107,12 +110,12 @@ export function BugSection(props: {
     return () => {
       active = false;
     };
-  }, [props.projectId, props.rows, page, pageSize, effectiveKeyword, status, severity, triageStatus, team, assigneeId, sortBy, sortOrder]);
+  }, [props.projectId, props.rows, page, pageSize, effectiveKeyword, status, severity, triageStatus, team, assigneeId, unreadOnly, sortBy, sortOrder]);
 
   useEffect(() => {
-    const filters = { keyword, status, severity, triageStatus, team, assigneeId, pageSize, sortBy, sortOrder, columns: visibleColumns };
+    const filters = { keyword, status, severity, triageStatus, team, assigneeId, unreadOnly, pageSize, sortBy, sortOrder, columns: visibleColumns };
     window.dispatchEvent(new CustomEvent('buggy:filters-change', { detail: { tab: 'bugs', filters } }));
-  }, [keyword, status, severity, triageStatus, team, assigneeId, pageSize, sortBy, sortOrder, visibleColumns]);
+  }, [keyword, status, severity, triageStatus, team, assigneeId, unreadOnly, pageSize, sortBy, sortOrder, visibleColumns]);
 
   useEffect(() => {
     const apply = (event: Event) => {
@@ -125,6 +128,7 @@ export function BugSection(props: {
       setTriageStatus(typeof filters.triageStatus === 'string' ? filters.triageStatus : '');
       setTeam(typeof filters.team === 'string' ? filters.team : '');
       setAssigneeId(typeof filters.assigneeId === 'string' ? filters.assigneeId : '');
+      setUnreadOnly(Boolean(filters.unreadOnly));
       setPageSize(typeof filters.pageSize === 'number' ? filters.pageSize : 20);
       setSortBy(typeof filters.sortBy === 'string' ? filters.sortBy : 'updatedAt');
       setSortOrder(filters.sortOrder === 'asc' ? 'asc' : 'desc');
@@ -139,11 +143,11 @@ export function BugSection(props: {
       const detail = (event as CustomEvent<{ entityType?: string; entityId?: string }>).detail;
       if (detail?.entityType !== 'bug' || !detail.entityId) return;
       const row = props.rows.find((item) => item.id === detail.entityId);
-      if (row) setEditing(row);
+      if (row) openBug(row);
     };
     window.addEventListener('buggy:open-entity', open);
     return () => window.removeEventListener('buggy:open-entity', open);
-  }, [props.rows]);
+  }, [props.rows, props.onMarkRead]);
 
   const sorted = (key: string) => {
     if (sortBy === key) setSortOrder((current) => current === 'asc' ? 'desc' : 'asc');
@@ -156,6 +160,11 @@ export function BugSection(props: {
   const activeRows = props.rows.filter((row) => !['verified', 'closed'].includes(row.status));
   const teamGroups = useMemo(() => bugTeamGroups(props.rows), [props.rows]);
   const selectedTeamLabel = teamLabel(team);
+  const newCount = props.rows.filter((row) => row.isNewForCurrentUser).length;
+  const openBug = (row: Bug) => {
+    setEditing(row);
+    if (row.isNewForCurrentUser) void props.onMarkRead?.(row.id);
+  };
 
   return (
     <DataPage
@@ -166,6 +175,7 @@ export function BugSection(props: {
           <MetricCard label="缺陷总数" value={props.rows.length} detail={`${props.rows.filter((row) => !['verified', 'closed'].includes(row.status)).length} 活跃`} tone="info" />
           <MetricCard label="严重缺陷" value={props.rows.filter((row) => ['S0', 'S1'].includes(row.severity)).length} detail="S0/S1" tone="risk" />
           <MetricCard label="已解决" value={props.rows.filter((row) => row.status === 'resolved').length} detail="待验证" />
+          <MetricCard label="NEW" value={newCount} detail="指派后未打开" tone={newCount ? 'risk' : 'neutral'} />
           <MetricCard label="团队视图" value={selectedTeamLabel} detail={`${activeRows.filter((row) => matchesTeam(row, team)).length} 活跃`} tone={team ? 'info' : 'neutral'} />
         </section>
       }
@@ -180,6 +190,11 @@ export function BugSection(props: {
           <option value="">全部负责人</option>
           {memberUsers.map((user) => <option key={user.id} value={user.id}>{user.username}</option>)}
         </select>
+        <label className={unreadOnly ? 'toolbar-toggle active' : 'toolbar-toggle'}>
+          <input type="checkbox" checked={unreadOnly} onChange={(event) => setUnreadOnly(event.target.checked)} />
+          <span>只看 NEW</span>
+          {newCount > 0 && <b>{newCount}</b>}
+        </label>
         <select value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))} aria-label="每页条数">
           <option value={10}>10 / 页</option>
           <option value={20}>20 / 页</option>
@@ -196,7 +211,8 @@ export function BugSection(props: {
         { label: '严重级别', value: severity, onClear: () => setSeverity('') },
         { label: '分诊', value: triageStatus, onClear: () => setTriageStatus('') },
         { label: '团队', value: team ? teamLabel(team) : '', onClear: () => setTeam('') },
-        { label: '负责人', value: assigneeId ? userName(props.users, assigneeId) : '', onClear: () => setAssigneeId('') }
+        { label: '负责人', value: assigneeId ? userName(props.users, assigneeId) : '', onClear: () => setAssigneeId('') },
+        { label: '未读', value: unreadOnly ? '只看 NEW' : '', onClear: () => setUnreadOnly(false) }
       ]} />
       <BugTriageBoard rows={props.rows} activeTriage={triageStatus} activeStatus={status} onTriage={setTriageStatus} onStatus={setStatus} />
       <BugTeamBoard groups={teamGroups} selectedTeam={team} onTeam={setTeam} />
@@ -209,7 +225,7 @@ export function BugSection(props: {
         emptyText="暂无缺陷"
         rows={rows.map((row) => {
           const cells: Record<string, ReactNode> = {
-            bug: <div className="cell-main"><strong>{row.title}</strong><span>{row.actualResult || row.reproduceSteps || '未填写问题详情'}</span></div>,
+            bug: <div className="cell-main"><strong>{row.title}{row.isNewForCurrentUser && <span className="new-marker">NEW</span>}</strong><span>{row.actualResult || row.reproduceSteps || '未填写问题详情'}</span></div>,
             source: bugSource(row, props.requirements, props.cases, props.plans),
             triage: <StatusBadge value={row.triageStatus || 'new'} />,
             team: row.team ? <StatusBadge value={row.team} /> : '-',
@@ -225,7 +241,7 @@ export function BugSection(props: {
               canWrite={props.canWrite}
               canManage={props.canManage || (row.reporterId === props.currentUser.id && (props.canCreate || props.canWrite))}
               onTransition={(action) => setTransition({ bug: row, status: action.status, label: action.label })}
-              onEdit={() => setEditing(row)}
+              onEdit={() => openBug(row)}
               onDuplicate={() => setDuplicate(row)}
               onDelete={() => props.mutate(() => api.deleteBug(row.id), '缺陷已删除')}
             />

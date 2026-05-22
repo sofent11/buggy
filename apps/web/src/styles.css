@@ -61,7 +61,7 @@ body {
 
 .sidebar button {
   display: grid;
-  grid-template-columns: 22px 18px minmax(0, 1fr);
+  grid-template-columns: 22px 18px minmax(0, 1fr) auto;
   gap: 8px;
   border-radius: 8px;
 }
@@ -98,6 +98,26 @@ body {
 .sidebar button.active .nav-index {
   background: white;
   color: var(--primary);
+}
+
+.nav-count {
+  min-width: 22px;
+  height: 22px;
+  display: inline-grid;
+  place-items: center;
+  justify-self: end;
+  border-radius: 999px;
+  background: var(--danger);
+  color: #fff;
+  padding: 0 7px;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.sidebar button.active .nav-count {
+  background: #fff;
+  color: var(--danger);
 }
 
 .workspace {
@@ -232,6 +252,24 @@ th {
 .cell-main strong {
   color: var(--text);
   overflow-wrap: anywhere;
+}
+
+.new-marker {
+  display: inline-flex;
+  align-items: center;
+  min-height: 18px;
+  margin-left: 8px;
+  border: 1px solid rgba(192, 55, 43, 0.28);
+  border-radius: 999px;
+  background: #fff5f5;
+  color: var(--danger) !important;
+  padding: 1px 7px;
+  font-size: 11px !important;
+  line-height: 14px !important;
+  font-weight: 900;
+  letter-spacing: 0;
+  vertical-align: text-bottom;
+  white-space: nowrap;
 }
 
 .cell-main span,
@@ -525,11 +563,11 @@ th {
   }
 
   .sidebar button {
-    grid-template-columns: 20px 18px;
+    grid-template-columns: 20px 18px auto;
     justify-content: center;
   }
 
-  .sidebar button > span:last-child {
+  .sidebar button > span:not(.nav-index):not(.nav-count) {
     display: none;
   }
 
@@ -557,10 +595,10 @@ th {
   }
 
   .sidebar button {
-    grid-template-columns: 20px 18px;
+    grid-template-columns: 20px 18px auto;
   }
 
-  .sidebar button > span:last-child {
+  .sidebar button > span:not(.nav-index):not(.nav-count) {
     display: none;
   }
 
@@ -1474,6 +1512,45 @@ summary {
   margin-left: auto;
 }
 
+.toolbar-toggle {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  color: var(--text);
+  padding: 0 10px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.toolbar-toggle.active {
+  border-color: rgba(192, 55, 43, 0.28);
+  background: #fff5f5;
+  color: var(--danger);
+}
+
+.toolbar-toggle input {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--danger);
+}
+
+.toolbar-toggle b {
+  min-width: 20px;
+  height: 20px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--danger);
+  color: #fff;
+  padding: 0 6px;
+  font-size: 12px;
+  line-height: 1;
+}
+
 .search-box {
   min-width: min(320px, 100%);
   flex: 1;
@@ -2003,7 +2080,7 @@ tr:last-child td {
 
 .sidebar button {
   display: grid;
-  grid-template-columns: 22px 18px minmax(0, 1fr);
+  grid-template-columns: 22px 18px minmax(0, 1fr) auto;
   gap: 8px;
   border-radius: 8px;
   background: transparent;
@@ -2928,7 +3005,7 @@ tbody tr:hover {
     font-size: 12px;
   }
 
-  .sidebar button > span:last-child {
+  .sidebar button > span:not(.nav-index):not(.nav-count) {
     display: block;
   }
 
@@ -4673,11 +4750,11 @@ select[multiple] {
   }
 
   .sidebar nav button {
-    min-width: 88px;
-    grid-template-columns: 20px 18px minmax(0, 1fr);
+    min-width: 104px;
+    grid-template-columns: 20px 18px minmax(0, 1fr) auto;
   }
 
-  .sidebar nav button > span:last-child {
+  .sidebar nav button > span:not(.nav-index):not(.nav-count) {
     display: inline;
     overflow: hidden;
     text-overflow: ellipsis;

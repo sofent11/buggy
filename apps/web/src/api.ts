@@ -24,7 +24,7 @@ import type { BusinessRoleKey, ProjectJoinRequest, ProjectPermission, SystemPerm
 
 const API_BASE = import.meta.env.VITE_API_BASE || '/api';
 export type ImportResult = { imported: number; errors: Array<{ row: number; message: string }> };
-export type ListParams = Record<string, string | number | undefined>;
+export type ListParams = Record<string, string | number | boolean | undefined>;
 
 function queryString(params: ListParams = {}) {
   const search = new URLSearchParams();
@@ -152,6 +152,7 @@ export const api = {
     return upload<Bug>(`/bugs/${id}/attachments/upload`, formData);
   },
   deleteBug: (id: string) => request<{ deleted: true }>(`/bugs/${id}`, { method: 'DELETE' }),
+  markBugRead: (id: string) => request<Bug>(`/bugs/${id}/read`, { method: 'PATCH' }),
   markDuplicateBug: (id: string, body: { duplicateOfId: string; reason: string }) =>
     request<Bug>(`/bugs/${id}/duplicate`, { method: 'POST', body: JSON.stringify(body) }),
   createBugFromRun: (body: { testPlanId: string; runItemId: string; title: string; actualResult?: string; reproduceSteps?: string; severity?: string; priority?: string; assigneeId?: string; dueAt?: string; environment?: string; foundVersion?: string }) =>

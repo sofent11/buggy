@@ -88,6 +88,12 @@ export class BugEntity {
   triageStatus!: BugTriageStatus;
 
   @Prop({ type: Date })
+  assignedAt?: Date;
+
+  @Prop({ type: Date })
+  assigneeReadAt?: Date;
+
+  @Prop({ type: Date })
   resolvedAt?: Date;
 
   @Prop({ type: Date })
@@ -106,3 +112,4 @@ export class BugEntity {
 export const BugSchema = SchemaFactory.createForClass(BugEntity);
 BugSchema.index({ projectId: 1, requirementId: 1, status: 1 });
 BugSchema.index({ projectId: 1, team: 1, status: 1 });
+BugSchema.index({ projectId: 1, assigneeId: 1, assignedAt: -1 });

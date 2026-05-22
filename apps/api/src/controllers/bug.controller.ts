@@ -23,7 +23,7 @@ export class BugController {
   @Get()
   async list(@Query() query: ListQueryDto, @CurrentUser() user: SessionUser) {
     if (query.projectId) await this.projects.get(query.projectId, user);
-    return this.bugs.list(query);
+    return this.bugs.list(query, user);
   }
 
   @Post()
@@ -42,6 +42,12 @@ export class BugController {
   async update(@Param('id') id: string, @Body() dto: UpdateBugDto, @CurrentUser() user: SessionUser) {
     await this.projects.assertModuleAction(await this.bugs.projectIdOf(id), user, 'bugs', 'edit');
     return this.bugs.update(id, dto, user);
+  }
+
+  @Patch(':id/read')
+  async markRead(@Param('id') id: string, @CurrentUser() user: SessionUser) {
+    await this.projects.get(await this.bugs.projectIdOf(id), user);
+    return this.bugs.markRead(id, user);
   }
 
   @Post(':id/transition')

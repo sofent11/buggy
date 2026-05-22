@@ -174,6 +174,18 @@ export function App() {
     await runMutation(action, resolveMessage, options);
   }, [runMutation]);
 
+  const markBugRead = useCallback(async (bugId: string) => {
+    try {
+      const nextBug = await api.markBugRead(bugId);
+      setData((current) => ({
+        ...current,
+        bugs: current.bugs.map((bug) => bug.id === nextBug.id ? nextBug : bug)
+      }));
+    } catch (error) {
+      setNotice(readableWorkspaceError(error));
+    }
+  }, []);
+
   const submitAuth = useCallback(async (values: AuthFormValues) => {
     setBusy(true);
     try {
@@ -362,6 +374,7 @@ export function App() {
   const canEditBug = canUseModuleAction('bugs', 'edit');
   const canDeleteBug = canUseModuleAction('bugs', 'delete');
   const unreadCount = data.notifications.filter((item) => item.status === 'unread').length;
+  const newBugCount = data.bugs.filter((item) => item.isNewForCurrentUser).length;
   const openEntity = useCallback((entityType: string, entityId?: string) => {
     const nextTab = tabOfEntity(entityType);
     if (nextTab) changeTab(nextTab);
@@ -432,7 +445,7 @@ export function App() {
           <NavButton tab="requirements" current={tab} icon={Flag} index={4} label="需求" onClick={changeTab} />
           <NavButton tab="cases" current={tab} icon={ClipboardCheck} index={5} label="用例库" onClick={changeTab} />
           <NavButton tab="plans" current={tab} icon={Activity} index={6} label="测试执行" onClick={changeTab} />
-          <NavButton tab="bugs" current={tab} icon={BugIcon} index={7} label="缺陷" onClick={changeTab} />
+          <NavButton tab="bugs" current={tab} icon={BugIcon} index={7} label="缺陷" count={newBugCount} onClick={changeTab} />
           <NavButton tab="reports" current={tab} icon={FileText} index={8} label="报表" onClick={changeTab} />
           {canUseUserAdmin && <NavButton tab="users" current={tab} icon={Users} index={9} label="用户管理" onClick={changeTab} />}
           <NavButton tab="settings" current={tab} icon={Settings} index={canUseUserAdmin ? 10 : 9} label="配置" onClick={changeTab} />
@@ -682,6 +695,7 @@ export function App() {
                 mutate={mutate}
                 mutateWithResult={mutateWithResult}
                 onNotice={setNotice}
+                onMarkRead={markBugRead}
                 onOpenEntity={openEntity}
               />
             )}
@@ -1039,6 +1053,7 @@ function savedViewFilterLabel(key: string) {
     triageStatus: '分诊',
     team: '团队',
     assigneeId: '负责人',
+    unreadOnly: '未读',
     ownerId: '负责人',
     requirementId: '需求',
     reviewStatus: '评审',
