@@ -53,18 +53,30 @@ export function HookForm(props: {
   children: (register: UseFormRegister<StringFormValues>) => ReactNode;
 }) {
   const form = useForm<StringFormValues>({ defaultValues: props.defaultValues || {} });
+  const submittingRef = useRef(false);
+  const [submitting, setSubmitting] = useState(false);
   useEffect(() => {
     form.reset(props.defaultValues || {});
   }, [form, props.defaultValues]);
   return (
     <form
       className={props.className || 'drawer-form'}
+      aria-busy={submitting}
+      data-submitting={submitting ? 'true' : undefined}
       onSubmit={form.handleSubmit(async (values, event) => {
+        if (submittingRef.current) return;
+        submittingRef.current = true;
+        setSubmitting(true);
         const domForm = event?.currentTarget instanceof HTMLFormElement ? new FormData(event.currentTarget) : formDataFromValues(values);
         Object.entries(values).forEach(([key, value]) => {
           if (!domForm.has(key)) domForm.set(key, formValue(value));
         });
-        await props.onSubmit(domForm, values);
+        try {
+          await props.onSubmit(domForm, values);
+        } finally {
+          submittingRef.current = false;
+          setSubmitting(false);
+        }
       })}
     >
       {props.children(form.register)}
