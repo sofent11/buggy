@@ -18,6 +18,27 @@ type ParsedWorkbook = {
   headers: string[];
   rows: ParsedWorkbookRow[];
 };
+type TestCaseAttachmentColumns = {
+  testNo: number;
+  module: number;
+  title?: number;
+  preconditions?: number;
+  step: number;
+  expected: number;
+  priority: number;
+  remark: number;
+};
+type TestCaseAttachmentDraft = {
+  rowNumber: number;
+  testNo: string;
+  title: string;
+  module: string;
+  preconditions: string;
+  priority: string;
+  remarks: string[];
+  steps: Array<{ action: string; expected: string; sort: number }>;
+  expectedResults: string[];
+};
 
 @Injectable()
 export class ImportExportService {
@@ -328,34 +349,76 @@ export class ImportExportService {
   private parseTestCaseAttachment(sheet: ExcelJS.Worksheet): ParsedWorkbook {
     const headersByColumn = this.attachmentHeadersByColumn(sheet);
     const rows: ParsedWorkbookRow[] = [];
+    const columns = testCaseAttachmentColumns(headersByColumn);
+    const drafts: TestCaseAttachmentDraft[] = [];
+    let current: TestCaseAttachmentDraft | null = null;
     for (let rowNumber = 4; rowNumber <= sheet.rowCount; rowNumber += 1) {
       const row = sheet.getRow(rowNumber);
-      const testNo = cellText(row.getCell(1));
-      const module = cellText(row.getCell(2));
-      const step = cellText(row.getCell(3));
-      const expected = cellText(row.getCell(4));
-      const priority = normalizePriority(cellText(row.getCell(8)));
-      const remark = cellText(row.getCell(9));
-      if (!hasAttachmentCaseContent({ testNo, module, step, expected, remark })) continue;
-      const title = testNo || truncateTitle(step) || fallbackAttachmentTitle(module, rowNumber);
+      const testNo = cellText(row.getCell(columns.testNo));
+      const module = cellText(row.getCell(columns.module));
+      const explicitTitle = columns.title ? cellText(row.getCell(columns.title)) : '';
+      const preconditions = columns.preconditions ? cellText(row.getCell(columns.preconditions)) : '';
+      const step = cellText(row.getCell(columns.step));
+      const expected = cellText(row.getCell(columns.expected));
+      const priority = normalizePriority(cellText(row.getCell(columns.priority)));
+      const remark = cellText(row.getCell(columns.remark));
+      if (!hasAttachmentCaseContent({ testNo, module, title: explicitTitle, preconditions, step, expected, remark })) continue;
+      const nextIdentity = testNo || explicitTitle;
+      const currentIdentity = current ? current.testNo || current.title : '';
+      const startsNewCase = !current || Boolean(nextIdentity && nextIdentity !== currentIdentity);
+      if (startsNewCase) {
+        current = {
+          rowNumber,
+          testNo,
+          title: explicitTitle,
+          module,
+          preconditions,
+          priority,
+          remarks: [],
+          steps: [],
+          expectedResults: []
+        };
+        drafts.push(current);
+      } else {
+        if (!current) continue;
+        const active = current;
+        if (module && !active.module) active.module = module;
+        if (preconditions && !active.preconditions) active.preconditions = preconditions;
+        if (priority && !active.priority) active.priority = priority;
+      }
+      if (!current) continue;
+      const active = current;
+      if (step || expected) active.steps.push({ action: step, expected, sort: active.steps.length + 1 });
+      if (expected && !active.expectedResults.includes(expected)) active.expectedResults.push(expected);
+      if (remark) active.remarks.push(remark);
+    }
+    for (const draft of drafts) {
+      const firstStep = draft.steps[0];
+      const title = attachmentCaseTitle(draft);
+      const stepsJson = JSON.stringify(draft.steps);
+      const expectedResult = draft.expectedResults.join('\n');
       rows.push({
-        rowNumber,
+        rowNumber: draft.rowNumber,
         data: {
           title,
           标题: title,
-          module,
-          模块: module,
-          step,
-          步骤: step,
-          expected,
-          预期: expected,
-          expectedResult: expected,
-          预期结果: expected,
-          ...(priority ? { priority, 优先级: priority } : {}),
-          测试编号: testNo,
-          所属模块: module,
-          测试步骤: step,
-          备注: remark
+          module: draft.module,
+          模块: draft.module,
+          preconditions: draft.preconditions,
+          前置条件: draft.preconditions,
+          step: firstStep?.action || '',
+          步骤: firstStep?.action || '',
+          expected: firstStep?.expected || '',
+          预期: firstStep?.expected || '',
+          stepsJson,
+          步骤JSON: stepsJson,
+          expectedResult,
+          预期结果: expectedResult,
+          ...(draft.priority ? { priority: draft.priority, 优先级: draft.priority } : {}),
+          测试编号: draft.testNo,
+          所属模块: draft.module,
+          测试步骤: draft.steps.map((step) => step.action).filter(Boolean).join('\n'),
+          备注: draft.remarks.join('\n')
         }
       });
     }
@@ -393,8 +456,13 @@ export class ImportExportService {
   }
 
   private isTestCaseAttachment(sheet: ExcelJS.Worksheet): boolean {
-    const headers = new Set(this.attachmentHeadersByColumn(sheet).filter((header): header is string => Boolean(header)));
-    return ['测试编号', '所属模块', '测试步骤', '预期结果', '优先级'].every((header) => headers.has(header));
+    const headers = this.attachmentHeadersByColumn(sheet);
+    return Boolean(
+      findHeaderColumn(headers, ['测试编号', '用例编号', '编号', 'caseid', 'case no', 'test no']) &&
+      findHeaderColumn(headers, ['所属模块', '模块', 'module']) &&
+      findHeaderColumn(headers, ['测试步骤', '操作步骤', '步骤', 'step'], ['预期', 'expected']) &&
+      findHeaderColumn(headers, ['预期结果', '期望结果', '预期', 'expected'])
+    );
   }
 
   private sourceHeaderForField(type: ImportRowsDto['type'], field: string, label: string, headers: string[], format: WorkbookFormat): string | undefined {
@@ -408,7 +476,8 @@ export class ImportExportService {
         priority: '优先级'
       };
       const attachmentHeader = attachmentMap[field];
-      if (attachmentHeader && headers.includes(attachmentHeader)) return attachmentHeader;
+      const source = attachmentHeader ? headers.find((header) => headerMatches(header, [attachmentHeader])) : undefined;
+      if (source) return source;
     }
     return headers.find((header) => header === label || header === field);
   }
@@ -472,8 +541,50 @@ function normalizePriority(value: unknown): string {
   return priorityValues.includes(priority as (typeof priorityValues)[number]) ? priority : raw;
 }
 
-function hasAttachmentCaseContent(row: { testNo: string; module: string; step: string; expected: string; remark: string }): boolean {
-  return Boolean(row.testNo || row.module || row.step || row.expected || row.remark);
+function testCaseAttachmentColumns(headersByColumn: Array<string | undefined>): TestCaseAttachmentColumns {
+  return {
+    testNo: findHeaderColumn(headersByColumn, ['测试编号', '用例编号', '编号', 'caseid', 'case no', 'test no']) || 1,
+    module: findHeaderColumn(headersByColumn, ['所属模块', '模块', 'module']) || 2,
+    title: findHeaderColumn(headersByColumn, ['用例标题', '用例名称', '测试标题', '标题', 'case title']),
+    preconditions: findHeaderColumn(headersByColumn, ['前置条件', '预置条件', 'precondition']),
+    step: findHeaderColumn(headersByColumn, ['测试步骤', '操作步骤', '步骤', 'step'], ['预期', 'expected']) || 3,
+    expected: findHeaderColumn(headersByColumn, ['预期结果', '期望结果', '预期', 'expected']) || 4,
+    priority: findHeaderColumn(headersByColumn, ['优先级', 'priority']) || 8,
+    remark: findHeaderColumn(headersByColumn, ['备注', '说明', 'remark', 'note']) || 9
+  };
+}
+
+function findHeaderColumn(headersByColumn: Array<string | undefined>, aliases: string[], excludes: string[] = []): number | undefined {
+  for (let columnNumber = 1; columnNumber < headersByColumn.length; columnNumber += 1) {
+    const header = headersByColumn[columnNumber];
+    if (headerMatches(header, aliases, excludes)) return columnNumber;
+  }
+  return undefined;
+}
+
+function headerMatches(header: string | undefined, aliases: string[], excludes: string[] = []): boolean {
+  const normalized = normalizeHeader(header);
+  if (!normalized) return false;
+  if (excludes.some((exclude) => normalized.includes(normalizeHeader(exclude)))) return false;
+  return aliases.some((alias) => {
+    const value = normalizeHeader(alias);
+    return normalized === value || normalized.endsWith(`/${value}`) || normalized.includes(value);
+  });
+}
+
+function normalizeHeader(value: unknown): string {
+  return String(value || '').replace(/\s+/g, '').toLowerCase();
+}
+
+function hasAttachmentCaseContent(row: { testNo: string; module: string; title: string; preconditions: string; step: string; expected: string; remark: string }): boolean {
+  return Boolean(row.testNo || row.module || row.title || row.preconditions || row.step || row.expected || row.remark);
+}
+
+function attachmentCaseTitle(draft: TestCaseAttachmentDraft): string {
+  if (draft.title) return draft.title;
+  const firstAction = draft.steps[0]?.action || '';
+  if (draft.testNo && firstAction) return `${draft.testNo} - ${truncateTitle(firstAction)}`;
+  return draft.testNo || truncateTitle(firstAction) || fallbackAttachmentTitle(draft.module, draft.rowNumber);
 }
 
 function truncateTitle(value: string): string {
