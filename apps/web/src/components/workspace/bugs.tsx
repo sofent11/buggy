@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Bug as BugIcon, Eye, GitMerge, MessageSquare, MoreHorizontal, Paperclip, PlayCircle, Plus, Save, Trash2, Upload, UploadCloud } from 'lucide-react';
 import type { Bug, BugAttachment, BugStatus, PageResult, ProjectMember, Requirement, TestCase, TestPlan, UserProfile } from '@buggy/shared-types';
 import type { UseFormRegister } from 'react-hook-form';
@@ -751,6 +751,37 @@ function BugCollaboration(props: { row: Bug; canWrite?: boolean; onComment?: (bo
   const [commentBody, setCommentBody] = useState('');
   const [attachmentName, setAttachmentName] = useState('');
   const [attachmentUrl, setAttachmentUrl] = useState('');
+  const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
+  const [attachmentFeedback, setAttachmentFeedback] = useState('');
+  const [addingAttachment, setAddingAttachment] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const resetAttachmentForm = () => {
+    setAttachmentName('');
+    setAttachmentUrl('');
+    setAttachmentFile(null);
+    setAttachmentFeedback('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+  const addAttachment = async () => {
+    if (addingAttachment) return;
+    const name = attachmentName.trim();
+    const url = attachmentUrl.trim();
+    if (!attachmentFile && (!name || !url)) {
+      setAttachmentFeedback('请选择文件，或填写附件名称和链接');
+      return;
+    }
+    setAddingAttachment(true);
+    try {
+      if (attachmentFile) {
+        await props.onFileAttachment?.(attachmentFile);
+      } else {
+        await props.onAttachment?.({ name, url });
+      }
+      resetAttachmentForm();
+    } finally {
+      setAddingAttachment(false);
+    }
+  };
   return (
     <div className="bug-collab span-four">
       <section>
@@ -781,23 +812,16 @@ function BugCollaboration(props: { row: Bug; canWrite?: boolean; onComment?: (bo
             <AttachmentCard key={attachment.id} attachment={attachment} />
           ))}
         </div>
-        {props.canWrite && <div className="inline-form compact">
-          <Input type="file" onChange={async (event) => {
-            const file = event.target.files?.[0];
-            if (!file) return;
-            await props.onFileAttachment?.(file);
-            event.target.value = '';
+        {props.canWrite && <div className="inline-form compact attachment-inline-form">
+          <Input type="file" ref={fileInputRef} onChange={(event) => {
+            const file = event.target.files?.[0] || null;
+            setAttachmentFile(file);
+            setAttachmentFeedback('');
           }} />
           <Input value={attachmentName} onChange={(event) => setAttachmentName(event.target.value)} placeholder="附件名称" />
           <Input value={attachmentUrl} onChange={(event) => setAttachmentUrl(event.target.value)} placeholder="截图、日志或文档链接" />
-          <Button type="button" onClick={async () => {
-            const name = attachmentName.trim();
-            const url = attachmentUrl.trim();
-            if (!name || !url) return;
-            await props.onAttachment?.({ name, url });
-            setAttachmentName('');
-            setAttachmentUrl('');
-          }}><Paperclip size={15} /> 添加</Button>
+          <Button type="button" disabled={addingAttachment} onClick={addAttachment}><Paperclip size={15} /> {addingAttachment ? '添加中' : '添加'}</Button>
+          {attachmentFeedback && <p className="inline-feedback" aria-live="polite">{attachmentFeedback}</p>}
         </div>}
       </section>
     </div>
